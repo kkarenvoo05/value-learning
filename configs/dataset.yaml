@@ -1,0 +1,70 @@
+# Dataset configuration for the Mulligan Insert Marker value-learning study.
+#
+# Provenance of each choice:
+#   [lars]  = explicitly specified by Lars Ankile
+#   [ours]  = our experimental choice (documented, can be changed)
+
+hf_namespace: mulligan
+task_prefix: real-marker-d2
+
+# Every repo is resolved from this tag to an immutable commit SHA, which is
+# written to data/meta/pins.json and to every manifest row. [ours]
+revision_tag: release-1
+
+# [lars] Training pool. "eval" repos record how data were *collected*;
+# earlier-round evaluation rollouts are intentionally training data here.
+train_pool:
+  - real-marker-d2-c00-teleop-mixed
+  - real-marker-d2-c01-dagger-mixed
+  - real-marker-d2-c02-dagger-mixed
+  - real-marker-d2-c03-dagger-mixed
+  - real-marker-d2-c04-dagger-mixed
+  - real-marker-d2-c05-dagger-mixed
+  - real-marker-d2-r00-eval
+  - real-marker-d2-r01-eval
+  - real-marker-d2-r02-eval
+  - real-marker-d2-r03-eval
+  - real-marker-d2-r04-eval
+
+# [lars] Final test repos. Kept separately identifiable (split = test_r05_eval /
+# test_r05_screen). Only metadata is used for integrity checks at this stage.
+test:
+  real-marker-d2-r05-eval: test_r05_eval
+  real-marker-d2-r05-screen: test_r05_screen
+
+# Related repos that are NOT in the split but may share source episodes with it
+# (derived subsets / per-policy views). Only used for the overlap audit. [ours]
+overlap_audit_extra:
+  - real-marker-d2-c00-teleop-validation
+  - real-marker-d2-r02-eval-b03
+
+# [ours] Validation: ~15% of training-pool episode *groups*, fixed seed.
+validation:
+  fraction: 0.15
+  seed: 20261017
+  # Stratify group assignment by (repository, outcome) so that every source
+  # and both outcomes are represented in validation.
+  stratify_by: [repo, outcome]
+
+# Metadata files fetched before any video. Everything else is opt-in. [ours]
+metadata_patterns:
+  - README.md
+  - .label_history.jsonl
+  - .outcome_edit_progress.json
+  - results.json
+  - results_eval_time.json
+  - meta/*.json
+  - meta/*.jsonl
+  - meta/*.parquet
+  - meta/episodes/*/*.parquet
+  - meta/sessions/*/.label_history.jsonl
+  - meta/sessions/*/.outcome_edit_progress.json
+  - meta/sessions/*/results.json
+  - meta/sessions/*/results_eval_time.json
+  - meta/sessions/*/meta/*.json
+
+paths:
+  meta_root: data/meta          # per-repo metadata snapshots (gitignored)
+  manifest: data/manifest/episodes.parquet
+  manifest_csv: data/manifest/episodes.csv
+  report_dir: reports

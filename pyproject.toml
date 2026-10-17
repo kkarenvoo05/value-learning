@@ -1,0 +1,29 @@
+[project]
+name = "value-learning"
+version = "0.0.1"
+description = "RECAP-style state-value function on the Mulligan Insert Marker dataset"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pyyaml",
+    "requests",
+    "huggingface_hub>=0.32",
+]
+
+[project.optional-dependencies]
+video = ["av", "matplotlib", "pillow"]
+train = ["torch", "torchvision"]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
