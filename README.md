@@ -65,7 +65,8 @@ source of truth for episode identity, outcome, valid endpoint `T`, group, and sp
 
 ## Status
 
-Current stage and next steps are in `reports/dataset_audit.md` (Sections 8–9). Planned
+The checklist is in `PROGRESS.md`; the current stage and next steps are in
+`reports/dataset_audit.md` (Sections 8–9). Planned
 progression: audit → target construction + tests → tiny-subset overfit → baseline
 (shared ImageNet ResNet-18 over two cameras → MLP → 201 bins, cross-entropy) → validation-based
 checkpointing and breakdowns vs a trivial baseline → video/value plots → a few ablations

@@ -1,5 +1,6 @@
-Read README.md first (project goal, ground rules, commands), then reports/dataset_audit.md
-for the current stage, open questions, and the target-construction proposal.
+Read README.md first (project goal, ground rules, commands), then PROGRESS.md (checklist;
+keep it updated when a step is finished), then reports/dataset_audit.md for the current
+stage, open questions, and the target-construction proposal.
 
 - Act as a research collaborator: explain key concepts, verify that results mean what we think.
 - Use `.venv/bin/python`; run `pytest -q` after changing the pipeline.
