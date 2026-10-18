@@ -8,6 +8,7 @@ dependencies = [
     "pandas",
     "pyarrow",
     "pyyaml",
+    "tabulate",           # DataFrame.to_markdown in the generated reports
     "requests",
     "huggingface_hub>=0.32",
 ]

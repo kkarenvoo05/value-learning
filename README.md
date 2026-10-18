@@ -33,13 +33,17 @@ Read the HF release docs, not only the papers: outcome/endpoint semantics live t
 
 ```
 configs/dataset.yaml       repos, split, validation seed, metadata patterns
+configs/targets.yaml       target constants (horizon, failure penalty, bins, timeout rule)
 src/vl/
   fetch_metadata.py        pin repos to commits, download metadata only
   frame_summary.py         per-episode summaries of trajectory parquet (remote column reads)
   manifest.py              episode manifest + label/endpoint precedence rules
   splits.py                group-aware train/val/test assignment
+  targets.py               per-frame value targets (return, normalized value, bin)
   audit_tables.py          regenerates reports/audit_tables.md
   preview.py               labeled multi-camera contact sheets from remote videos
+  fetch_videos.py          download pinned camera videos -> data/videos/
+  operator_visibility.py   person-segmenter audit of operator visibility per camera
 tests/                     synthetic unit tests + integrity checks on the built manifest
 reports/dataset_audit.md   audit findings, open questions, target-construction proposal
 data/                      (gitignored) pinned metadata, summaries, manifest
@@ -56,6 +60,7 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 .venv/bin/python -m vl.manifest           # -> data/manifest/episodes_unsplit.parquet
 .venv/bin/python -m vl.splits             # -> data/manifest/episodes.{parquet,csv}
 .venv/bin/python -m vl.audit_tables       # -> reports/audit_tables.md
+.venv/bin/python -m vl.targets            # -> data/targets/frame_targets.parquet, reports/targets_summary.md
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```
@@ -74,6 +79,9 @@ checkpointing and breakdowns vs a trivial baseline → video/value plots → a f
 
 ## Environment notes
 
-- Developed on an 8 GB Apple M2 laptop whose disk was nearly full (~2–3 GB free). The full
-  dataset is ~27 GB; the training cameras alone are ~12 GB. Plan data storage before training.
+- Started on an 8 GB Apple M2 laptop (disk nearly full); now developed on the `move2` machine,
+  with the code under `/move/u/karenvo/Projects/value-learning`.
+- The full dataset is ~27 GB; the training cameras alone are ~12 GB. Training data goes on NFS
+  storage under Karen's name, **not** under `/move/` (Lars). See `PROGRESS.md` Stage 0 for the
+  current location.
 - HF repos are public; no token needed.

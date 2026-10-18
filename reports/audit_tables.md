@@ -161,8 +161,8 @@ Total if fully downloaded: 28.9 GB (side_1+wrist_left videos + data only: see re
 | ('r05-eval', 'r05-screen')               |       50 |
 | ('c05-dagger-mixed', 'r04-eval')         |       30 |
 | ('c00-teleop-mixed', 'c01-dagger-mixed') |       25 |
-| ('c01-dagger-mixed', 'r00-eval')         |       25 |
 | ('c02-dagger-mixed', 'r01-eval')         |       25 |
+| ('c01-dagger-mixed', 'r00-eval')         |       25 |
 | ('c03-dagger-mixed', 'r02-eval')         |       25 |
 | ('c04-dagger-mixed', 'r03-eval')         |       17 |
 

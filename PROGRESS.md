@@ -6,9 +6,20 @@ Details for finished items are in `reports/dataset_audit.md`.
 ## Stage 0 — Setup
 - [x] Project skeleton, `pyproject.toml`, `.venv` (uv), `.gitignore` (data/videos/checkpoints excluded)
 - [x] `README.md` and `CLAUDE.md` for future sessions
-- [x] `git init` (nothing committed yet)
-- [ ] Get compute + storage (mentor's workstation over SSH, ~50–100 GB disk, GPU)
-- [ ] First commit
+- [x] `git init`
+- [~] Storage. Lars: training data goes on NFS storage under Karen's name, **not** under `/move/`.
+      **Temporary solution (2026-10-17):** `data/` in the project is a symlink to
+      `/sailhome/karenvo/vl-data` (NFS home, 20 GB quota, ~19 GB free after moving
+      `~/.cursor-server` to `/move/u/karenvo/.cursor-server` behind a symlink). Fits the
+      ~12 GB training cameras + data with a few GB to spare; the 3.3 GB test videos make it
+      tight, so fetch those later. Home filling up breaks the shell, so check `df -h ~` before
+      each download.
+      **Permanent:** `/iris/u/karenvo` does not exist and Karen is not in the `finnlab` group that
+      owns `/iris/u`. Ask Lars to get it created, then move `vl-data` there and re-point `data`.
+      No other NFS mount on move2 is writable for this account (`/scr` is a local move2 disk).
+- [ ] Compute (GPU for Stage 3+): ask Lars (Q6)
+- [ ] Phase 2 compute (π₀.₅ fine-tuning): IRIS cluster
+- [x] First commit
 
 ## Stage 1 — Dataset inspection, audit, splits (2026-10-17)
 - [x] Inspect metadata before any video download (format, FPS, cameras, fields, provenance)
@@ -26,41 +37,170 @@ Details for finished items are in `reports/dataset_audit.md`.
 - [x] Video/trajectory sync check (ffprobe frame counts = row counts)
 - [x] Initial-state-extremes crop check at f=0
 - [x] Audit report + regenerable tables
-- [ ] Inspect odd episodes by video: c02/82 (7.3 s "timeout"), r03/5, 34, 35, 50 (over the cap)
-- [ ] Crop check on mid-episode frames (gripper near top edge during insertion)
+- [x] Rebuilt on move2 (2026-10-17): same 15 pinned commits, identical split counts, all 26
+      tests pass (the 8 manifest integrity tests now run instead of skipping)
+- [~] Review ~10 episodes across categories: 10 random (seed 0) + 6 odd cases, 10-column
+      filmstrips in `reports/figures/stage1_review/` (audit Section 5a). Labels, endpoints and sync
+      agree in all 16. **Reviewed from still frames by Claude; Karen should still watch a few as
+      video.**
+- [x] Odd episodes: c02/82 is an aborted trial labeled timeout (same target either way);
+      r03/5, 34, 35, 50 are genuine ~55 s stalls, kept
+- [x] Mid-episode crop check: center crop keeps marker/gripper/holder opening at insertion in
+      all 16; holder top leaves the wrist frame during approach (audit Section 5)
+- [x] Operator visible in `wrist_left` measured (2026-10-18, `reports/operator_visibility.md`):
+      ~20% of valid frames (21–24% after correcting with 180 hand labels; detector precision
+      0.91–0.94, recall 0.78–0.87), 13% inside the crop, 58% of episodes. It follows the task
+      phase (arm at the holder) rather than outcome: success vs timeout ≤5 points apart at
+      matched time. **For review:** recommendation is no masking for the baseline, plus a
+      visible/not-visible breakdown in Stage 4
+- [x] Fixed `vl.preview.frame_at` returning frame f+1 (filmstrips were labelled 67 ms late;
+      regenerated). Manifest, endpoints and targets were never affected
 
-## Open questions (block Stage 2)
-- [ ] Q1: timeouts — treat as failure (RECAP) or as censored (Mulligan critic)? Ask Lars.
-- [ ] Q2: cameras — confirm `wrist_left` + `side_1`. Ask Lars.
-- [ ] Q3: where training data lives (see Stage 0)
+## Open questions
+- [x] Q1: timeouts → **failure, as in RECAP** (Lars, 2026-10-17). Not censored.
+- [x] Q2: cameras → **`wrist_left` + `side_1`**. Lars's meeting notes: of the 4 cameras, only 2
+      are used for policies, the left wrist view and the side-on view. `side_1` is the only side
+      camera in r00–r02, so it is that view. Which cameras and whether to add proprioception
+      remain empirical questions (Stage 5).
+- [~] Q3: storage → NFS under Karen's name, not under `/move/` (Lars). Temporary: home directory
+      (`/sailhome/karenvo/vl-data`); permanent `/iris/u/karenvo` pending (see Stage 0).
+- [ ] Q4: does Lars have an existing loader that applies reviewed outcomes and endpoint trimming?
+- [ ] Q5: should `r05-screen` be a separate diagnostic distribution?
+- [ ] Q6: what compute (GPU) and policy-evaluation setup can Karen use? (move2 has an idle
+      TITAN RTX 24 GB: may Karen use it?)
+- [ ] Q7: soft truncation: what rule did the reviewer use to pick the stall frame (all 210
+      `soft_truncate` edits are human, `cv2-editor`)? And why do 47 training timeouts end
+      before the cap without being soft-truncated (operator stopped the trial?) And why do 4 r03
+      rollouts run 826–840 steps although r03 `results.json` has `max_steps: 800` and
+      `no_auto_timeout: false`? r03/35 is a success at 826 steps, after the cap. Kept as
+      labeled for the baseline (all fit inside H = 60 s)
 
-## Stage 2 — Targets
-- [~] Target design proposed (seconds, C_fail = H = 60 s, v = R/120 s, 201 bins on [−1, 0])
-- [ ] Freeze failure penalty, normalization, support, timeout rule
-- [ ] Implement target construction; report out-of-support targets
-- [ ] Tests on hand-computable synthetic episodes
+## Guidance from the meeting with Lars
+(Transcript: https://notes.granola.ai/t/393c9237-febd-434a-8d84-3418ff58cedb)
+- Start point: implement the RECAP way of learning V on the Mulligan Insert Marker data.
+- Simplest possible version first, get it working, then iterate.
+- Understanding over code: know what V learns and verify it behaves as expected.
+- Expected behavior: values rise roughly linearly on episodes that go well and drop where
+  mistakes happen. Visualize this (Stage 4). The drops can only appear in the model's
+  *predictions*; the training targets are straight countdowns.
+- Model: ImageNet-pretrained torchvision ResNet-18 plus a categorical value head; swap in a larger
+  backbone later only if needed.
+- If one-GPU training is fast, try a few variations and compare (Stage 5).
+- Next (Karen): RECAP value function implementation this weekend (2026-10-17/18).
 
-## Stage 3 — Data and model
-- [ ] Download pinned training-pool `side_1`, `wrist_left`, data on the workstation
-- [ ] Frame loader (valid frames only, original timing kept when subsampling)
-- [ ] Fixed per-camera crops chosen
-- [ ] Model: shared ImageNet ResNet-18 → concat 2×512 → MLP → 201 logits; cross-entropy
-- [ ] Tiny-subset overfitting check
+## Stage 2 — Targets (Check A: target arithmetic)
+- [x] Target design (seconds, C_fail = H = 60 s, v = R/120 s, 201 bins on [−1, 0]); all values
+      in `configs/targets.yaml` with provenance tags
+- [x] Freeze failure penalty, normalization, support, timeout rule (timeout = failure, Lars)
+- [x] Implement target construction (`src/vl/targets.py`); out-of-support frames get `bin = -1`,
+      are counted per split/outcome, never clipped
+- [x] Tests on hand-computable synthetic episodes (`tests/test_targets.py`, 11 tests; checked
+      that they fail on a floor-instead-of-round bin bug and on a missing failure penalty)
+- [x] Run on the real manifest → `data/targets/frame_targets.parquet` (575,406 frames, 1,970
+      episodes), `reports/targets_summary.md`, `reports/figures/target_examples.png`.
+      0 out-of-support targets; independently recomputed per-episode first/last values match
+- [x] Stall frames (marker held at the holder for tens of seconds) have rising targets on a
+      nearly static image, so they are unfittable from one image (audit 5a). **Reviewed by
+      Karen 2026-10-18:** kept in the baseline; analyzed separately in Stage 4
+- [x] **Stage 2 reviewed by Karen (2026-10-18).** Decisions:
+      - C_fail = H = 60 s, v = R/120 s kept. It is the smallest penalty that puts every failure
+        frame below every success frame; not tuned so the longest episode hits exactly −1
+        (lowest target −0.966). [ours]
+      - Seconds rather than steps: same normalized targets (1 step = 1 frame = 1/15 s); seconds
+        keep the Stage 6 lookahead defined in time. [ours]
+      - Timeout endpoints kept as reviewed, including the 173 of 214 training timeouts that
+        end before the 53.3 s cap (reviewer-truncated or recording ended); broken down in
+        Stage 4; open question Q7
+      - r03/35 (success at 826 steps, after the 800-step cap; validation split) kept as
+        success, pending Q7
+      - Targets rise over time for failures and timeouts too, as in RECAP's reward (−1 per
+        step, −C_fail at the end); drops at mistakes can appear only in predictions
 
-## Stage 4 — Baseline training and evaluation
-- [ ] Train baseline; select checkpoint on validation
-- [ ] Metrics: CE, expected-value error, per-episode/source breakdowns vs trivial baseline
-- [ ] Synchronized video/value plots (predictions, targets, intervention markers)
-- [ ] Failure-case analysis: what the model learns
+## Stage 3 — Data and model (target: Sun 2026-10-18)
+- [~] Download pinned training-pool `side_1`, `wrist_left`, data (storage still open, Stage 0).
+      `wrist_left` done (5.3 GB, `vl.fetch_videos`); `side_1` and data parquet not yet
+- [ ] Frame loader (valid frames only, original timing kept when subsampling, cameras in sync)
+- [ ] Fixed per-camera crops chosen from mid-episode frames; no horizontal flips or aggressive
+      crops; ImageNet normalization
+- [ ] Check B, data alignment: render a few samples with both images, timestamp, outcome, T and
+      target, and confirm both views are from the same moment
+- [ ] Model: shared ImageNet ResNet-18 → concat 2×512 → MLP (1024 → 256 → 201); cross-entropy.
+      Scalar prediction = Σ p_b · v_b (bin centers)
+- [ ] Model inputs are current images only: no proprioception, actions, elapsed time, outcome,
+      stage, policy ID or time-to-go (those build the label and must not leak into the input)
+- [ ] Starting settings [ours, not paper]: 224×224 per view, batch 32, AdamW, lr 1e-4 backbone /
+      1e-3 head, mixed precision, uniform valid-frame sampling (log source/outcome mix)
+- [ ] Check C: tiny-subset overfitting check (loss must drop a lot; else debug loader/targets)
 
-## Stage 5 — Ablations and test
-- [ ] One camera vs two
-- [ ] Proprioception (if useful)
-- [ ] Timeout-handling sensitivity (if Q1 leaves it open)
+## Stage 4 — Baseline training and evaluation (target: Mon 2026-10-19)
+- [ ] Train baseline; select checkpoint on validation cross-entropy
+- [ ] Trivial baselines: constant predictor (training return distribution); optional
+      elapsed-time-only predictor (elapsed time only, never eventual duration or outcome)
+- [ ] Metrics: CE, MAE of expected value vs normalized return, averaged per frame *and* per
+      episode, train/val gap; broken down by outcome, source repo, autonomous vs assisted
+- [ ] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
+      failure, recovery, intervention, typical error, worst error): both views, predicted value
+      (raw; any smoothing labeled), MC target, intervention intervals, marked mistakes/recovery
+- [ ] Note: the *targets* are straight countdowns and never drop at a mistake. A drop in the
+      *prediction* is what we test for. Never force predictions to be monotonic.
+- [ ] Questions to answer: does V rise at grasp/seat, fall at a drop, tell hovering-above-holder
+      from seated, react to occlusion, and stay meaningful on late-round autonomous rollouts?
+- [ ] Assisted episodes reflect the human+robot mixture, not the robot alone: analyze separately
+- [ ] Operator visibility (Stage 1 audit, `reports/operator_visibility.md`): break CE/MAE down
+      by operator visible vs not in `wrist_left` (per-frame `person_frac` in
+      `data/audit/operator_visibility_wrist_left.parquet`, 1 fps; extend to the frames
+      evaluated). Compare matched frames (same phase/outcome) with and without the operator, and
+      check whether sharp V drops coincide with the operator appearing
+- [ ] Timeout endpoints: report CE/MAE separately for the three kinds of training timeout:
+      reviewer-truncated at a stall (`soft_truncate`, 126), recording ended early (47), ran to
+      the 53.3 s cap (41). Baseline keeps the reviewer's T (treated like a failure's T). If
+      the truncated ones are much worse, the arbitrary endpoint matters; fallback is the
+      Stage 5 timeouts-excluded diagnostic. Changing T or censoring timeouts is a label change:
+      ask Lars first
+- [ ] Stall frames: report error on stall periods separately and do not count a flat V
+      during a stall as a model failure (one image cannot show how long the robot has been
+      stuck; audit 5a)
+- [ ] **Decide operator masking** (baseline: no masking). Mask/crop the bottom-left corner
+      only if the check above shows V reacting to the operator; then retrain as a Stage 5
+      one-change ablation
+- [ ] Phase-one gate: beats the trivial baselines on validation, interpretable held-out curves,
+      failure cases understood. Evidence that history/other supervision is needed also counts.
+
+## Stage 5 — Ablations and test (target: Tue 2026-10-20)
+One change at a time, in this order:
+- [ ] 1. Side only vs wrist + side
+- [ ] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
+      first; normalize with training statistics only)
+- [ ] 3. Frozen vs fine-tuned encoder
+- [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
+      the two images; larger backbone only if ResNet-18 underfits
+- [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
+- [ ] If Stage 4 shows V reacting to the operator: masked `wrist_left` bottom-left corner vs
+      unmasked (see Stage 4 operator check)
 - [ ] Freeze all choices
-- [ ] Final test evaluation (r05-eval, r05-screen reported separately)
+- [ ] Final test evaluation (r05-eval, r05-screen reported separately; check r05-screen
+      provenance before treating it as equivalent; they share the same 50 starts)
+- [ ] Progress package for Lars: what was built (architecture, inputs, targets, split), metrics
+      + 3 representative plots/videos, failure examples, one comparison, next decision; with
+      config, pinned revisions and checkpoint
 
-## Stage 6 — Toward policy improvement
-- [ ] Check advantage labels (consistent units, lookahead defined in time)
-- [ ] π₀.₅ advantage-conditioned fine-tuning
-- [ ] Compare against LWD-style value learning
+## Stage 6 — Policy improvement (Phase 2; only after the Stage 4 gate passes)
+Advantage conditioning happens here, not in this week's deliverable.
+- [ ] Advantage labels: Â_t = Σ_{k=t}^{t+n−1} r̃_k + V̂(o_{t+n}) − V̂(o_t), rewards and V in the
+      same normalization, terminals handled explicitly, lookahead n chosen in seconds then
+      converted to frames (do not copy RECAP's frame counts)
+- [ ] Threshold advantages into positive/negative indicators (as in RECAP)
+- [ ] Inspect advantage distributions and positive/negative examples first. A rising value is
+      not automatically a positive advantage (progress must beat the cost of elapsed time).
+      An overfit V gives ~zero advantages on its training episodes: consider out-of-fold V.
+- [ ] π₀.₅ advantage-conditioned fine-tuning; compare with vs without V (IRIS cluster). Lars:
+      conceptually simpler than learning V but needs more compute.
+- [ ] Fair comparison: matched initialization, budget, preprocessing and data mixture; include a
+      strong imitation baseline; separate the effect of conditioning from the effect of which
+      data reaches the actor
+- [ ] Real policy improvement needs robot rollouts (or an execution environment); offline
+      imitation loss alone cannot show it. Ask Lars what evaluation setup is available.
+
+## Stage 7 — LWD comparison (later)
+- [ ] LWD as a comparison: does bootstrapped value learning give better improvement signals?
+      Matched comparison; trade-offs between the two (both are SOTA VLA post-training)

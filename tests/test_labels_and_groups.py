@@ -86,3 +86,9 @@ def test_groups_and_split_are_disjoint_and_deterministic():
     assert s.loc["T:0", "split"] == "test_t"
     assert bool(s.loc["A:5", "test_overlap_conflict"])
     assert (s1.split == "val").sum() > 0
+
+
+def test_center_crop_box_matches_torchvision_resize_256_crop_224():
+    from vl.preview import center_crop_box
+    # 640x480: short side 480 -> 256 (scale 8/15); a 224 crop keeps a 420 px square, centered.
+    assert center_crop_box(640, 480) == (110, 30, 530, 450)

@@ -1,0 +1,37 @@
+# Value-target construction (see reports/dataset_audit.md Section 8).
+#
+# Provenance of each choice:
+#   [paper] = RECAP / pi*0.6 (arXiv 2511.14759)
+#   [lars]  = explicitly specified by Lars Ankile
+#   [ours]  = our experimental choice (documented, can be changed)
+#
+# Per episode with valid final frame T and frame rate fps, for t = 0..T:
+#   R_t = -(T - t) / fps - c_fail_s * [episode failed]      (seconds, undiscounted)
+#   v_t = R_t / (horizon_s + c_fail_s)                       (one task-wide scale)
+# Frames after T are never targets.
+
+# [paper] reward -1 per step, no discounting; [ours] measured in seconds, not steps,
+# so later advantage lookaheads are defined in time.
+units: seconds
+
+# [ours] Longest valid episode is 56.0 s (840 frames), so 60 s covers every observed episode.
+horizon_s: 60.0
+
+# [paper] large negative terminal reward for failure; [ours] value = horizon_s, which puts
+# every success in (-0.5, 0] and every failure in [-1, -0.5] for episodes up to horizon_s.
+c_fail_s: 60.0
+
+# [lars] timeouts are failures, as in RECAP (2026-10-17). Not treated as censored.
+failure_outcomes: [failure, timeout]
+success_outcomes: [success]
+
+# [paper] B = 201 bins, values in (-1, 0). [ours] bin *centers* evenly spaced on [-1, 0]
+# inclusive (width 0.005 = 0.6 s), hard one-hot to the nearest center.
+n_bins: 201
+v_min: -1.0
+v_max: 0.0
+
+paths:
+  frame_targets: data/targets/frame_targets.parquet
+  report: reports/targets_summary.md
+  figure: reports/figures/target_examples.png

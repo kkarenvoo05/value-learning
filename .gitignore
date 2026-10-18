@@ -6,6 +6,8 @@ __pycache__/
 
 # Data, caches, checkpoints, generated media — never commit
 data/
+# (no trailing slash: data may be a symlink to external storage)
+/data
 checkpoints/
 runs/
 *.mp4

@@ -25,9 +25,18 @@ CAMS = ["wrist_left", "side_1", "side_2"]
 THUMB = (320, 240)
 
 
+def center_crop_box(w: int, h: int, resize: int = 256, crop: int = 224) -> tuple[int, int, int, int]:
+    """Region of a w×h frame kept by torchvision's Resize(resize) + CenterCrop(crop)."""
+    side = min(w, h) * crop / resize
+    x0, y0 = (w - side) / 2, (h - side) / 2
+    return round(x0), round(y0), round(x0 + side), round(y0 + side)
+
+
 def frame_at(url: str, t: float, fps: int, size=(640, 480)) -> Image.Image | None:
     """Decode the frame starting at time t. Accurate seeking straight to the final frame
-    returns nothing with these AV1 files, so seek one frame early and keep the second."""
+    returns nothing with these AV1 files, so seek one frame early. ffmpeg then outputs from the
+    first frame whose pts >= start, which is already the wanted frame: keep the first one.
+    (Keeping the second returned frame f+1; checked against PyAV and ffmpeg select=eq(n,f).)"""
     w, h = size
     start = max(0.0, t - 1.0 / fps)
     cmd = ["ffmpeg", "-v", "error", "-ss", f"{start:.4f}", "-i", url, "-frames:v", "2",
@@ -36,11 +45,11 @@ def frame_at(url: str, t: float, fps: int, size=(640, 480)) -> Image.Image | Non
     n = len(out.stdout) // (w * h * 3)
     if out.returncode or n == 0:
         return None
-    k = 0 if start == 0.0 and t < 1.0 / fps else n - 1
-    return Image.frombytes("RGB", (w, h), out.stdout[k * w * h * 3:(k + 1) * w * h * 3])
+    return Image.frombytes("RGB", (w, h), out.stdout[:w * h * 3])
 
 
-def episode_sheet(row: pd.Series, eps_meta: pd.Series, cams_wanted=CAMS, n_cols: int = 6) -> Image.Image:
+def episode_sheet(row: pd.Series, eps_meta: pd.Series, cams_wanted=CAMS, n_cols: int = 6,
+                  crop_box: bool = False) -> Image.Image:
     fps, T, n = row.fps, int(row["T"]), int(row.raw_length)
     idx = set(np.linspace(0, T, n_cols - 1).round().astype(int).tolist() + [T])
     if row.first_human_frame >= 0:
@@ -69,6 +78,8 @@ def episode_sheet(row: pd.Series, eps_meta: pd.Series, cams_wanted=CAMS, n_cols:
             label = f"{cam} f={f} t={f / fps:.2f}s{tag}"
             d.text((x + 4, y), label, fill="red" if f >= T else "black")
             if img is not None:
+                if crop_box:
+                    ImageDraw.Draw(img).rectangle(center_crop_box(*img.size), outline="yellow", width=3)
                 sheet.paste(img.resize(THUMB), (x, y + 14))
             else:
                 d.text((x + 10, y + 100), "decode failed", fill="red")
@@ -82,6 +93,8 @@ def main():
     ap.add_argument("--episodes", type=int, nargs="+", required=True)
     ap.add_argument("--out", default="reports/figures")
     ap.add_argument("--cams", nargs="+", default=CAMS)
+    ap.add_argument("--cols", type=int, default=6, help="evenly spaced frames from 0 to T")
+    ap.add_argument("--crop-box", action="store_true", help="outline the Resize(256)+CenterCrop(224) region")
     args = ap.parse_args()
     cfg = load_config(args.config)
     m = pd.read_parquet(cfg["paths"]["manifest"]).set_index(["repo", "episode_index"])
@@ -91,7 +104,7 @@ def main():
     for e in args.episodes:
         row = m.loc[(args.repo, e)].copy(); row["repo"], row["episode_index"] = args.repo, e
         p = out / f"{args.repo}_ep{e:04d}.jpg"
-        episode_sheet(row, eps.loc[e], args.cams).save(p, quality=85)
+        episode_sheet(row, eps.loc[e], args.cams, args.cols, args.crop_box).save(p, quality=85)
         print(p)
 
 
