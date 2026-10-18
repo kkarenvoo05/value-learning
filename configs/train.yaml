@@ -26,9 +26,20 @@ check_c:
 baseline:
   steps: 40000              # x batch 32 = 1.28M samples, ~3.4 passes over the 373,947 train frames
   warmup_steps: 500         # linear LR warmup, then constant
+  schedule: constant
   eval_every: 2000          # full validation split (64,906 frames)
   eval_batch_size: 128
   workers: 28               # video decoding runs in the workers (Stage 3.3: ~28 samples/s each)
+
+# Decision 2(a): same as `baseline` except a shorter run with cosine LR decay and more
+# frequent evals (the constant-LR baseline peaked at step 2k and then overfit).
+baseline_cosine:
+  steps: 8000               # ~0.68 passes over the train frames
+  warmup_steps: 500
+  schedule: cosine          # LR factor: linear warmup, then cosine from 1 to 0 at the last step
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
 
 paths:
   runs: data/runs            # checkpoints + logs (gitignored, on Karen's NFS storage)

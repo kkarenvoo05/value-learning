@@ -245,8 +245,11 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       (per frame and per episode). Already what `vl.train_baseline` does. [ours]
 - [ ] **Decision 2, overfitting** (best checkpoint at 0.17 passes; val CE worse than the
       constant from ~6k steps). Try in this order, one change at a time:
-      - [ ] (a) Shorter schedule with learning-rate decay (e.g. cosine to ~0 over a few thousand
-            steps, more frequent val evals). Labels unchanged. **Try first.**
+      - [~] (a) Shorter schedule with learning-rate decay (e.g. cosine to ~0 over a few thousand
+            steps, more frequent val evals). Labels unchanged. **Try first.** Submitted
+            2026-10-18: `RUN=cosine_8k SECTION=baseline_cosine sbatch scripts/baseline.sbatch`.
+            8k steps (~0.68 passes), 500-step warmup then cosine to 0, full-val eval every 500
+            steps; everything else as the step-2k baseline [ours]
       - [ ] (b) Lower learning rate (backbone and/or head), if (a) still overfits early
       - [ ] (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
             Changes target construction, not in RECAP: only with Karen's OK, and only if (a)/(b)
@@ -254,13 +257,18 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       - Success criterion: the best checkpoint is no longer an early accident (val CE flat or
         improving over a stretch of evals), and val MAE ≤ the step-2k baseline's 0.119
 - [ ] **Repo-aware evaluation** (the repo shortcut, `reports/baseline_results.md`):
-      - [ ] Add the repo-only constant (val MAE 0.140) as the trivial baseline the model must
-            beat, next to the global constant, in every run's eval
-      - [ ] Report metrics within the eval repos r01–r04 (outcomes vary there), incl. the
-            success AUC by elapsed time
-      - [ ] Report the *within-episode* signal: how well V's change over an episode tracks the
-            target's change. A per-repo offset cancels in V(o_{t+n}) − V(o_t), the quantity
-            Stage 6 advantages use
+      - [x] Add the repo-only constant (val MAE 0.140) as the trivial baseline the model must
+            beat, next to the global constant, in every run's eval (`vl.metrics`, logged at every
+            eval of `vl.train_baseline`; `python -m vl.metrics --run <run>` re-scores old runs)
+      - [x] Report metrics within the eval repos r00–r04 (outcomes vary there), incl. the
+            within-repo success AUC at 1/5/10 s. Step-2k baseline: eval-repo MAE 0.194 vs
+            repo-constant 0.222; AUC 0.59 / 0.62 / 0.81
+      - [x] Report the *within-episode* signal: `offset_free_mae` (subtract each episode's mean
+            from V and v, then MAE), vs the same number for a flat line. A per-repo offset cancels
+            in it, as it does in V(o_{t+n}) − V(o_t), the quantity Stage 6 advantages use. (The
+            target's own change is the same fixed slope in every episode, so "does ΔV track Δv"
+            is not informative.) **Step-2k baseline: 0.052, worse than flat (0.037)**: V's
+            within-episode wiggles and jumps add error against the straight countdown
       - [ ] Find what in the images reveals the repo (e.g. first frames per repo side by side:
             setup, lighting, operator, camera pose); ask Lars whether collection and eval data are
             expected to look different

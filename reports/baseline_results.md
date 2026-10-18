@@ -108,6 +108,21 @@ What this suggests [Claude's reading of the stills; to be checked against the vi
 - **Possible occlusion sensitivity:** in 01 V drops by ~0.2 while the arm fills the side
   camera. Check on more episodes (Stage 4 occlusion question).
 
+## Repo-aware metrics (`vl.metrics`, step-2k baseline)
+
+| metric | model | reference |
+|---|---:|---:|
+| val MAE (frame) | 0.119 | repo-only constant 0.140 |
+| eval-repo (r00–r04) MAE | 0.194 | repo-only constant 0.222 |
+| within-repo success AUC at 1 / 5 / 10 s | 0.59 / 0.62 / 0.81 | 0.5 = chance |
+| offset-free (shape) MAE, per episode | **0.052** | flat line 0.037 |
+
+The shape error is worse than a flat line. Once each episode's average level is removed, V's
+within-episode ups and downs fit the straight countdown worse than no movement at all. The
+jumps (e.g. −0.55 → 0 at seating) count as error against a straight target, so some of this is
+expected. Still, it means this V's frame-to-frame changes, the input to Stage 6 advantages, are
+mostly not tracking the countdown.
+
 ## Open decisions (for Karen)
 
 1. **Checkpoint selection:** CE and MAE disagree after step 2k. Keep CE (the objective), or
