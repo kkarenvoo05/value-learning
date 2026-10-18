@@ -143,7 +143,7 @@ def main():
 
     meta = {"args": vars(args), "config": cfg, "steps": steps, "episodes": uids, "n_frames": len(sub),
             "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu",
-            "amp": str(dtype), "torch": torch.__version__,
+            "amp": str(dtype), "torch": str(torch.__version__),
             "git": subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()}
     (run / "config.json").write_text(json.dumps(meta, indent=2))
 

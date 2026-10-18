@@ -22,5 +22,13 @@ check_c:
   steps: 1500
   eval_every: 250
 
+# Stage 4 baseline (vl.train_baseline): all training frames, checkpoint chosen on val CE.
+baseline:
+  steps: 40000              # x batch 32 = 1.28M samples, ~3.4 passes over the 373,947 train frames
+  warmup_steps: 500         # linear LR warmup, then constant
+  eval_every: 2000          # full validation split (64,906 frames)
+  eval_batch_size: 128
+  workers: 28               # video decoding runs in the workers (Stage 3.3: ~28 samples/s each)
+
 paths:
   runs: data/runs            # checkpoints + logs (gitignored, on Karen's NFS storage)
