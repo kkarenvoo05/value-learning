@@ -45,6 +45,7 @@ src/vl/
   check_data.py            integrity of downloaded videos/parquet vs pins and manifest
   dataset.py               PyTorch Dataset/DataLoader (images only as model input), crops
   data_figures.py          crop sheets, Check B, sync checks, review videos
+  model.py                 ValueModel: shared ResNet-18 over two cameras -> 201-bin value head
   audit_tables.py          regenerates reports/audit_tables.md
   preview.py               labeled multi-camera contact sheets from remote videos
   fetch_videos.py          download pinned camera videos -> data/videos/
@@ -72,6 +73,7 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 .venv/bin/python -m vl.check_data         # -> reports/data_integrity.md (hashes all files, ~10 min)
 .venv/bin/python -m vl.dataset --workers 4 --batches 100   # loader throughput + sampled mix
 .venv/bin/python -m vl.data_figures       # -> reports/figures/stage3/, data/review_videos/
+.venv/bin/python -m vl.model              # parameter count + initialization check on a real batch
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```

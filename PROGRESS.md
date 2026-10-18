@@ -188,12 +188,22 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
 - **You check:** the logged mix matches the index, and one batch's shapes, dtypes and value ranges
 
 ### 3.7 Model
-- [ ] Shared ImageNet ResNet-18 (same weights for both views) → concat 2×512 → MLP
-      (1024 → 256 → 201) → cross-entropy on the hard bin. Prediction V = Σ p_b · v_b over the 201
-      bin centers on [−1, 0] [paper: 201-bin categorical; architecture ours]
-- [ ] Sanity tests: output shape (B, 201); at initialization CE ≈ ln 201 ≈ 5.30 and V ≈ −0.5
-      (near-uniform softmax); expected-value function maps a one-hot on bin b to v_b exactly;
-      parameter count printed
+- [x] `src/vl/model.py`: shared ImageNet ResNet-18 (same weights for both views) → concat 2×512
+      → MLP (1024 → 256 → 201) → cross-entropy on the hard bin. Prediction V = Σ p_b · v_b over
+      the 201 bin centers on [−1, 0] [paper: 201-bin categorical; architecture ours]. Takes the
+      uint8 image dict; ImageNet normalization is inside `forward`. 11,490,569 parameters
+      (backbone 11,176,512 + head 314,057)
+- [x] Sanity on a real training batch (`python -m vl.model`, CPU): logits (16, 201); at
+      initialization CE 5.380 (ln 201 = 5.303), max p 0.016 (uniform 0.005), V ∈ [−0.497, −0.487]
+      (uniform −0.5). Not exactly uniform because the last layer has PyTorch's default random
+      init [ours: kept]
+- [x] Tests (`tests/test_model.py`, 9): shape; one shared backbone; changing only `wrist_left` or
+      only `side_1` changes the output; cameras read by name; normalization inside; one-hot on
+      bin b → v_b; uniform → V = −0.5 and CE = ln 201; a few steps fit one batch. Checked
+      that the tests fail if normalization is dropped or one camera is fed twice
+- Note [paper vs ours]: Mulligan's Insert Marker critic uses **one ResNet-18 per camera**
+  (audit Section 5); our plan shares one backbone. Possible later ablation. With a shared
+  backbone in train mode, BatchNorm statistics are computed over wrist and side images together
 - **You check:** walk through `forward` line by line and explain why the head outputs 201
   logits rather than one number, and what Σ p_b · v_b means
 
