@@ -241,8 +241,9 @@ Per episode with valid final frame T (0-indexed), for t = 0..T, in **seconds** (
    should watch them as video).
 3. ~~Mid-episode crop check~~ (center crop adequate; final crop decided in Stage 3).
 4. Permanent NFS storage (`/iris/u/karenvo`); temporary home-directory storage in use.
-5. ~~Implement, test and run target construction~~ (done). Next stage: data download, loader,
-   alignment check (Check B), model, tiny-subset overfit (Check C).
+5. ~~Implement, test and run target construction~~ (done). ~~Data download, loader, crops,
+   alignment check (Check B)~~ (done 2026-10-18, `reports/data_checks.md`). Next: model (3.7),
+   tiny-subset overfit (Check C, 3.8).
 6. Open for review: stall frames are unfittable from images alone (Section 5a). Operator in
    `wrist_left` is measured (Section 5, `operator_visibility.md`); recommendation is no
    masking for the baseline and a visible/not-visible breakdown in Stage 4 (decision pending).

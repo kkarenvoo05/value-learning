@@ -34,18 +34,24 @@ Read the HF release docs, not only the papers: outcome/endpoint semantics live t
 ```
 configs/dataset.yaml       repos, split, validation seed, metadata patterns
 configs/targets.yaml       target constants (horizon, failure penalty, bins, timeout rule)
+configs/data.yaml          cameras, crops, image size, normalization
 src/vl/
   fetch_metadata.py        pin repos to commits, download metadata only
   frame_summary.py         per-episode summaries of trajectory parquet (remote column reads)
   manifest.py              episode manifest + label/endpoint precedence rules
   splits.py                group-aware train/val/test assignment
   targets.py               per-frame value targets (return, normalized value, bin)
+  frames.py                frame index (one row per training example) + exact frame decoding
+  check_data.py            integrity of downloaded videos/parquet vs pins and manifest
+  dataset.py               PyTorch Dataset/DataLoader (images only as model input), crops
+  data_figures.py          crop sheets, Check B, sync checks, review videos
   audit_tables.py          regenerates reports/audit_tables.md
   preview.py               labeled multi-camera contact sheets from remote videos
   fetch_videos.py          download pinned camera videos -> data/videos/
   operator_visibility.py   person-segmenter audit of operator visibility per camera
 tests/                     synthetic unit tests + integrity checks on the built manifest
 reports/dataset_audit.md   audit findings, open questions, target-construction proposal
+reports/data_checks.md     Stage 3 data pipeline: checks, measurements, decisions
 data/                      (gitignored) pinned metadata, summaries, manifest
 ```
 
@@ -61,11 +67,16 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 .venv/bin/python -m vl.splits             # -> data/manifest/episodes.{parquet,csv}
 .venv/bin/python -m vl.audit_tables       # -> reports/audit_tables.md
 .venv/bin/python -m vl.targets            # -> data/targets/frame_targets.parquet, reports/targets_summary.md
+.venv/bin/python -m vl.fetch_videos --cams wrist_left side_1 --data   # ~11 GB -> data/videos/
+.venv/bin/python -m vl.frames             # -> data/frames/frame_index.parquet
+.venv/bin/python -m vl.check_data         # -> reports/data_integrity.md (hashes all files, ~10 min)
+.venv/bin/python -m vl.dataset --workers 4 --batches 100   # loader throughput + sampled mix
+.venv/bin/python -m vl.data_figures       # -> reports/figures/stage3/, data/review_videos/
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```
 
-Nothing above downloads videos. The manifest (`data/manifest/episodes.parquet`) is the single
+Only `vl.fetch_videos` downloads videos. The manifest (`data/manifest/episodes.parquet`) is the single
 source of truth for episode identity, outcome, valid endpoint `T`, group, and split.
 
 ## Status

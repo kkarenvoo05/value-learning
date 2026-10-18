@@ -75,6 +75,12 @@ Details for finished items are in `reports/dataset_audit.md`.
       `no_auto_timeout: false`? r03/35 is a success at 826 steps, after the cap. Kept as
       labeled for the baseline (all fit inside H = 60 s)
 
+- [ ] Q8: does a marker fully seated in *any* of the holder's 4 holes count as success, or is
+      there a target hole? The release docs don't say. The VLM tag "wrong_hole_partial_insert"
+      (16 train/val episodes: 14 failure, 2 timeout, 0 success) comes from a VLM prior, not a
+      task definition. Doesn't change the baseline: partial inserts are not seated, so not
+      success either way (r00/29, reviewed by Karen 2026-10-18)
+
 ## Guidance from the meeting with Lars
 (Transcript: https://notes.granola.ai/t/393c9237-febd-434a-8d84-3418ff58cedb)
 - Start point: implement the RECAP way of learning V on the Mulligan Insert Marker data.
@@ -117,20 +123,89 @@ Details for finished items are in `reports/dataset_audit.md`.
         step, −C_fail at the end); drops at mistakes can appear only in predictions
 
 ## Stage 3 — Data and model (target: Sun 2026-10-18)
-- [~] Download pinned training-pool `side_1`, `wrist_left`, data (storage still open, Stage 0).
-      `wrist_left` done (5.3 GB, `vl.fetch_videos`); `side_1` and data parquet not yet
-- [ ] Frame loader (valid frames only, original timing kept when subsampling, cameras in sync)
-- [ ] Fixed per-camera crops chosen from mid-episode frames; no horizontal flips or aggressive
-      crops; ImageNet normalization
-- [ ] Check B, data alignment: render a few samples with both images, timestamp, outcome, T and
-      target, and confirm both views are from the same moment
-- [ ] Model: shared ImageNet ResNet-18 → concat 2×512 → MLP (1024 → 256 → 201); cross-entropy.
-      Scalar prediction = Σ p_b · v_b (bin centers)
-- [ ] Model inputs are current images only: no proprioception, actions, elapsed time, outcome,
-      stage, policy ID or time-to-go (those build the label and must not leak into the input)
-- [ ] Starting settings [ours, not paper]: 224×224 per view, batch 32, AdamW, lr 1e-4 backbone /
-      1e-3 head, mixed precision, uniform valid-frame sampling (log source/outcome mix)
-- [ ] Check C: tiny-subset overfitting check (loss must drop a lot; else debug loader/targets)
+Eight checkpoints, done in order. Each one ends with something Karen checks directly
+(**You check**) before the next starts, so every piece is understood before it is built on.
+
+### 3.1 Data on disk
+- [x] Download pinned training-pool `side_1`, `wrist_left`, data parquet (2026-10-18;
+      `vl.fetch_videos --cams side_1 --data`). 11 GB in `data/videos/` (home NFS, 6.8 GB left)
+- [x] Integrity (`vl.check_data` → `reports/data_integrity.md`): sha256 of all 1,785 files =
+      pinned LFS hashes; every episode × camera has frames 0..T at from_ts + k/15; parquet rows,
+      frame_index, timestamps and is_valid agree with the manifest. Only exception: r00/35
+      `wrist_left` is one frame short after T (known, harmless; the frame index now guards
+      against reading into the next episode)
+- **You check:** the on-disk layout for one episode: which mp4 file, which time range inside it
+  (LeRobot v3 packs many episodes per file), which parquet rows. Be able to answer "where do the
+  pixels for r02 episode 17, frame 300 live?" (worked answer: `reports/data_checks.md` 3.1)
+
+### 3.2 Frame index: what one training example is
+- [x] `vl.frames` → `data/frames/frame_index.parquet`: 438,853 frames from 1,620 episodes
+      (train 373,947 / val 64,906); t ≤ T only; train/val only (test untouched)
+- [x] Counts match `reports/targets_summary.md` per split and outcome exactly
+- [x] **Checked by Karen (2026-10-18):** r00/29 t=100 recomputed by hand (v = −0.5311,
+  bin 94), 157 rows = T+1, no label column reaches the model
+
+### 3.3 Frame decoding
+- [x] `FrameReader.read(path, from_ts, t, fps)` decodes by timestamp and raises if it would land
+      on another frame. 434/434 real frames byte-identical to sequential decoding (11 repos ×
+      2 cams, incl. packed files); synthetic tests fail on a t+1 bug
+- [x] Decode speed: 4 workers → 112 samples/s (AV1, keyframe every 2 frames; no AV1 hardware
+      decode on the TITAN RTX). **Decision [ours]: decode on the fly** (exact, no extra disk,
+      ~1 h per pass over train frames); pre-extraction (~10 GB) doesn't fit the home quota.
+      Revisit if Stage 4 is loader-bound
+- **You check:** the measured speed, and the decision with its reason (frames/s needed for
+  batch 32 at a useful GPU utilization vs frames/s the decoder gives)
+
+### 3.4 Crops and preprocessing
+- [x] Fixed square crops [ours], `configs/data.yaml`: `wrist_left` (80, 0, 560, 480) full height
+      (centre crop cut the holder's top); `side_1` (140, 0, 560, 420), moved up and right onto
+      the scene. 224×224 bilinear, ImageNet mean/std. No flips, no random crops
+- [x] Contact sheets `reports/figures/stage3/crops_*.jpg` (phases, stall, failure end,
+      initial-state extremes; raw + box next to the model's input after normalize→unnormalize)
+- **You check:** the sheet. Nothing needed to judge progress (marker, gripper, holder opening)
+  is cut off; un-normalize a tensor and confirm it renders back to the same image
+
+### 3.5 Check B: data alignment
+- [x] `reports/figures/stage3/check_b_alignment.jpg`: 8 samples through the real loader path,
+      annotated with references recomputed independently (parquet timestamp and is_valid,
+      Section 8 formula): 8/8 agree
+- [x] Sync, measured: camera motion vs end-effector speed peaks at lag 0 for `side_1` in 16/16
+      clear episodes and for `wrist_left` in 17/22 (other 5: flat curve, +6 within 0.06).
+      Video ↔ proprio timing is ambiguous at 0 or +6 frames (probably 6-frame action chunks):
+      recheck before the Stage 5 proprio ablation
+- [x] Review videos of what the model sees, `data/review_videos/` (5 episodes)
+- **You check:** both views show the same moment (gripper pose agrees between wrist and side),
+  late frames have v_t near 0 (success) or near −0.5 (failure), and t never exceeds T
+
+### 3.6 Dataset and DataLoader
+- [x] `vl.dataset.FrameDataset` → `{"images": {wrist_left, side_1}, "bin", "value", "row"}`; only
+      `images` go to the model; labels stay in the index (looked up by `row`)
+- [x] Tests: exact item keys / camera keys, item i is frame t of its episode, crop box, normalize
+      round-trip (`tests/test_dataset.py`; 36 tests pass)
+- [x] Uniform sampling over valid train frames [ours]; sampled mix vs index: success 0.60/0.62,
+      timeout 0.28/0.27, failure 0.12/0.10; every repo within 1 point
+- [x] Throughput: 3 workers 86, 4 workers 112 samples/s
+- **You check:** the logged mix matches the index, and one batch's shapes, dtypes and value ranges
+
+### 3.7 Model
+- [ ] Shared ImageNet ResNet-18 (same weights for both views) → concat 2×512 → MLP
+      (1024 → 256 → 201) → cross-entropy on the hard bin. Prediction V = Σ p_b · v_b over the 201
+      bin centers on [−1, 0] [paper: 201-bin categorical; architecture ours]
+- [ ] Sanity tests: output shape (B, 201); at initialization CE ≈ ln 201 ≈ 5.30 and V ≈ −0.5
+      (near-uniform softmax); expected-value function maps a one-hot on bin b to v_b exactly;
+      parameter count printed
+- **You check:** walk through `forward` line by line and explain why the head outputs 201
+  logits rather than one number, and what Σ p_b · v_b means
+
+### 3.8 Training step and Check C: tiny-subset overfit
+- [ ] GPU: confirm with Lars that Karen may use move2's TITAN RTX (Q6)
+- [ ] Training settings [ours, not paper]: 224×224 per view, batch 32, AdamW, lr 1e-4 backbone /
+      1e-3 head, mixed precision, fixed seed; config + command logged
+- [ ] Overfit ~4 training episodes (1 success, 1 failure, 1 timeout, 1 assisted; a few hundred
+      frames). Train CE must fall far below 5.30 and V must track the target curve on those
+      episodes. If not, debug loader/targets before Stage 4
+- **You check:** the loss curve, and a predicted-vs-target value plot for each of the 4 episodes.
+  Stall frames may stay hard even here (one image cannot tell how long the robot has been stuck)
 
 ## Stage 4 — Baseline training and evaluation (target: Mon 2026-10-19)
 - [ ] Train baseline; select checkpoint on validation cross-entropy
