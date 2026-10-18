@@ -236,10 +236,38 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       elapsed-time-only 0.235, repo + time 0.146, **repo-only constant 0.140** vs model 0.119.
       Repo almost fixes the outcome (c00–c05 ~100% success, r00 4% … r04 53%), so most of the
       gain could be repo recognition. Within eval repos r01–r04, V's success AUC rises from 0.57
-      at 1 s to 0.80 at 12 s (a progress signal). **Decisions pending (Karen):** checkpoint
-      metric, overfitting fix, repo-aware baseline. Original plan item: constant predictor;
-      optional
-      elapsed-time-only predictor (elapsed time only, never eventual duration or outcome)
+      at 1 s to 0.80 at 12 s (a progress signal). Original plan item: constant predictor;
+      optional elapsed-time-only predictor (elapsed time only, never eventual duration or outcome)
+
+### Baseline recipe: settle before Stage 5 (ablations compare against a fixed baseline)
+- [x] **Decision 1, checkpoint metric (Karen, 2026-10-18):** select the checkpoint on per-frame
+      validation **CE** (the training objective), and always report val **MAE** of V next to it
+      (per frame and per episode). Already what `vl.train_baseline` does. [ours]
+- [ ] **Decision 2, overfitting** (best checkpoint at 0.17 passes; val CE worse than the
+      constant from ~6k steps). Try in this order, one change at a time:
+      - [ ] (a) Shorter schedule with learning-rate decay (e.g. cosine to ~0 over a few thousand
+            steps, more frequent val evals). Labels unchanged. **Try first.**
+      - [ ] (b) Lower learning rate (backbone and/or head), if (a) still overfits early
+      - [ ] (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
+            Changes target construction, not in RECAP: only with Karen's OK, and only if (a)/(b)
+            leave the model over-confident
+      - Success criterion: the best checkpoint is no longer an early accident (val CE flat or
+        improving over a stretch of evals), and val MAE ≤ the step-2k baseline's 0.119
+- [ ] **Repo-aware evaluation** (the repo shortcut, `reports/baseline_results.md`):
+      - [ ] Add the repo-only constant (val MAE 0.140) as the trivial baseline the model must
+            beat, next to the global constant, in every run's eval
+      - [ ] Report metrics within the eval repos r01–r04 (outcomes vary there), incl. the
+            success AUC by elapsed time
+      - [ ] Report the *within-episode* signal: how well V's change over an episode tracks the
+            target's change. A per-repo offset cancels in V(o_{t+n}) − V(o_t), the quantity
+            Stage 6 advantages use
+      - [ ] Find what in the images reveals the repo (e.g. first frames per repo side by side:
+            setup, lighting, operator, camera pose); ask Lars whether collection and eval data are
+            expected to look different
+- [ ] Retrain the baseline with the settled recipe, **3 seeds**, to measure seed-to-seed noise.
+      Ablation differences smaller than that noise are not evidence
+- [ ] Karen's observations from the step-2k videos: list them here and sort each into
+      data/label fix (before retraining), recipe fix, or ablation question
 - [ ] Metrics: CE, MAE of expected value vs normalized return, averaged per frame *and* per
       episode, train/val gap; broken down by outcome, source repo, autonomous vs assisted
 - [~] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
