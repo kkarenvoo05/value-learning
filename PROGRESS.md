@@ -228,8 +228,17 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
   Stall frames may stay hard even here (one image cannot tell how long the robot has been stuck)
 
 ## Stage 4 — Baseline training and evaluation (target: Mon 2026-10-19)
-- [ ] Train baseline; select checkpoint on validation cross-entropy
-- [ ] Trivial baselines: constant predictor (training return distribution); optional
+- [x] Train baseline (job 17947767, 2026-10-18, 40 min; `reports/baseline_results.md`). 40k steps
+      × 32, best.pt = lowest val CE = **step 2,000**: val CE 3.873, MAE 0.119 (constant: 4.530,
+      0.257). **Overfits after ~2k steps**: train CE 3.41 → 1.41, val CE 3.87 → 8.73 (worse than
+      the constant from ~6k), val MAE plateaus at 0.13–0.14 (over-confident distributions)
+- [~] Trivial baselines (`reports/baseline_results.md`), val MAE: global constant 0.257,
+      elapsed-time-only 0.235, repo + time 0.146, **repo-only constant 0.140** vs model 0.119.
+      Repo almost fixes the outcome (c00–c05 ~100% success, r00 4% … r04 53%), so most of the
+      gain could be repo recognition. Within eval repos r01–r04, V's success AUC rises from 0.57
+      at 1 s to 0.80 at 12 s (a progress signal). **Decisions pending (Karen):** checkpoint
+      metric, overfitting fix, repo-aware baseline. Original plan item: constant predictor;
+      optional
       elapsed-time-only predictor (elapsed time only, never eventual duration or outcome)
 - [ ] Metrics: CE, MAE of expected value vs normalized return, averaged per frame *and* per
       episode, train/val gap; broken down by outcome, source repo, autonomous vs assisted
