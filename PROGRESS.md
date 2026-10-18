@@ -242,9 +242,14 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       elapsed-time-only predictor (elapsed time only, never eventual duration or outcome)
 - [ ] Metrics: CE, MAE of expected value vs normalized return, averaged per frame *and* per
       episode, train/val gap; broken down by outcome, source repo, autonomous vs assisted
-- [ ] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
+- [~] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
       failure, recovery, intervention, typical error, worst error): both views, predicted value
-      (raw; any smoothing labeled), MC target, intervention intervals, marked mistakes/recovery
+      (raw; any smoothing labeled), MC target, intervention intervals, marked mistakes/recovery.
+      **Done for the step-2k baseline** (`vl.value_plots`; 9 episodes; PNGs in
+      `reports/figures/stage4/baseline/`, videos in `data/review_videos/stage4/baseline/`;
+      findings in `reports/baseline_results.md`). Human shading uses `source` = 1 (the
+      `intervention` column only marks onsets). Mistakes/recovery are not yet marked (no
+      reviewed per-frame mistake labels). **Karen to watch the videos**
 - [ ] Note: the *targets* are straight countdowns and never drop at a mistake. A drop in the
       *prediction* is what we test for. Never force predictions to be monotonic.
 - [ ] Questions to answer: does V rise at grasp/seat, fall at a drop, tell hovering-above-holder

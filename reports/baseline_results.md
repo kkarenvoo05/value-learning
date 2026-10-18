@@ -74,6 +74,40 @@ operator presence) also reveals the likely outcome.
     harder episodes remain.
   - On eval repos the model's MAE is 0.199 vs 0.240 for the repo constant.
 
+## Synchronized video/value plots (best checkpoint, step 2k)
+
+`python -m vl.value_plots --run baseline` → `reports/figures/stage4/baseline/*.png` (filmstrip
+of both cropped views + curve) and `data/review_videos/stage4/baseline/*.mp4` (moving cursor).
+9 validation episodes, chosen by a fixed rule (median-MAE episode of each kind, plus the worst
+episodes; the worst-error episode is also the assisted failure). Shading = human control
+(`source` = 1). Read from the still frames by Claude; **not yet watched as video by Karen**.
+
+| # | kind | episode | outcome, T | MAE | what V does |
+|---|---|---|---|---:|---|
+| 01 | autonomous success | r03/61 | success, 15.7 s | 0.198 | starts pessimistic (−0.4), dips to −0.6 at ~4 s while the arm passes in front of the side camera, then rises steadily from ~8 s as the marker reaches the holder; ≈ 0 at the seat |
+| 02 | autonomous failure | r01/110 | failure, 35.7 s | 0.093 | flat ≈ −0.57 for 30 s with the marker held at the holder |
+| 03 | timeout (soft-truncated stall) | r01/23 | timeout, 34.5 s | 0.118 | flat ≈ −0.55 through the stall |
+| 04 | timeout at the 53 s cap | r03/125 | timeout, 53.3 s | 0.191 | flat ≈ −0.57 for 45 s while the target climbs −0.94 → −0.5 |
+| 05 | assisted success | c01/102 | success, 22.5 s | 0.021 | tracks the target, unaffected by the two takeovers |
+| 06 | assisted failure (= worst error) | c03/97 | failure, 9.7 s | 0.467 | ≈ −0.05 throughout (confident success); brief dip during the takeover at 9 s |
+| 07 | teleop demo | c00/182 | success, 11.1 s | 0.009 | on the target |
+| 08 | typical error | c02/61 | success, 10.7 s | 0.038 | close to the target, slightly pessimistic early |
+| 09 | worst success | r01/103 | success, 28.3 s | 0.407 | flat ≈ −0.55 for 25 s at the holder, then **jumps to ≈ 0 at the seat** |
+
+What this suggests [Claude's reading of the stills; to be checked against the videos]:
+- **V recognizes a seated marker** (01, 09: sharp rise exactly at seating), and rises with
+  visible progress toward the holder (01).
+- **"Holding the marker at the holder" gets V ≈ −0.55, whatever happens next** (02, 03, 04,
+  09). That is the average of the two outcome groups (eventual seat ≈ −0.1, stall/failure ≈
+  −0.7). It is the image-only ambiguity predicted in audit Section 5a: one frame cannot show
+  how long the robot has been stuck. It is not a bug, but it is where most eval-repo error
+  comes from.
+- **Repo prior:** collection-repo episodes get V ≈ −0.1 regardless of outcome. The worst error
+  (06) is a c03 failure predicted as a confident success; c03 val episodes are 98% success.
+  Eval-repo episodes start near −0.4 to −0.6.
+- **Possible occlusion sensitivity:** in 01 V drops by ~0.2 while the arm fills the side
+  camera. Check on more episodes (Stage 4 occlusion question).
+
 ## Open decisions (for Karen)
 
 1. **Checkpoint selection:** CE and MAE disagree after step 2k. Keep CE (the objective), or

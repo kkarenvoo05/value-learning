@@ -48,6 +48,8 @@ src/vl/
   data_figures.py          crop sheets, Check B, sync checks, review videos
   model.py                 ValueModel: shared ResNet-18 over two cameras -> 201-bin value head
   train.py                 training loop (Check C tiny-subset overfit so far)
+  train_baseline.py        Stage 4 baseline: full train set, val-CE checkpointing
+  value_plots.py           synchronized camera / V-vs-target plots and videos for val episodes
 scripts/check_c.sbatch     SLURM job for Check C (move partition, one GPU)
   audit_tables.py          regenerates reports/audit_tables.md
   preview.py               labeled multi-camera contact sheets from remote videos
@@ -78,6 +80,8 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 .venv/bin/python -m vl.data_figures       # -> reports/figures/stage3/, data/review_videos/
 .venv/bin/python -m vl.model              # parameter count + initialization check on a real batch
 sbatch scripts/check_c.sbatch             # Check C on a GPU -> data/runs/check_c/
+sbatch scripts/baseline.sbatch            # Stage 4 baseline -> data/runs/baseline/
+.venv/bin/python -m vl.value_plots --run baseline   # -> reports/figures/stage4/, data/review_videos/stage4/
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```
