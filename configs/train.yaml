@@ -1,0 +1,26 @@
+# Training settings (Stage 3.8+). All [ours, not paper] unless tagged.
+
+data_config: configs/data.yaml
+target_config: configs/targets.yaml
+
+seed: 0
+batch_size: 32
+optimizer: adamw            # torch default betas (0.9, 0.999), eps 1e-8
+weight_decay: 0.01          # torch AdamW default
+lr_backbone: 1.0e-4         # pretrained ResNet-18: smaller steps
+lr_head: 1.0e-3             # randomly initialized MLP head
+amp: auto                   # bf16 if the GPU supports it, else fp16 with a GradScaler
+workers: 8
+log_every: 25
+
+# Check C (tiny-subset overfit): one training episode of each kind, kept short.
+check_c:
+  episodes_per_kind: 1
+  # success/failure/timeout: fully autonomous; assisted: DAgger rollout with a human takeover
+  kinds: [success, failure, timeout, assisted]
+  max_frames: 300                                # choose episodes with T + 1 <= this
+  steps: 1500
+  eval_every: 250
+
+paths:
+  runs: data/runs            # checkpoints + logs (gitignored, on Karen's NFS storage)

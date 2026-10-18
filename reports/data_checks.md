@@ -130,6 +130,15 @@ with `python -m vl.data_figures`): `reports/figures/stage3/`, review videos in
   - success 0.60 vs 0.62, timeout 0.28 vs 0.27, failure 0.12 vs 0.10.
   - Every repo within 1 point of its share in the index.
 
+## 3.7–3.8 Model and Check C
+
+- Model, tests and initialization check: PROGRESS 3.7. Check C: `python -m vl.train --check-c`
+  via `sbatch scripts/check_c.sbatch` (job 17947295, move5, RTX PRO 6000, bf16). 720 frames
+  from 4 training episodes, cached once through `FrameDataset`, 1,500 steps of batch 32
+  (~67 passes): eval-mode CE 0.018 (from 5.30), MAE 0.0014, corr(V, v) ≥ 0.994 on every
+  episode. The pipeline can fit its targets. This is memorization, not evidence of
+  generalization.
+
 ## Open items carried forward
 
 - Video ↔ parquet timing for proprioception (above): before Stage 5.

@@ -208,12 +208,22 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
   logits rather than one number, and what Σ p_b · v_b means
 
 ### 3.8 Training step and Check C: tiny-subset overfit
-- [ ] GPU: confirm with Lars that Karen may use move2's TITAN RTX (Q6)
-- [ ] Training settings [ours, not paper]: 224×224 per view, batch 32, AdamW, lr 1e-4 backbone /
-      1e-3 head, mixed precision, fixed seed; config + command logged
-- [ ] Overfit ~4 training episodes (1 success, 1 failure, 1 timeout, 1 assisted; a few hundred
-      frames). Train CE must fall far below 5.30 and V must track the target curve on those
-      episodes. If not, debug loader/targets before Stage 4
+- [~] GPU: Karen OK'd the `move` partition's rtxpro6000 (move5) for Stage 3.8 (2026-10-18). Q6
+      (move2 TITAN RTX / standing compute) is still open with Lars
+- [x] `src/vl/train.py --check-c`, `configs/train.yaml`, `scripts/check_c.sbatch`. Settings
+      [ours, not paper]: 224×224 per view, batch 32, AdamW (wd 0.01), lr 1e-4 backbone / 1e-3
+      head, bf16 autocast, seed 0; config, git commit and device logged to the run's
+      `config.json`
+- [x] **Check C passed (2026-10-18, job 17947295, RTX PRO 6000, 1,500 steps, 57 s)** on 4
+      training episodes / 720 frames: autonomous success r02/54, failure r00/82, soft-truncated
+      timeout r02/241, assisted DAgger success c03/93. Eval-mode CE 5.30 → **0.018**;
+      MAE(V, v) **0.0014** (≈ 0.17 s); per-episode corr(V, v) ≥ 0.994. Plot:
+      `reports/figures/stage3/check_c.png`; run in `data/runs/check_c/`
+- Reading it: the pipeline (loader → targets → model → loss → optimizer) can learn the
+  targets. It says nothing about generalization: 720 frames are memorized. Even the timeout's
+  stall frames were fit (two small blips at 12.5–13.5 s), which on this few frames means
+  memorizing tiny image differences. Whether V can handle stalls on *held-out* episodes is a
+  Stage 4 question
 - **You check:** the loss curve, and a predicted-vs-target value plot for each of the 4 episodes.
   Stall frames may stay hard even here (one image cannot tell how long the robot has been stuck)
 

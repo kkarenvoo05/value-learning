@@ -35,6 +35,7 @@ Read the HF release docs, not only the papers: outcome/endpoint semantics live t
 configs/dataset.yaml       repos, split, validation seed, metadata patterns
 configs/targets.yaml       target constants (horizon, failure penalty, bins, timeout rule)
 configs/data.yaml          cameras, crops, image size, normalization
+configs/train.yaml         optimizer, learning rates, AMP, Check C subset
 src/vl/
   fetch_metadata.py        pin repos to commits, download metadata only
   frame_summary.py         per-episode summaries of trajectory parquet (remote column reads)
@@ -46,6 +47,8 @@ src/vl/
   dataset.py               PyTorch Dataset/DataLoader (images only as model input), crops
   data_figures.py          crop sheets, Check B, sync checks, review videos
   model.py                 ValueModel: shared ResNet-18 over two cameras -> 201-bin value head
+  train.py                 training loop (Check C tiny-subset overfit so far)
+scripts/check_c.sbatch     SLURM job for Check C (move partition, one GPU)
   audit_tables.py          regenerates reports/audit_tables.md
   preview.py               labeled multi-camera contact sheets from remote videos
   fetch_videos.py          download pinned camera videos -> data/videos/
@@ -74,6 +77,7 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 .venv/bin/python -m vl.dataset --workers 4 --batches 100   # loader throughput + sampled mix
 .venv/bin/python -m vl.data_figures       # -> reports/figures/stage3/, data/review_videos/
 .venv/bin/python -m vl.model              # parameter count + initialization check on a real batch
+sbatch scripts/check_c.sbatch             # Check C on a GPU -> data/runs/check_c/
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```
