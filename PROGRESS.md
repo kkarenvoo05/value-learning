@@ -243,7 +243,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
 - [x] **Decision 1, checkpoint metric (Karen, 2026-10-18):** select the checkpoint on per-frame
       validation **CE** (the training objective), and always report val **MAE** of V next to it
       (per frame and per episode). Already what `vl.train_baseline` does. [ours]
-- [ ] **Decision 2, overfitting** (best checkpoint at 0.17 passes; val CE worse than the
+- [x] **Decision 2, overfitting** (best checkpoint at 0.17 passes; val CE worse than the
       constant from ~6k steps). Try in this order, one change at a time:
       - [x] (a) Shorter schedule with learning-rate decay (e.g. cosine to ~0 over a few thousand
             steps, more frequent val evals). Labels unchanged. **Try first.** Submitted
@@ -256,11 +256,16 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             starts at ~0.09 passes, so it is not caused by revisiting frames, and the schedule
             is not the lever. Shape error grows steadily (0.043 at 500 → 0.071 at 8k, flat
             0.037). `reports/baseline_results.md`, "Decision 2(a)"
-      - [~] (b) Lower learning rate (backbone and/or head), if (a) still overfits early.
-            Submitted 2026-10-18: `RUN=lowlr_8k SECTION=baseline_lowlr`, both LRs 10x lower
-            (backbone 1e-5, head 1e-4), otherwise identical to (a) [ours]. GPU: L40S or
-            RTX PRO 6000, whichever frees first
-      - [ ] (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
+      - [x] (b) Lower learning rate (backbone and/or head), if (a) still overfits early.
+            `RUN=lowlr_8k SECTION=baseline_lowlr`, both LRs 10x lower (backbone 1e-5, head
+            1e-4), otherwise identical to (a) [ours]. Job 17954831, L40S, 19 min. **Meets the
+            success criterion:** val CE stays within 3.73–3.88 from step 1.5k to 8k (never near
+            the constant's 4.53); best at step 3k, val CE 3.727, MAE 0.117 (≤ 0.119); eval-repo
+            MAE 0.188 vs repo-const 0.222; within-repo AUC 0.69 / 0.63 / 0.85. Shape error still
+            worse than flat (0.050 vs 0.037): not an overfitting problem.
+            **Settled recipe: `baseline_lowlr`** (pending the 3-seed retrain)
+      - [ ] (c) not needed: (b) removed the over-confidence (kept for reference)
+      - (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
             Changes target construction, not in RECAP: only with Karen's OK, and only if (a)/(b)
             leave the model over-confident
       - Success criterion: the best checkpoint is no longer an early accident (val CE flat or

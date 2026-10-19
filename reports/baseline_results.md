@@ -163,3 +163,32 @@ eval every 500 steps [ours]. The GPU type also differs from the baseline (RTX PR
 - Differences between this run and the baseline at their best (CE 3.84 vs 3.87, MAE 0.129 vs
   0.119) are within what one seed and a different GPU could produce; the 3-seed retrain will
   say how large that noise is.
+
+## Decision 2(b): 10x lower learning rates (2026-10-18)
+
+Run `data/runs/lowlr_8k/` (job 17954831, move4, L40S, git `8ada382`, 19 min). Same as 2(a)
+except backbone LR 1e-5 and head LR 1e-4 (both 10x lower) [ours].
+
+| step | val CE | val MAE | eval-repo MAE | shape MAE | AUC 1/5/10 s |
+|---:|---:|---:|---:|---:|---|
+| 500 | 4.228 | 0.235 | 0.280 | 0.031 | 0.60 / 0.53 / 0.79 |
+| 1,500 | 3.745 | 0.132 | 0.213 | 0.042 | 0.63 / 0.61 / 0.78 |
+| **3,000 (best)** | **3.727** | **0.117** | 0.188 | 0.050 | 0.69 / 0.63 / 0.85 |
+| 4,500 | 3.794 | 0.113 | 0.184 | 0.052 | 0.65 / 0.56 / 0.83 |
+| 8,000 | 3.878 | 0.116 | 0.189 | 0.053 | 0.69 / 0.57 / 0.83 |
+| references | constant 4.530 | repo-const 0.140 | repo-const 0.222 | flat 0.037 | 0.5 |
+| step-2k baseline | 3.873 | 0.119 | 0.194 | 0.052 | 0.59 / 0.62 / 0.81 |
+
+- **Success criterion met.** Val CE is flat (3.73–3.88) over the last 6.5k steps instead of
+  climbing past the constant, so the best checkpoint is no longer an early accident. Best-
+  checkpoint MAE 0.117 ≤ 0.119, and MAE keeps improving slightly after the CE minimum.
+- Best on every summary number so far: val CE, val MAE, eval-repo MAE (0.188, 0.034 below
+  the repo-only constant) and within-repo AUC. The gaps to the baseline are small; whether
+  they exceed seed noise is for the 3-seed retrain.
+- **Still unsolved: shape.** The shape error is below flat only at step 500, when V barely
+  moves; afterwards it is 0.042–0.054 vs 0.037. Lowering the LR did not change this, so the
+  within-episode jumpiness is not an overfitting effect. It is the main open problem for
+  Stage 6 advantages.
+- Within-repo AUC at 1 s (0.69) is above chance before the robot has moved. Something in the
+  first frames predicts the outcome even inside one repo (e.g. starting pose, marker
+  placement, or day/round within a repo). Worth checking with the repo-cue question.
