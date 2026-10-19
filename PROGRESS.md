@@ -345,7 +345,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
 
 ## Stage 5 — Ablations and test (target: Tue 2026-10-20)
 One change at a time, in this order:
-- [ ] 1. Cameras: wrist + side (= the `lowlr_8k` baseline, 3 seeds, done) vs **side only** vs
+- [x] 1. Cameras: wrist + side (= the `lowlr_8k` baseline, 3 seeds, done) vs **side only** vs
       **wrist only** (Karen, 2026-10-19), 3 seeds each, same recipe, compared on val. Also check
       which single-camera model still tells the round at frame 0 (where the repo cue lives) and
       whether the drops at arm retraction from the side view survive without `side_1`.
@@ -353,8 +353,13 @@ One change at a time, in this order:
       camera (near-duplicate), and `side_2` is missing in r00–r02 (500 of 1,624 training-pool
       episodes), always shows the seated operator (a shortcut risk), and is black in r05-screen
       b02 eps 0–37 (test)
-      Submitted 2026-10-19: jobs 17970401 (side, `side_s{0,1,2}`) and 17970402 (wrist,
-      `wrist_s{0,1,2}`), one L40S each, seeds run in sequence (`scripts/cameras.sbatch`)
+      Submitted 2026-10-19: jobs 17970458 (side, `side_s{0,1,2}`) and 17970459 (wrist,
+      `wrist_s{0,1,2}`), one L40S each on humanoid1 (resubmitted from move), seeds run in sequence (`scripts/cameras.sbatch`)
+      **Result (`reports/stage5_ablations.md`): keep both cameras.** Val MAE / CE over 3 seeds: both
+      0.121 / 3.730, side only 0.130 / 3.799, wrist only 0.191 / 3.963 (worse than the repo-only
+      constant 0.140). The side view carries most of the signal **and the round cue** (side-only
+      frame-0 V has the baseline's round ordering; wrist-only's is reversed). The drops when the arm
+      leaves the side view vanish in wrist only, so they come from `side_1`
 - [ ] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
       first; normalize with training statistics only)
 - [ ] 3. Frozen vs fine-tuned encoder. Fine-tuned arm = `lowlr_8k` / `_s1` / `_s2` (backbone at
