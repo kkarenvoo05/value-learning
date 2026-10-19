@@ -304,14 +304,14 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       **V hedges toward the middle on autonomous rollouts**: much better than the repo constant
       on successes (0.218 vs 0.447), worse on failures (0.133 vs 0.065) and timeouts (0.186 vs
       0.106); same on all 3 seeds
-- [~] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
+- [x] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
       failure, recovery, intervention, typical error, worst error): both views, predicted value
       (raw; any smoothing labeled), MC target, intervention intervals, marked mistakes/recovery.
       Done for the step-2k baseline (9 episodes) and **the settled recipe** (`--run lowlr_8k`,
       11 episodes incl. a "drop failure"; PNGs in `reports/figures/stage4/lowlr_8k/`, videos
       in `data/review_videos/stage4/lowlr_8k/`). Human shading uses `source` = 1.
-      Mistakes/recovery are not marked (no reviewed per-frame mistake labels). **Karen to watch
-      the lowlr_8k videos**
+      Mistakes/recovery are not marked (no reviewed per-frame mistake labels). **Watched by
+      Karen (2026-10-19): looks good, no data or label problems**
 - [x] Note: the *targets* are straight countdowns and never drop at a mistake. A drop in the
       *prediction* is what we test for. Never force predictions to be monotonic.
 - [~] Questions (`reports/baseline_results.md`, "Stage 4 questions"): **rises at seat: yes**
