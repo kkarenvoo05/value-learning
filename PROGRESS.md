@@ -270,7 +270,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             leave the model over-confident
       - Success criterion: the best checkpoint is no longer an early accident (val CE flat or
         improving over a stretch of evals), and val MAE ≤ the step-2k baseline's 0.119
-- [ ] **Repo-aware evaluation** (the repo shortcut, `reports/baseline_results.md`):
+- [~] **Repo-aware evaluation** (the repo shortcut, `reports/baseline_results.md`):
       - [x] Add the repo-only constant (val MAE 0.140) as the trivial baseline the model must
             beat, next to the global constant, in every run's eval (`vl.metrics`, logged at every
             eval of `vl.train_baseline`; `python -m vl.metrics --run <run>` re-scores old runs)
