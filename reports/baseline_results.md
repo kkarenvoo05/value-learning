@@ -294,8 +294,27 @@ source. **No need to ask Lars about changing T.** (Small n: 4 capped, 5 ended ea
 | V rises at grasp/seat? | **Seat: yes.** Grasp: not visible as a step | successes V −0.29 at T−5 s → −0.09 at T−1 s → −0.02 at T; plots 01, 10 jump to ≈ 0 at seating |
 | seated vs hovering above the holder? | **Yes** | AUC 1.000: last 0.5 s of successes (V −0.02) vs timeout stall frames (V −0.46) |
 | V falls at a drop? | **Not testable on val** | only 5 episodes with a drop/slip/release VLM label; the one plotted (11, r01/109) is a missed grasp (the marker never leaves the table), V flat −0.55 |
-| reacts to occlusion? | operator: no (above); arm occluding the side view: not measured | needs an occlusion measure; earlier plot 01 (step-2k baseline) showed a −0.2 dip |
+| reacts to occlusion? | **Operator: no. Arm covering the side view: no level shift**; sharp drops cluster when the arm *leaves* the view (cause open) | see "Arm occlusion of `side_1`" below |
 | meaningful on late-round autonomous rollouts? | **Yes** (r02–r04) | see per-round numbers above |
+
+### Arm occlusion of `side_1` (2026-10-19, `vl.side_occlusion`, `reports/side_occlusion_lowlr_8k.md`)
+
+No occlusion labels exist, so we use a proxy [ours]: the fraction of the 112×112 training crop that
+differs (> 40 in any RGB channel, 3×3 majority filter) from the repo's median val image at 1 fps
+(4,451 frames). The sheet `reports/figures/stage4/side_occlusion_sheet.jpg` confirms the ranking:
+the top quartile (occlusion 0.11–0.27) is the arm close to the camera filling the view. It misses
+some white arm against the white wall and flags glare in 2 of 8 samples, so treat it as a rough measure.
+
+- **No level shift.** Matched within (repo, outcome, 2 s) strata, the top occlusion quartile vs the rest has
+  ΔV −0.005…−0.013 against Δtarget −0.002…−0.006, and ΔMAE +0.002…+0.008 on all 3 seeds. That is within seed noise.
+- **Jumps:** corr(ΔV, Δocclusion) between consecutive 1 s samples is +0.03…+0.05, which is effectively zero. But
+  drops of more than 0.2 in 1 s are rare (14–33 pairs out of 3,041), and they are 3–8× more likely when the
+  occlusion changes a lot. That is driven by the arm **leaving** the view (P 0.045–0.081 vs 0.003–0.008),
+  not by the arm covering it (≤ 0.005). This may be a real event (the arm pulling back after a missed
+  insert) or a viewpoint artifact. The proxy can't tell them apart; the frames would need watching.
+- **Reading:** covering the side view does not bias V. The −0.2 dip seen in plot 01 of the step-2k
+  baseline is not a general effect in the settled recipe. The small cluster of drops at arm-retraction
+  is a candidate for the Stage 5 "side only vs wrist + side" ablation to explain.
 
 ### Shape: jitter and slow wander
 

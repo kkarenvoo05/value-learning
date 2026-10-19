@@ -318,7 +318,9 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       (−0.29 at T−5 s → −0.02 at T); grasp: no visible step; **seated vs hovering: yes** (AUC
       1.0); **late rounds: yes** (beats repo constant on r02–r04, within-round AUC@10 s
       0.72–0.88); **fall at a drop: not testable** on val (5 VLM-labelled drops; the plotted one
-      is a missed grasp); occlusion: the operator has no effect; arm occlusion of `side_1` not measured.
+      is a missed grasp); occlusion: the operator has no effect; **arm covering `side_1`: no level shift**
+      (matched ΔV ≈ −0.01, all seeds; `vl.side_occlusion`, pixel-difference proxy), but the rare
+      > 0.2 drops cluster when the arm leaves the view (cause open).
       Also: V jitters (frame-to-frame |ΔV| 30× the target slope); even 3 s smoothing stays
       worse than flat on shape
 - [x] Assisted episodes analysed separately: human- vs robot-controlled frames have the same error

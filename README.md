@@ -50,6 +50,8 @@ src/vl/
   train.py                 training loop (Check C tiny-subset overfit so far)
   train_baseline.py        Stage 4 baseline: full train set, val-CE checkpointing
   value_plots.py           synchronized camera / V-vs-target plots and videos for val episodes
+  analysis.py              Stage 4 breakdowns (outcome/kind/repo, timeouts, stalls, operator, shape)
+  side_occlusion.py        Stage 4 occlusion check: arm covering side_1 vs V (pixel-difference proxy)
 scripts/check_c.sbatch     SLURM job for Check C (move partition, one GPU)
   audit_tables.py          regenerates reports/audit_tables.md
   preview.py               labeled multi-camera contact sheets from remote videos
