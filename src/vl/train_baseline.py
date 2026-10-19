@@ -4,6 +4,7 @@ Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run baseline      # -> data/runs/baseline/
     .venv/bin/python -u -m vl.train_baseline --run cosine_8k --section baseline_cosine
     .venv/bin/python -u -m vl.train_baseline --run lowlr_8k --section baseline_lowlr
+    .venv/bin/python -u -m vl.train_baseline --run lowlr_8k_s1 --section baseline_lowlr --seed 1
 
 - Sampling [ours]: uniform over every valid training frame (shuffled passes, fixed seed),
   frames decoded on the fly by FrameDataset (Stage 3.3 decision).
@@ -84,11 +85,14 @@ def main():
     ap.add_argument("--config", default="configs/train.yaml")
     ap.add_argument("--run", required=True)
     ap.add_argument("--section", default="baseline", help="config section with the schedule (baseline, baseline_cosine)")
+    ap.add_argument("--seed", type=int, help="override the config seed (model head init + data order)")
     ap.add_argument("--steps", type=int, help="override baseline.steps (smoke tests)")
     ap.add_argument("--val-limit", type=int, help="use only the first N validation episodes (smoke tests)")
     args = ap.parse_args()
     cfg = load_config(args.config)
     bc = cfg[args.section]
+    if args.seed is not None:
+        cfg["seed"] = args.seed
     dcfg, tcfg = load_config(cfg["data_config"]), load_config(cfg["target_config"])
     steps = args.steps or bc["steps"]
     run = Path(cfg["paths"]["runs"]) / args.run

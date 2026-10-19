@@ -2,6 +2,7 @@
 # Stage 4 baseline: full training set, checkpoint chosen on validation CE.
 #   sbatch scripts/baseline.sbatch            (RUN=name to change the run directory)
 #   RUN=cosine_8k SECTION=baseline_cosine sbatch scripts/baseline.sbatch
+#   RUN=lowlr_8k_s1 SECTION=baseline_lowlr SEED=1 sbatch scripts/baseline.sbatch
 #SBATCH --job-name=job
 #SBATCH --account=move
 #SBATCH --partition=move
@@ -16,5 +17,5 @@ cd /move/u/karenvo/Projects/value-learning
 echo "host $(hostname)  gpu $(nvidia-smi --query-gpu=name --format=csv,noheader)  start $(date -Is)"
 echo "git $(git rev-parse HEAD)  dirty: $(git status --porcelain -- src configs | wc -l) files"
 df -h ~ | tail -1
-.venv/bin/python -u -m vl.train_baseline --run "${RUN:-baseline}" --section "${SECTION:-baseline}"
+.venv/bin/python -u -m vl.train_baseline --run "${RUN:-baseline}" --section "${SECTION:-baseline}" ${SEED:+--seed "$SEED"}
 echo "end $(date -Is)"
