@@ -3,6 +3,7 @@
 Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run baseline      # -> data/runs/baseline/
     .venv/bin/python -u -m vl.train_baseline --run cosine_8k --section baseline_cosine
+    .venv/bin/python -u -m vl.train_baseline --run lowlr_8k --section baseline_lowlr
 
 - Sampling [ours]: uniform over every valid training frame (shuffled passes, fixed seed),
   frames decoded on the fly by FrameDataset (Stage 3.3 decision).
@@ -122,8 +123,9 @@ def main():
     (run / "config.json").write_text(json.dumps(meta, indent=2))
 
     model = build_model(dcfg, tcfg).to(device).train()
-    opt = torch.optim.AdamW([{"params": model.backbone.parameters(), "lr": cfg["lr_backbone"]},
-                             {"params": model.head.parameters(), "lr": cfg["lr_head"]}],
+    # A section may override the top-level learning rates (decision 2(b)).
+    opt = torch.optim.AdamW([{"params": model.backbone.parameters(), "lr": bc.get("lr_backbone", cfg["lr_backbone"])},
+                             {"params": model.head.parameters(), "lr": bc.get("lr_head", cfg["lr_head"])}],
                             weight_decay=cfg["weight_decay"])
     base_lr = [g["lr"] for g in opt.param_groups]
     scaler = torch.amp.GradScaler("cuda", enabled=dtype == torch.float16)

@@ -41,5 +41,15 @@ baseline_cosine:
   eval_batch_size: 128
   workers: 28
 
+baseline_lowlr:             # decision 2(b): baseline_cosine with both learning rates 10x lower
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5       # overrides the top-level lr_backbone / lr_head for this section
+  lr_head: 1.0e-4
+
 paths:
   runs: data/runs            # checkpoints + logs (gitignored, on Karen's NFS storage)

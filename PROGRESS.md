@@ -256,7 +256,10 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             starts at ~0.09 passes, so it is not caused by revisiting frames, and the schedule
             is not the lever. Shape error grows steadily (0.043 at 500 → 0.071 at 8k, flat
             0.037). `reports/baseline_results.md`, "Decision 2(a)"
-      - [ ] (b) Lower learning rate (backbone and/or head), if (a) still overfits early
+      - [~] (b) Lower learning rate (backbone and/or head), if (a) still overfits early.
+            Submitted 2026-10-18: `RUN=lowlr_8k SECTION=baseline_lowlr`, both LRs 10x lower
+            (backbone 1e-5, head 1e-4), otherwise identical to (a) [ours]. GPU: L40S or
+            RTX PRO 6000, whichever frees first
       - [ ] (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
             Changes target construction, not in RECAP: only with Karen's OK, and only if (a)/(b)
             leave the model over-confident
