@@ -345,7 +345,14 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
 
 ## Stage 5 — Ablations and test (target: Tue 2026-10-20)
 One change at a time, in this order:
-- [ ] 1. Side only vs wrist + side
+- [ ] 1. Cameras: wrist + side (= the `lowlr_8k` baseline, 3 seeds, done) vs **side only** vs
+      **wrist only** (Karen, 2026-10-19), 3 seeds each, same recipe, compared on val. Also check
+      which single-camera model still tells the round at frame 0 (where the repo cue lives) and
+      whether the drops at arm retraction from the side view survive without `side_1`.
+      Not adding `wrist_right`/`side_2` [ours]: `wrist_right` is the other lens of the same wrist
+      camera (near-duplicate), and `side_2` is missing in r00–r02 (500 of 1,624 training-pool
+      episodes), always shows the seated operator (a shortcut risk), and is black in r05-screen
+      b02 eps 0–37 (test)
 - [ ] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
       first; normalize with training statistics only)
 - [ ] 3. Frozen vs fine-tuned encoder
