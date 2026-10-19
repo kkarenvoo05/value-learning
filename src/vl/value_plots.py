@@ -15,7 +15,8 @@ Episodes, one per kind, chosen with a fixed rule:
   autonomous success / failure / soft-truncated timeout / timeout at the cap: the episode whose
   MAE is the median of its kind; assisted success / assisted failure / teleop demo: same;
   typical: median MAE over all val episodes; worst: highest MAE; worst success: lowest mean V
-  among successes.
+  among successes; drop failure: median MAE among episodes whose VLM failure mode (a machine
+  label, diagnostic only) is a dropped, slipped or released marker.
 """
 
 import argparse
@@ -42,7 +43,7 @@ def choose_episodes(pred: pd.DataFrame, man: pd.DataFrame) -> list[tuple[str, st
     e = (pred.assign(err=(pred.V - pred.value).abs())
          .groupby("episode_uid").agg(repo=("repo", "first"), outcome=("outcome", "first"), T=("T", "first"),
                                      mae=("err", "mean"), V_mean=("V", "mean"))
-         .join(man.set_index("episode_uid")[["source_type", "has_human_frames", "soft_truncate"]]))
+         .join(man.set_index("episode_uid")[["source_type", "has_human_frames", "soft_truncate", "machine_failure_mode"]]))
     auto = (e.source_type == "eval") & ~e.has_human_frames
     kinds = [
         ("autonomous_success", median_pick(e[auto & (e.outcome == "success")])),
@@ -55,6 +56,9 @@ def choose_episodes(pred: pd.DataFrame, man: pd.DataFrame) -> list[tuple[str, st
         ("typical_error", median_pick(e)),
         ("worst_error", e.mae.idxmax()),
         ("worst_success", e[e.outcome == "success"].V_mean.idxmin()),
+        # "fall at a drop": the VLM failure-mode label (diagnostic only) names a lost marker
+        ("drop_failure", median_pick(e[e.machine_failure_mode.isin(
+            ["dropped_marker_during_transport", "marker_slipped_from_gripper", "marker_released_at_holder"])])),
     ]
     out, seen = [], set()
     for k, uid in kinds:
