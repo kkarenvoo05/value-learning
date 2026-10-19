@@ -357,7 +357,12 @@ One change at a time, in this order:
       `wrist_s{0,1,2}`), one L40S each, seeds run in sequence (`scripts/cameras.sbatch`)
 - [ ] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
       first; normalize with training statistics only)
-- [ ] 3. Frozen vs fine-tuned encoder
+- [ ] 3. Frozen vs fine-tuned encoder. Fine-tuned arm = `lowlr_8k` / `_s1` / `_s2` (backbone at
+      `lr_backbone` 1e-5). Frozen arm: `--freeze-backbone` [ours], same `baseline_lowlr` recipe,
+      cameras and head LR; ImageNet backbone gets no optimizer group and stays in eval mode, so
+      BatchNorm statistics don't move either (`tests/test_model.py`). ~0.3M trainable params.
+      Submitted 2026-10-19: job 17971059 (`frozen_s{0,1,2}`, humanoid L40S, seeds in sequence,
+      git `878541f`, `scripts/frozen.sbatch`)
 - [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
       the two images; larger backbone only if ResNet-18 underfits
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
