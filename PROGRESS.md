@@ -353,6 +353,8 @@ One change at a time, in this order:
       camera (near-duplicate), and `side_2` is missing in r00–r02 (500 of 1,624 training-pool
       episodes), always shows the seated operator (a shortcut risk), and is black in r05-screen
       b02 eps 0–37 (test)
+      Submitted 2026-10-19: jobs 17970401 (side, `side_s{0,1,2}`) and 17970402 (wrist,
+      `wrist_s{0,1,2}`), one L40S each, seeds run in sequence (`scripts/cameras.sbatch`)
 - [ ] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
       first; normalize with training statistics only)
 - [ ] 3. Frozen vs fine-tuned encoder
