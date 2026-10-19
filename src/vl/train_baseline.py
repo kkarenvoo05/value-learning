@@ -5,6 +5,7 @@ Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run cosine_8k --section baseline_cosine
     .venv/bin/python -u -m vl.train_baseline --run lowlr_8k --section baseline_lowlr
     .venv/bin/python -u -m vl.train_baseline --run lowlr_8k_s1 --section baseline_lowlr --seed 1
+    .venv/bin/python -u -m vl.train_baseline --run side_s0 --section baseline_lowlr --cameras side_1
 
 - Sampling [ours]: uniform over every valid training frame (shuffled passes, fixed seed),
   frames decoded on the fly by FrameDataset (Stage 3.3 decision).
@@ -86,6 +87,7 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--section", default="baseline", help="config section with the schedule (baseline, baseline_cosine)")
     ap.add_argument("--seed", type=int, help="override the config seed (model head init + data order)")
+    ap.add_argument("--cameras", nargs="+", help="override data.yaml cameras (Stage 5 camera ablation)")
     ap.add_argument("--steps", type=int, help="override baseline.steps (smoke tests)")
     ap.add_argument("--val-limit", type=int, help="use only the first N validation episodes (smoke tests)")
     args = ap.parse_args()
@@ -94,6 +96,8 @@ def main():
     if args.seed is not None:
         cfg["seed"] = args.seed
     dcfg, tcfg = load_config(cfg["data_config"]), load_config(cfg["target_config"])
+    if args.cameras:
+        dcfg["cameras"] = args.cameras
     steps = args.steps or bc["steps"]
     run = Path(cfg["paths"]["runs"]) / args.run
     run.mkdir(parents=True, exist_ok=True)
@@ -119,7 +123,7 @@ def main():
     val_dl = DataLoader(FrameDataset(val, dcfg), batch_size=bc["eval_batch_size"], shuffle=False,
                         num_workers=workers, persistent_workers=True, pin_memory=True, prefetch_factor=4)
 
-    meta = {"args": vars(args), "config": cfg, "steps": steps, "trivial_baseline": trivial,
+    meta = {"args": vars(args), "config": cfg, "cameras": dcfg["cameras"], "steps": steps, "trivial_baseline": trivial,
             "n_train": len(train), "n_val": len(val),
             "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu", "amp": str(dtype),
             "torch": str(torch.__version__),

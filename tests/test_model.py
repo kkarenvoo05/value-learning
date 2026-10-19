@@ -90,3 +90,20 @@ def test_a_few_steps_fit_one_batch():
             assert m.backbone.conv1.weight.grad.abs().sum() > 0 and m.head[2].weight.grad.abs().sum() > 0
         opt.step()
     assert losses[-1] < 0.5 * losses[0]
+
+
+@pytest.mark.parametrize("cam", CAMS)
+def test_single_camera_model_reads_only_its_camera(cam):
+    """Stage 5 camera ablation: a one-camera model takes a 512-d feature and ignores other views."""
+    torch.manual_seed(0)
+    m = ValueModel([cam], pretrained=False).eval()
+    assert m.head[0].in_features == 512
+    x = images(b=2)
+    other = next(c for c in CAMS if c != cam)
+    with torch.no_grad():
+        a = m(x)
+        b = m({**x, other: torch.zeros_like(x[other])})
+        c = m({**x, cam: torch.zeros_like(x[cam])})
+    assert a.shape == (2, 201)
+    assert torch.equal(a, b)
+    assert not torch.allclose(a, c)

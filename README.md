@@ -83,6 +83,7 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 .venv/bin/python -m vl.model              # parameter count + initialization check on a real batch
 sbatch scripts/check_c.sbatch             # Check C on a GPU -> data/runs/check_c/
 sbatch scripts/baseline.sbatch            # Stage 4 baseline -> data/runs/baseline/
+NAME=side CAMS=side_1 sbatch scripts/cameras.sbatch   # Stage 5 camera ablation, seeds 0-2 -> data/runs/side_s*/
 .venv/bin/python -m vl.value_plots --run baseline   # -> reports/figures/stage4/, data/review_videos/stage4/
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
