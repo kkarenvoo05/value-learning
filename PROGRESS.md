@@ -361,8 +361,10 @@ One change at a time, in this order:
       `lr_backbone` 1e-5). Frozen arm: `--freeze-backbone` [ours], same `baseline_lowlr` recipe,
       cameras and head LR; ImageNet backbone gets no optimizer group and stays in eval mode, so
       BatchNorm statistics don't move either (`tests/test_model.py`). ~0.3M trainable params.
-      Submitted 2026-10-19: job 17971059 (`frozen_s{0,1,2}`, humanoid L40S, seeds in sequence,
-      git `878541f`, `scripts/frozen.sbatch`)
+      Running 2026-10-19: job 17971269 (`frozen_s{0,1,2}`, move5 **RTX PRO 6000**, not the
+      fine-tuned arm's L40S; seeds in sequence, git `2eeb32c`, `scripts/frozen.sbatch` with
+      `--partition=move --gres=gpu:rtxpro6000:1 --cpus-per-task=32`; humanoid job 17971059
+      cancelled while queued)
 - [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
       the two images; larger backbone only if ResNet-18 underfits
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
