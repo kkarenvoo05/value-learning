@@ -133,3 +133,33 @@ mostly not tracking the countdown.
 3. **Repo shortcut:** make the repo-only constant the trivial baseline to beat, and report
    metrics within the eval repos, where outcomes vary. Check what in the images lets the
    model tell repos apart.
+
+## Decision 2(a): shorter schedule with cosine decay (2026-10-18)
+
+Run `data/runs/cosine_8k/` (job 17950654, move4, **L40S**, git `400b17a`, 25 min). Same as
+the baseline except: 8k steps (~0.68 passes), 500-step warmup then cosine decay to 0, full-val
+eval every 500 steps [ours]. The GPU type also differs from the baseline (RTX PRO 6000).
+
+| step | val CE | val MAE | eval-repo MAE | shape MAE | AUC 1/5/10 s |
+|---:|---:|---:|---:|---:|---|
+| 500 | 3.985 | 0.144 | 0.229 | 0.043 | 0.54 / 0.57 / 0.79 |
+| **1,000 (best)** | **3.839** | 0.129 | 0.197 | 0.048 | 0.56 / 0.61 / 0.76 |
+| 2,000 | 3.970 | 0.126 | 0.203 | 0.059 | 0.57 / 0.58 / 0.77 |
+| 4,500 | 4.636 | 0.131 | 0.219 | 0.063 | 0.59 / 0.58 / 0.75 |
+| 8,000 | 5.734 | 0.135 | 0.221 | 0.071 | 0.57 / 0.55 / 0.75 |
+| references | constant 4.530 | repo-const 0.140 | repo-const 0.222 | flat 0.037 | 0.5 |
+| step-2k baseline | 3.873 | 0.119 | 0.194 | 0.052 | 0.59 / 0.62 / 0.81 |
+
+- **The success criterion is not met.** Val CE again bottoms out early (step 1k) and rises
+  while the LR is still high; MAE at the best checkpoint (0.129) is worse than the baseline's
+  0.119, and only 0.011 better than the repo-only constant.
+- Overfitting starts at ~1k steps = 32k frames ≈ 0.09 passes: most training frames have not
+  been seen once. So it is not memorizing revisited frames. More likely the model learns
+  features of the 1,373 training *episodes* (each 1k-step stretch already samples ~23 frames
+  of every episode, and neighbouring frames are near-duplicates) that do not carry over to
+  new episodes. The LR schedule acts too late to matter.
+- The shape error gets worse at every eval (0.043 → 0.071) and is never below a flat line:
+  training makes V's within-episode movement jumpier, not more countdown-like.
+- Differences between this run and the baseline at their best (CE 3.84 vs 3.87, MAE 0.129 vs
+  0.119) are within what one seed and a different GPU could produce; the 3-seed retrain will
+  say how large that noise is.

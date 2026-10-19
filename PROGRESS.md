@@ -245,11 +245,17 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       (per frame and per episode). Already what `vl.train_baseline` does. [ours]
 - [ ] **Decision 2, overfitting** (best checkpoint at 0.17 passes; val CE worse than the
       constant from ~6k steps). Try in this order, one change at a time:
-      - [~] (a) Shorter schedule with learning-rate decay (e.g. cosine to ~0 over a few thousand
+      - [x] (a) Shorter schedule with learning-rate decay (e.g. cosine to ~0 over a few thousand
             steps, more frequent val evals). Labels unchanged. **Try first.** Submitted
             2026-10-18: `RUN=cosine_8k SECTION=baseline_cosine sbatch scripts/baseline.sbatch`.
             8k steps (~0.68 passes), 500-step warmup then cosine to 0, full-val eval every 500
-            steps; everything else as the step-2k baseline [ours]
+            steps; everything else as the step-2k baseline [ours]. Ran as job 17950654 on an
+            **L40S** (move4; rtxpro6000s were full), 25 min. **Result: does not fix it.** Best
+            at step 1,000 (val CE 3.839 vs 3.873, MAE 0.129 vs 0.119); val CE rises from step
+            1.5k and passes the constant at 4.5k, before the LR has decayed much. Overfitting
+            starts at ~0.09 passes, so it is not caused by revisiting frames, and the schedule
+            is not the lever. Shape error grows steadily (0.043 at 500 → 0.071 at 8k, flat
+            0.037). `reports/baseline_results.md`, "Decision 2(a)"
       - [ ] (b) Lower learning rate (backbone and/or head), if (a) still overfits early
       - [ ] (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
             Changes target construction, not in RECAP: only with Karen's OK, and only if (a)/(b)
@@ -274,8 +280,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             expected to look different
 - [ ] Retrain the baseline with the settled recipe, **3 seeds**, to measure seed-to-seed noise.
       Ablation differences smaller than that noise are not evidence
-- [ ] Karen's observations from the step-2k videos: list them here and sort each into
-      data/label fix (before retraining), recipe fix, or ablation question
+- [x] Karen's observations from the step-2k videos: Karen reports them addressed (2026-10-18)
 - [ ] Metrics: CE, MAE of expected value vs normalized return, averaged per frame *and* per
       episode, train/val gap; broken down by outcome, source repo, autonomous vs assisted
 - [~] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
