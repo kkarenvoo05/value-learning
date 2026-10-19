@@ -232,7 +232,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       × 32, best.pt = lowest val CE = **step 2,000**: val CE 3.873, MAE 0.119 (constant: 4.530,
       0.257). **Overfits after ~2k steps**: train CE 3.41 → 1.41, val CE 3.87 → 8.73 (worse than
       the constant from ~6k), val MAE plateaus at 0.13–0.14 (over-confident distributions)
-- [~] Trivial baselines (`reports/baseline_results.md`), val MAE: global constant 0.257,
+- [x] Trivial baselines (`reports/baseline_results.md`), val MAE: global constant 0.257,
       elapsed-time-only 0.235, repo + time 0.146, **repo-only constant 0.140** vs model 0.119.
       Repo almost fixes the outcome (c00–c05 ~100% success, r00 4% … r04 53%), so most of the
       gain could be repo recognition. Within eval repos r01–r04, V's success AUC rises from 0.57
@@ -263,7 +263,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             the constant's 4.53); best at step 3k, val CE 3.727, MAE 0.117 (≤ 0.119); eval-repo
             MAE 0.188 vs repo-const 0.222; within-repo AUC 0.69 / 0.63 / 0.85. Shape error still
             worse than flat (0.050 vs 0.037): not an overfitting problem.
-            **Settled recipe: `baseline_lowlr`** (pending the 3-seed retrain)
+            **Settled recipe: `baseline_lowlr`** (confirmed by the 3-seed retrain on CE/stability; see below)
       - [ ] (c) not needed: (b) removed the over-confidence (kept for reference)
       - (c) Soft targets (Gaussian over neighbouring bins, "HL-Gauss") instead of one-hot.
             Changes target construction, not in RECAP: only with Karen's OK, and only if (a)/(b)
@@ -283,46 +283,63 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             target's own change is the same fixed slope in every episode, so "does ΔV track Δv"
             is not informative.) **Step-2k baseline: 0.052, worse than flat (0.037)**: V's
             within-episode wiggles and jumps add error against the straight countdown
-      - [ ] Find what in the images reveals the repo (e.g. first frames per repo side by side:
-            setup, lighting, operator, camera pose); ask Lars whether collection and eval data are
-            expected to look different
-- [ ] Retrain the baseline with the settled recipe, **3 seeds**, to measure seed-to-seed noise.
-      Ablation differences smaller than that noise are not evidence
+      - [~] Find what in the images reveals the repo. Done: `vl.analysis --repo-sheet` ->
+            `reports/figures/stage4/first_frames_by_repo.png`; V at frame 0 already differs by
+            round (r00–r02 ≈ −0.55, r04 ≈ −0.40), but no cue is obvious by eye (side-view glare
+            varies, strongest in c00). Within a round, frame-0 V is at chance (AUC 0.55); the
+            1 s AUC (0.66) comes from the first second of motion, not the initial layout or the
+            policy. **Open: ask Lars** whether rounds differ in day/lighting/camera setup
+            (`reports/baseline_results.md`, "Repo cues")
+- [x] Retrain the baseline with the settled recipe, **3 seeds** (2026-10-19; seeds 1–2 jobs
+      17958964/17958965, L40S, ~20 min each, `RUN=lowlr_8k_s<k> SECTION=baseline_lowlr SEED=<k>`;
+      seed 0 = `lowlr_8k`). Best val CE 3.730 ± 0.002, MAE **0.121 ± 0.004**, eval-repo MAE
+      0.196 ± 0.008, shape 0.047 ± 0.004 (flat 0.037), AUC 1/5/10 s 0.67/0.64/0.84 ± 0.01–0.02.
+      **Seed 0 was lucky**: the mean MAE does not beat the step-2k baseline's 0.119; the gain is
+      CE (3.73 vs 3.87) and no overfitting. **Stage 5 differences below ~2 sd (MAE 0.008,
+      eval-repo MAE 0.016) are not evidence**
 - [x] Karen's observations from the step-2k videos: Karen reports them addressed (2026-10-18)
-- [ ] Metrics: CE, MAE of expected value vs normalized return, averaged per frame *and* per
-      episode, train/val gap; broken down by outcome, source repo, autonomous vs assisted
+- [x] Metrics (`vl.analysis`, `reports/stage4_analysis_lowlr_8k.md`): CE, MAE per frame and per
+      episode, by outcome × kind (autonomous/assisted/DAgger/teleop) and source repo. Train/val
+      gap (`vl.predict`, job 17958970, 250 train episodes): CE 3.55 vs 3.73, MAE 0.091 vs 0.117.
+      **V hedges toward the middle on autonomous rollouts**: much better than the repo constant
+      on successes (0.218 vs 0.447), worse on failures (0.133 vs 0.065) and timeouts (0.186 vs
+      0.106); same on all 3 seeds
 - [~] Synchronized video/value plots for 8–12 episodes chosen systematically (clean success,
       failure, recovery, intervention, typical error, worst error): both views, predicted value
       (raw; any smoothing labeled), MC target, intervention intervals, marked mistakes/recovery.
-      **Done for the step-2k baseline** (`vl.value_plots`; 9 episodes; PNGs in
-      `reports/figures/stage4/baseline/`, videos in `data/review_videos/stage4/baseline/`;
-      findings in `reports/baseline_results.md`). Human shading uses `source` = 1 (the
-      `intervention` column only marks onsets). Mistakes/recovery are not yet marked (no
-      reviewed per-frame mistake labels). **Karen to watch the videos**
-- [ ] Note: the *targets* are straight countdowns and never drop at a mistake. A drop in the
+      Done for the step-2k baseline (9 episodes) and **the settled recipe** (`--run lowlr_8k`,
+      11 episodes incl. a "drop failure"; PNGs in `reports/figures/stage4/lowlr_8k/`, videos
+      in `data/review_videos/stage4/lowlr_8k/`). Human shading uses `source` = 1.
+      Mistakes/recovery are not marked (no reviewed per-frame mistake labels). **Karen to watch
+      the lowlr_8k videos**
+- [x] Note: the *targets* are straight countdowns and never drop at a mistake. A drop in the
       *prediction* is what we test for. Never force predictions to be monotonic.
-- [ ] Questions to answer: does V rise at grasp/seat, fall at a drop, tell hovering-above-holder
-      from seated, react to occlusion, and stay meaningful on late-round autonomous rollouts?
-- [ ] Assisted episodes reflect the human+robot mixture, not the robot alone: analyze separately
-- [ ] Operator visibility (Stage 1 audit, `reports/operator_visibility.md`): break CE/MAE down
-      by operator visible vs not in `wrist_left` (per-frame `person_frac` in
-      `data/audit/operator_visibility_wrist_left.parquet`, 1 fps; extend to the frames
-      evaluated). Compare matched frames (same phase/outcome) with and without the operator, and
-      check whether sharp V drops coincide with the operator appearing
-- [ ] Timeout endpoints: report CE/MAE separately for the three kinds of training timeout:
-      reviewer-truncated at a stall (`soft_truncate`, 126), recording ended early (47), ran to
-      the 53.3 s cap (41). Baseline keeps the reviewer's T (treated like a failure's T). If
-      the truncated ones are much worse, the arbitrary endpoint matters; fallback is the
-      Stage 5 timeouts-excluded diagnostic. Changing T or censoring timeouts is a label change:
-      ask Lars first
-- [ ] Stall frames: report error on stall periods separately and do not count a flat V
-      during a stall as a model failure (one image cannot show how long the robot has been
-      stuck; audit 5a)
-- [ ] **Decide operator masking** (baseline: no masking). Mask/crop the bottom-left corner
-      only if the check above shows V reacting to the operator; then retrain as a Stage 5
-      one-change ablation
-- [ ] Phase-one gate: beats the trivial baselines on validation, interpretable held-out curves,
-      failure cases understood. Evidence that history/other supervision is needed also counts.
+- [~] Questions (`reports/baseline_results.md`, "Stage 4 questions"): **rises at seat: yes**
+      (−0.29 at T−5 s → −0.02 at T); grasp: no visible step; **seated vs hovering: yes** (AUC
+      1.0); **late rounds: yes** (beats repo constant on r02–r04, within-round AUC@10 s
+      0.72–0.88); **fall at a drop: not testable** on val (5 VLM-labelled drops; the plotted one
+      is a missed grasp); occlusion: the operator has no effect; arm occlusion of `side_1` not measured.
+      Also: V jitters (frame-to-frame |ΔV| 30× the target slope); even 3 s smoothing stays
+      worse than flat on shape
+- [x] Assisted episodes analysed separately: human- vs robot-controlled frames have the same error
+      (0.035 vs 0.031); only 1 assisted failure in val (c03/97, predicted as a confident success),
+      so assisted failures cannot be analysed on this split
+- [x] Operator visibility: matched (repo, outcome, 2 s bin) visible-minus-not ΔV +0.00…+0.06,
+      ΔMAE ≤ 0 on all 3 seeds; sharp drops do not coincide with appearances (P 0.025–0.04 vs
+      base 0.046; 0 of the drops > 0.2). Uses the 1 fps audit samples (not extended)
+- [x] Timeout endpoints (val): soft-truncated MAE 0.174 (31 ep.), ended early 0.108 (5), cap
+      0.283 (4). Truncated ones are **not** worse; capped are worst (long T → low targets).
+      No label change needed; no need to ask Lars
+- [x] Stall frames (heuristic: robot control, ≥ 3 s in, 3 s mean speed < 15 mm/s [ours]): 64% of
+      timeout frames. V is flat in stalls (+0.02 vs target +0.145 per ~17 s segment), as expected;
+      stall frames are not where timeout error concentrates (0.164 vs 0.224)
+- [x] **Decide operator masking: no masking** (pre-set rule: V does not react to the operator).
+      The Stage 5 masking ablation is dropped
+- [~] Phase-one gate (Claude's assessment in `reports/baseline_results.md`; **Karen/Lars to
+      sign off**): beats the trivial baselines overall (not on autonomous failures/timeouts
+      alone); curves partly interpretable (seat, progress; jittery); failure cases mostly
+      understood (stall ambiguity, repo prior hedging). Stalls are evidence that a short history
+      or elapsed-time input is needed (Stage 5 "current frame vs short history")
 
 ## Stage 5 — Ablations and test (target: Tue 2026-10-20)
 One change at a time, in this order:
@@ -333,7 +350,7 @@ One change at a time, in this order:
 - [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
       the two images; larger backbone only if ResNet-18 underfits
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
-- [ ] If Stage 4 shows V reacting to the operator: masked `wrist_left` bottom-left corner vs
+- [x] Not needed (Stage 4: V does not react to the operator). Was: if Stage 4 shows V reacting to the operator: masked `wrist_left` bottom-left corner vs
       unmasked (see Stage 4 operator check)
 - [ ] Freeze all choices
 - [ ] Final test evaluation (r05-eval, r05-screen reported separately; check r05-screen

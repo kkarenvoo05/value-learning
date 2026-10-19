@@ -4,9 +4,13 @@ Validation split, best checkpoint. MAE and bias are per frame unless labelled; r
 
 ## Seeds (best checkpoint of each run)
 
-|          |   best step |   val_ce |   val_mae |   val_mae_per_episode |   eval_repos_mae |   offset_free_mae |   eval_repos_auc_1s |   eval_repos_auc_5s |   eval_repos_auc_10s |
-|:---------|------------:|---------:|----------:|----------------------:|-----------------:|------------------:|--------------------:|--------------------:|---------------------:|
-| lowlr_8k |        3000 |   3.7273 |    0.1173 |                0.0984 |           0.1881 |              0.05 |              0.6864 |              0.6297 |               0.8499 |
+|             |   best step |   val_ce |   val_mae |   val_mae_per_episode |   eval_repos_mae |   offset_free_mae |   eval_repos_auc_1s |   eval_repos_auc_5s |   eval_repos_auc_10s |
+|:------------|------------:|---------:|----------:|----------------------:|-----------------:|------------------:|--------------------:|--------------------:|---------------------:|
+| lowlr_8k    |     3000    |   3.7273 |    0.1173 |                0.0984 |           0.1881 |            0.05   |              0.6864 |              0.6297 |               0.8499 |
+| lowlr_8k_s1 |     2000    |   3.7315 |    0.1226 |                0.1025 |           0.1955 |            0.0473 |              0.667  |              0.6489 |               0.8317 |
+| lowlr_8k_s2 |     2000    |   3.7296 |    0.1244 |                0.1014 |           0.2041 |            0.0421 |              0.6535 |              0.6356 |               0.8287 |
+| mean        |     2333.33 |   3.7295 |    0.1214 |                0.1008 |           0.1959 |            0.0465 |              0.669  |              0.6381 |               0.8368 |
+| sd          |      577.35 |   0.0021 |    0.0037 |                0.0021 |           0.008  |            0.004  |              0.0165 |              0.0098 |               0.0115 |
 
 ## By outcome and episode kind
 
@@ -44,6 +48,15 @@ Validation split, best checkpoint. MAE and bias are per frame unless labelled; r
 | ('human', 'success') |         74 |     6519 |  2.529 | 0.035 |             0.037 |       -0.033 |            0.04  |
 | ('robot', 'failure') |          1 |      137 | 10.08  | 0.464 |             0.464 |        0.464 |            0.475 |
 | ('robot', 'success') |         65 |    12406 |  3.211 | 0.031 |             0.029 |       -0.011 |            0.039 |
+
+## Train/val gap
+
+|                 |   train (sample) |      val |   gap (val - train) |
+|:----------------|-----------------:|---------:|--------------------:|
+| CE              |           3.5541 |   3.7273 |              0.1732 |
+| MAE             |           0.0913 |   0.1173 |              0.0259 |
+| MAE per episode |           0.078  |   0.0984 |              0.0204 |
+| episodes        |         250      | 247      |             -3      |
 
 ## Timeouts by endpoint kind
 

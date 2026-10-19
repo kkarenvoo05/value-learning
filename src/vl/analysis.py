@@ -5,6 +5,7 @@ Usage:
         -> reports/stage4_analysis_<run>.md      (tables only; interpretation lives in
                                                   reports/baseline_results.md)
            data/analysis/val_trajectory.parquet  (cached per-frame speed / human control)
+    --repo-sheet also writes reports/figures/stage4/first_frames_by_repo.png
 
 Reads data/runs/<run>/val_predictions.parquet (best checkpoint), the manifest, the val
 trajectories (end-effector position, `source`) and the Stage 1 operator-visibility audit.
@@ -237,11 +238,38 @@ def shape_section(p: pd.DataFrame, repo_median: dict) -> str:
     return "\n\n".join(out)
 
 
+def first_frame_sheet(idx: pd.DataFrame, dcfg: dict, out: Path, per_repo: int = 4, tile: int = 160):
+    """Frame 0 of `per_repo` random training episodes of every training-pool repo, both cropped
+    views side by side, one row per repo: what in a still image could reveal the repo/round."""
+    from PIL import Image, ImageDraw
+
+    from vl.dataset import FrameDataset
+    first = idx[(idx.split == "train") & (idx.frame_index == 0)]
+    pick = first.groupby("repo").sample(n=per_repo, random_state=0)
+    ds = FrameDataset(pick, dcfg)
+    repos = sorted(pick.repo.unique())
+    label_w = 110
+    sheet = Image.new("RGB", (label_w + per_repo * len(dcfg["cameras"]) * tile, len(repos) * tile), "white")
+    draw = ImageDraw.Draw(sheet)
+    for i in range(len(ds)):
+        r = repos.index(ds.index.repo[i])
+        k = int((ds.index.repo[:i] == ds.index.repo[i]).sum())
+        for j, c in enumerate(dcfg["cameras"]):
+            img = Image.fromarray(ds[i]["images"][c].permute(1, 2, 0).numpy()).resize((tile, tile))
+            sheet.paste(img, (label_w + (k * len(dcfg["cameras"]) + j) * tile, r * tile))
+    for r, repo in enumerate(repos):
+        draw.text((4, r * tile + tile // 2 - 6), repo.replace("real-marker-d2-", ""), fill="black")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", required=True)
     ap.add_argument("--seeds", nargs="*", default=[])
     ap.add_argument("--train-config", default="configs/train.yaml")
+    ap.add_argument("--repo-sheet", action="store_true", help="also write the first-frame sheet per repo")
     args = ap.parse_args()
     tc = load_config(args.train_config)
     dcfg = load_config(tc["data_config"])
@@ -280,6 +308,8 @@ def main():
             "## Shape: jitter vs slow wander\n", shape_section(p, rmed) + "\n",
             "## Operator visibility in wrist_left\n", operator_section(p, op) + "\n",
             "## Stage 4 questions\n", questions_section(p) + "\n"]
+    if args.repo_sheet:
+        print("->", first_frame_sheet(idx, dcfg, Path("reports/figures/stage4/first_frames_by_repo.png")))
     out = Path(tc["paths"].get("reports", "reports")) / f"stage4_analysis_{args.run}.md"
     out.write_text("\n".join(sec))
     print(f"-> {out}")
