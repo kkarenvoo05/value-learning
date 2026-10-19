@@ -6,6 +6,7 @@ Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run lowlr_8k --section baseline_lowlr
     .venv/bin/python -u -m vl.train_baseline --run lowlr_8k_s1 --section baseline_lowlr --seed 1
     .venv/bin/python -u -m vl.train_baseline --run side_s0 --section baseline_lowlr --cameras side_1
+    .venv/bin/python -u -m vl.train_baseline --run frozen_s0 --section baseline_lowlr --freeze-backbone
 
 - Sampling [ours]: uniform over every valid training frame (shuffled passes, fixed seed),
   frames decoded on the fly by FrameDataset (Stage 3.3 decision).
@@ -88,6 +89,8 @@ def main():
     ap.add_argument("--section", default="baseline", help="config section with the schedule (baseline, baseline_cosine)")
     ap.add_argument("--seed", type=int, help="override the config seed (model head init + data order)")
     ap.add_argument("--cameras", nargs="+", help="override data.yaml cameras (Stage 5 camera ablation)")
+    ap.add_argument("--freeze-backbone", action="store_true",
+                    help="train only the head; ImageNet backbone fixed (Stage 5 encoder ablation)")
     ap.add_argument("--steps", type=int, help="override baseline.steps (smoke tests)")
     ap.add_argument("--val-limit", type=int, help="use only the first N validation episodes (smoke tests)")
     args = ap.parse_args()
@@ -131,10 +134,16 @@ def main():
     (run / "config.json").write_text(json.dumps(meta, indent=2))
 
     model = build_model(dcfg, tcfg).to(device).train()
-    # A section may override the top-level learning rates (decision 2(b)).
-    opt = torch.optim.AdamW([{"params": model.backbone.parameters(), "lr": bc.get("lr_backbone", cfg["lr_backbone"])},
-                             {"params": model.head.parameters(), "lr": bc.get("lr_head", cfg["lr_head"])}],
-                            weight_decay=cfg["weight_decay"])
+    if args.freeze_backbone:
+        model.freeze_backbone()
+    # A section may override the top-level learning rates (decision 2(b)). A frozen backbone gets
+    # no optimizer group, so the head's LR and schedule are unchanged.
+    groups = [{"params": model.head.parameters(), "lr": bc.get("lr_head", cfg["lr_head"])}]
+    if not args.freeze_backbone:
+        groups.insert(0, {"params": model.backbone.parameters(), "lr": bc.get("lr_backbone", cfg["lr_backbone"])})
+    opt = torch.optim.AdamW(groups, weight_decay=cfg["weight_decay"])
+    print(f"trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
+          f"{' (backbone frozen)' if args.freeze_backbone else ''}", flush=True)
     base_lr = [g["lr"] for g in opt.param_groups]
     scaler = torch.amp.GradScaler("cuda", enabled=dtype == torch.float16)
     logf = open(run / "log.jsonl", "w")

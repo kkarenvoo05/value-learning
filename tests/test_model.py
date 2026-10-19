@@ -107,3 +107,25 @@ def test_single_camera_model_reads_only_its_camera(cam):
     assert a.shape == (2, 201)
     assert torch.equal(a, b)
     assert not torch.allclose(a, c)
+
+
+def test_frozen_backbone_trains_only_the_head():
+    """Stage 5 encoder ablation: after training steps the backbone's weights *and* BatchNorm
+    running statistics are unchanged (it stays in eval mode under model.train()); the head moves."""
+    torch.manual_seed(0)
+    m = ValueModel(CAMS, pretrained=False).freeze_backbone().train()
+    before = {k: v.clone() for k, v in m.backbone.state_dict().items()}
+    head_before = m.head[2].weight.clone()
+    assert m.training and not m.backbone.training
+    assert all(not p.requires_grad for p in m.backbone.parameters())
+    opt = torch.optim.AdamW(m.head.parameters(), lr=1e-3)
+    x, y = images(b=4, size=64), torch.tensor([10, 60, 120, 190])
+    for _ in range(3):
+        loss = value_loss(m(x), y)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    m.eval().train()                                 # eval/train round trip keeps the backbone in eval
+    assert not m.backbone.training
+    assert all(torch.equal(v, before[k]) for k, v in m.backbone.state_dict().items())
+    assert not torch.equal(m.head[2].weight, head_before)

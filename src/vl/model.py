@@ -46,6 +46,21 @@ class ValueModel(nn.Module):
         self.register_buffer("bin_centers", torch.linspace(v_min, v_max, n_bins))
         self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
+        self.backbone_frozen = False
+
+    def freeze_backbone(self) -> "ValueModel":
+        """Stage 5 ablation 3: keep the pretrained backbone fixed, train only the head [ours].
+        Frozen means no weight updates *and* no BatchNorm running-statistic updates, so the
+        backbone stays in eval mode even when the model is put in train mode."""
+        self.backbone.requires_grad_(False)
+        self.backbone_frozen = True
+        return self.train(self.training)
+
+    def train(self, mode: bool = True) -> "ValueModel":
+        super().train(mode)
+        if self.backbone_frozen:
+            self.backbone.eval()
+        return self
 
     def forward(self, images: dict[str, torch.Tensor]) -> torch.Tensor:
         """images: {cam: uint8 (B, 3, H, W)} -> logits (B, n_bins)."""
