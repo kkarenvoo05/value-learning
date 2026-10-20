@@ -380,6 +380,10 @@ One change at a time, in this order:
       augmentation) plus flicker of the hump balance between near-identical frames (maybe fixable).
       - [ ] Step 0: pre-end flicker metrics on the baseline (needs full-val distributions, job 17973560)
       - [ ] Step 1: arms A1 photometric, A2 crop shift/scale, A3 both; 3 seeds each, val never augmented
+            Implemented 2026-10-19 (`vl.dataset` augment, sections `baseline_lowlr_aug_{photo,crop,both}`,
+            tests; real-frame check `reports/figures/stage5/augment_examples.jpg`: marker, gripper and
+            holder stay in view). Submitted on humanoid: jobs 17977330 (photo), 17977331 (crop),
+            17977332 (both), runs `aug_<arm>_s{0,1,2}`, seeds in sequence
       - [ ] Step 2: pre-set rule: accuracy within 2 sd, pre-end |ΔV| and |Δp_succ| ≥ 25% lower and
             better than 0.5 s smoothing, real uncertainty kept (failure/stall plots stay two-humped)
 - [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
