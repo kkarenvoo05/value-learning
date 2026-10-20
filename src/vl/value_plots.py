@@ -6,6 +6,9 @@ Usage:
            data/review_videos/stage4/<run>/<same name>.mp4             (video + moving cursor)
 
 Reads the run's val_predictions.parquet (the best checkpoint's per-frame V); no GPU needed.
+With --dist, the background shows the model's full predicted distribution over the 201 value bins
+at every frame (darker = more probability), from data/runs/<run>/val_probs_plotted.npz or
+val_probs.npz (`vl.value_dist`); V is the mean of that column. Outputs get a `_dist` suffix.
 Curves: target v (the Monte-Carlo countdown, black), predicted V = Σ p_b v_b (raw, unsmoothed,
 orange). Shaded: frames where the trajectory parquet's `source` is 1 (human in control; the
 `intervention` column only marks takeover onsets). Dotted line: the reviewed endpoint T. The *targets* are straight lines by
@@ -74,17 +77,28 @@ def intervals(flag: np.ndarray) -> list[tuple[int, int]]:
     return list(zip(np.where(d == 1)[0], np.where(d == -1)[0] - 1))
 
 
-def curve_figure(e: pd.DataFrame, human: list, title: str, size=(9.6, 3.2), dpi=100):
+def curve_figure(e: pd.DataFrame, human: list, title: str, size=(9.6, 3.2), dpi=100, probs: np.ndarray | None = None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=size, dpi=dpi)
     fps = float(e.fps.iloc[0])
     t = e.frame_index.to_numpy() / fps
+    if probs is not None:
+        # Column = one frame's distribution over the 201 bins; each bin spans its center +- half a width.
+        # Each column is scaled to its own maximum, so a confident and a spread-out prediction are
+        # both visible; the colour bar is "relative probability within the frame".
+        n = probs.shape[1]
+        hw = 0.5 / (n - 1)
+        rel = probs / probs.max(axis=1, keepdims=True)
+        im = ax.imshow(rel.T, origin="lower", aspect="auto", cmap="Purples", vmin=0, vmax=1, interpolation="nearest",
+                       extent=[t[0] - 0.5 / fps, t[-1] + 0.5 / fps, -1 - hw, 0 + hw], zorder=0)
+        cb = fig.colorbar(im, ax=ax, pad=0.01, fraction=0.03)
+        cb.set_label("p(bin) / max", fontsize=7); cb.ax.tick_params(labelsize=6)
     for a, b in human:
         ax.axvspan(a / fps, (b + 1) / fps, color="tab:blue", alpha=0.15, lw=0)
     ax.plot(t, e.value, color="black", lw=1.6, label="target v (MC countdown)")
-    ax.plot(t, e.V, color="tab:orange", lw=1.3, label="predicted V (raw)")
+    ax.plot(t, e.V, color="tab:orange", lw=1.3, label="predicted V (raw)" + (" = mean of the shaded distribution" if probs is not None else ""))
     ax.axvline(e["T"].iloc[0] / fps, color="gray", ls=":", lw=1)
     ax.set_ylim(-1.02, 0.02); ax.set_xlim(0, t[-1] + 0.2)
     ax.set_xlabel("time (s)"); ax.set_ylabel("normalized value")
@@ -104,13 +118,14 @@ def render(fig) -> Image.Image:
     return Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[..., :3].copy())
 
 
-def episode_outputs(kind, k, e, idx_row, man_row, human, reader, cfg, fig_dir, vid_dir, n_strip=8, S=224):
+def episode_outputs(kind, k, e, idx_row, man_row, human, reader, cfg, fig_dir, vid_dir, n_strip=8, S=224,
+                    probs=None, video=True):
     mae = float((e.V - e.value).abs().mean())
-    name = f"{k:02d}_{kind}_{e.repo.iloc[0][15:]}_ep{int(e.episode_index.iloc[0]):04d}"
+    name = f"{k:02d}_{kind}_{e.repo.iloc[0][15:]}_ep{int(e.episode_index.iloc[0]):04d}" + ("_dist" if probs is not None else "")
     title = (f"{kind}: {e.repo.iloc[0][15:]} ep{int(e.episode_index.iloc[0])} | {e.outcome.iloc[0]}, "
              f"T = {e['T'].iloc[0] / e.fps.iloc[0]:.1f} s | episode MAE {mae:.3f}"
              + (f" | VLM: {man_row.machine_failure_mode}" if isinstance(man_row.machine_failure_mode, str) else ""))
-    fig, ax = curve_figure(e, human, title)
+    fig, ax = curve_figure(e, human, title, probs=probs)
     curve = render(fig)
     # Map time -> curve pixel column, for the strip ticks and the video cursor.
     x0, x1 = ax.get_xlim()
@@ -144,6 +159,8 @@ def episode_outputs(kind, k, e, idx_row, man_row, human, reader, cfg, fig_dir, v
         x = tx(t / e.fps.iloc[0])
         d.line([(x, 2 * tw + 14), (x, 2 * tw + 22)], fill="red", width=2)
     sheet.save(fig_dir / f"{name}.png")
+    if not video:
+        return name, mae
 
     # Video: both views + the curve with a moving cursor.
     W = 2 * S
@@ -174,6 +191,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="baseline")
     ap.add_argument("--train-config", default="configs/train.yaml")
+    ap.add_argument("--dist", action="store_true", help="shade the full predicted distribution behind the curves")
+    ap.add_argument("--no-video", action="store_true")
     args = ap.parse_args()
     tc = load_config(args.train_config)
     cfg = load_config(tc["data_config"])
@@ -186,6 +205,12 @@ def main():
     vid_dir = Path("data/review_videos/stage4") / args.run
     fig_dir.mkdir(parents=True, exist_ok=True); vid_dir.mkdir(parents=True, exist_ok=True)
     reader, vroot = FrameReader(), Path(cfg["paths"]["video_root"])
+    dist = None
+    if args.dist:
+        f = next(p for p in [run / "val_probs_plotted.npz", run / "val_probs.npz"] if p.exists())
+        z = np.load(f)
+        dist = {(u, int(t)): i for i, (u, t) in enumerate(zip(z["episode_uid"], z["frame_index"]))}
+        probs_all, V_dist = z["probs"].astype(np.float32), z["V"]
     rows = []
     for k, (kind, uid) in enumerate(choose_episodes(pred, man), 1):
         e = pred[pred.episode_uid == uid].sort_values("frame_index")
@@ -194,7 +219,14 @@ def main():
         # `source` == 1 marks human-controlled frames; `intervention` only marks takeover onsets.
         flag = trajectory(vroot, ir.repo, int(ir.episode_index), "source").ravel()[: int(ir["T"]) + 1] == 1
         human = intervals(flag)
-        name, mae = episode_outputs(kind, k, e, ir, mr, human, reader, cfg, fig_dir, vid_dir)
+        probs = None
+        if dist is not None:
+            rows_ = [dist[(uid, int(t))] for t in e.frame_index]
+            probs = probs_all[rows_]
+            # The distributions were recomputed (possibly another GPU / AMP dtype): check they match V.
+            assert np.abs(V_dist[rows_] - e.V.to_numpy()).max() < 0.03, "recomputed distributions disagree with V"
+        name, mae = episode_outputs(kind, k, e, ir, mr, human, reader, cfg, fig_dir, vid_dir, probs=probs,
+                                    video=not args.no_video)
         rows.append({"kind": kind, "file": name, "outcome": e.outcome.iloc[0], "T_s": round(ir["T"] / ir.fps, 1),
                      "MAE": round(mae, 3), "human_frames": int(flag.sum())})
         print("->", name, flush=True)
