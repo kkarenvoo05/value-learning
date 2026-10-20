@@ -374,6 +374,14 @@ One change at a time, in this order:
       fine-tuned arm's L40S; seeds in sequence, git `2eeb32c`, `scripts/frozen.sbatch` with
       `--partition=move --gres=gpu:rtxpro6000:1 --cpus-per-task=32`; humanoid job 17971059
       cancelled while queued)
+- [ ] Image augmentation (Karen, 2026-10-19; plan: `reports/stage5_augmentation_plan.md`), aimed at
+      the mentor's concern that V before the last ~10 s looks random. Distribution plots show two
+      humps (success/failure) with V their average: real outcome uncertainty (not fixable by
+      augmentation) plus flicker of the hump balance between near-identical frames (maybe fixable).
+      - [ ] Step 0: pre-end flicker metrics on the baseline (needs full-val distributions, job 17973560)
+      - [ ] Step 1: arms A1 photometric, A2 crop shift/scale, A3 both; 3 seeds each, val never augmented
+      - [ ] Step 2: pre-set rule: accuracy within 2 sd, pre-end |ΔV| and |Δp_succ| ≥ 25% lower and
+            better than 0.5 s smoothing, real uncertainty kept (failure/stall plots stay two-humped)
 - [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
       the two images; larger backbone only if ResNet-18 underfits
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
