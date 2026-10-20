@@ -100,7 +100,7 @@ def check_b(ds, idx, cfg, tcfg, out_dir: Path, n=8):
         e = idx.loc[r]
         pq = parquet_row(Path(cfg["paths"]["video_root"]), e.repo, int(e.episode_index), int(e.frame_index))
         failed = e.outcome in tcfg["failure_outcomes"]
-        v_ref = (-(e["T"] - e.frame_index) / e.fps - tcfg["c_fail_s"] * failed) / (tcfg["horizon_s"] + tcfg["c_fail_s"])
+        v_ref = (-(e["T"] - e.frame_index) - tcfg["c_fail_steps"] * failed) / (tcfg["horizon_steps"] + tcfg["c_fail_steps"])
         centers = np.linspace(tcfg["v_min"], tcfg["v_max"], tcfg["n_bins"])
         ok = (abs(v["value"] - v_ref) < 1e-9 and int(pq.is_valid) == 1 and v["row"] == r
               and abs(pq.timestamp - e.frame_index / e.fps) < 1e-3 and abs(centers[v["bin"]] - v_ref) <= 0.0025 + 1e-9)

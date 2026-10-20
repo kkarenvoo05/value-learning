@@ -112,8 +112,12 @@ Details for finished items are in `reports/dataset_audit.md`.
       - C_fail = H = 60 s, v = R/120 s kept. It is the smallest penalty that puts every failure
         frame below every success frame; not tuned so the longest episode hits exactly −1
         (lowest target −0.966). [ours]
-      - Seconds rather than steps: same normalized targets (1 step = 1 frame = 1/15 s); seconds
-        keep the Stage 6 lookahead defined in time. [ours]
+      - ~~Seconds rather than steps~~ **Changed to timesteps (Karen + mentor, 2026-10-19):** reward
+        −1 per timestep (frame), failure penalty 900 steps, R_t = −(T − t) − 900·[failed],
+        v_t = R_t / 1800. Every repo is 15 fps, so this is exactly the old seconds version
+        (60 s = 900 steps): rebuilt `frame_targets` and `frame_index` have identical bins and
+        values within 1.1e-16 on all 575,406 / 438,853 frames, so **no retraining needed**; all
+        trained runs stay valid. Stage 6 lookaheads are chosen in seconds and converted at 15 fps
       - Timeout endpoints kept as reviewed, including the 173 of 214 training timeouts that
         end before the 53.3 s cap (reviewer-truncated or recording ended); broken down in
         Stage 4; open question Q7

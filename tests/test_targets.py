@@ -1,7 +1,7 @@
 """Hand-computed checks on synthetic episodes for value-target construction.
 
-Reference numbers use fps = 15, horizon_s = c_fail_s = 60 (scale 120 s), 201 bins on [-1, 0]
-(width 0.005), as in configs/targets.yaml.
+Reference numbers use timesteps (one per frame, 15 fps), horizon_steps = c_fail_steps = 900
+(scale 1800 steps = 120 s), 201 bins on [-1, 0] (width 0.005 = 9 steps), as in configs/targets.yaml.
 """
 
 import numpy as np
@@ -10,7 +10,7 @@ import pytest
 
 from vl.targets import bin_centers, build_targets, episode_targets, summarize
 
-CFG = {"horizon_s": 60.0, "c_fail_s": 60.0, "failure_outcomes": ["failure", "timeout"],
+CFG = {"horizon_steps": 900, "c_fail_steps": 900, "failure_outcomes": ["failure", "timeout"],
        "success_outcomes": ["success"], "n_bins": 201, "v_min": -1.0, "v_max": 0.0}
 
 
@@ -22,25 +22,25 @@ def test_bin_centers_span_support_with_expected_width():
 
 
 def test_success_episode_hand_computed():
-    # T = 30 at 15 fps: the first frame is 2 s from the end.
+    # T = 30: the first frame is 30 steps (2 s) from the end, reward -1 per step.
     e = episode_targets(T=30, fps=15, outcome="success", cfg=CFG)
     assert len(e) == 31 and list(e.frame_index) == list(range(31))   # nothing after T
     first, last = e.iloc[0], e.iloc[-1]
-    assert first.return_s == pytest.approx(-2.0)
-    assert first.value == pytest.approx(-2.0 / 120)                    # -0.016667
+    assert first.return_steps == -30
+    assert first.value == pytest.approx(-30 / 1800)                    # -0.016667
     assert first.bin == 197                                            # round(196.667)
-    assert last.return_s == 0.0 and last.value == 0.0 and last.bin == 200
+    assert last.return_steps == 0 and last.value == 0.0 and last.bin == 200
     assert e.in_support.all()
 
 
 def test_failure_episode_hand_computed():
-    # T = 15 at 15 fps: 1 s to the end plus the 60 s failure penalty.
+    # T = 15: 15 steps to the end plus the 900-step failure penalty.
     e = episode_targets(T=15, fps=15, outcome="failure", cfg=CFG)
     first, last = e.iloc[0], e.iloc[-1]
-    assert first.return_s == pytest.approx(-61.0)
-    assert first.value == pytest.approx(-61.0 / 120)                   # -0.508333
+    assert first.return_steps == -915
+    assert first.value == pytest.approx(-915 / 1800)                   # -0.508333
     assert first.bin == 98                                             # round(98.333)
-    assert last.return_s == -60.0 and last.value == -0.5 and last.bin == 100
+    assert last.return_steps == -900 and last.value == -0.5 and last.bin == 100
 
 
 def test_timeout_gets_the_same_targets_as_failure():
@@ -51,7 +51,8 @@ def test_timeout_gets_the_same_targets_as_failure():
 
 def test_value_rises_linearly_by_one_frame_per_step():
     e = episode_targets(T=100, fps=15, outcome="success", cfg=CFG)
-    assert np.allclose(np.diff(e.value), 1 / (15 * 120))
+    assert np.allclose(np.diff(e.value), 1 / 1800)
+    assert (np.diff(e.return_steps) == 1).all() and (np.diff(e.steps_to_go) == -1).all()
     assert np.allclose(np.diff(e.time_to_go_s), -1 / 15)
 
 
@@ -63,13 +64,13 @@ def test_successes_and_failures_separate_at_minus_half():
 
 
 def test_out_of_support_is_flagged_not_clipped():
-    # A 70 s failure: first frame R = -130 s, v = -1.0833, outside [-1, 0].
+    # A 1050-step (70 s) failure: first frame R = -1950 steps, v = -1.0833, outside [-1, 0].
     e = episode_targets(T=1050, fps=15, outcome="failure", cfg=CFG)
     first = e.iloc[0]
-    assert first.value == pytest.approx(-130 / 120)
+    assert first.value == pytest.approx(-1950 / 1800)
     assert not first.in_support and first.bin == -1
-    # Frames within the last 60 s are back inside the support.
-    assert e[e.time_to_go_s <= 60].in_support.all()
+    # Frames within the last 900 steps are back inside the support.
+    assert e[e.steps_to_go <= 900].in_support.all()
 
 
 def test_value_just_past_the_edge_still_maps_to_the_edge_bin():

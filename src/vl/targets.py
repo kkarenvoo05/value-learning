@@ -3,9 +3,10 @@
 Usage:
     .venv/bin/python -m vl.targets --config configs/targets.yaml
 
-For an episode with valid final frame T (0-indexed) and frame rate fps, each frame t = 0..T gets
-    R_t = -(T - t) / fps - c_fail_s * [failed]      Monte-Carlo return in seconds, undiscounted
-    v_t = R_t / (horizon_s + c_fail_s)              normalized value, ~[-1, 0]
+For an episode with valid final frame T (0-indexed; one timestep = one frame), each frame t = 0..T gets
+    r_t = -1 per timestep, plus -c_fail_steps at the end of a failed episode
+    R_t = -(T - t) - c_fail_steps * [failed]          Monte-Carlo return in timesteps, undiscounted
+    v_t = R_t / (horizon_steps + c_fail_steps)        normalized value, ~[-1, 0]
     bin = nearest of n_bins evenly spaced centers on [v_min, v_max]
 Frames after T are never targets. Values outside the support are flagged (bin = -1) and
 reported, never clipped. Choices and their provenance are in configs/targets.yaml.
@@ -40,12 +41,12 @@ def episode_targets(T: int, fps: float, outcome: str, cfg: dict) -> pd.DataFrame
     else:
         raise ValueError(f"no target for outcome {outcome!r}")
     t = np.arange(int(T) + 1)
-    time_to_go = (T - t) / fps
-    ret = -time_to_go - cfg["c_fail_s"] * failed + 0.0   # + 0.0 turns -0.0 into 0.0
-    value = ret / (cfg["horizon_s"] + cfg["c_fail_s"])
+    steps_to_go = int(T) - t
+    ret = -steps_to_go - cfg["c_fail_steps"] * failed              # integer timesteps
+    value = ret / (cfg["horizon_steps"] + cfg["c_fail_steps"]) + 0.0   # + 0.0 turns -0.0 into 0.0
     b, ok = value_to_bin(value, cfg)
-    return pd.DataFrame({"frame_index": t, "time_to_go_s": time_to_go, "return_s": ret,
-                         "value": value, "bin": b, "in_support": ok, "failed": failed})
+    return pd.DataFrame({"frame_index": t, "steps_to_go": steps_to_go, "time_to_go_s": steps_to_go / fps,
+                         "return_steps": ret, "value": value, "bin": b, "in_support": ok, "failed": failed})
 
 
 def build_targets(manifest: pd.DataFrame, cfg: dict) -> pd.DataFrame:
@@ -58,7 +59,7 @@ def build_targets(manifest: pd.DataFrame, cfg: dict) -> pd.DataFrame:
                               episode_index=ep.episode_index, split=ep.split,
                               outcome=ep.outcome))
     cols = ["episode_uid", "repo", "episode_index", "split", "outcome", "failed", "frame_index",
-            "time_to_go_s", "return_s", "value", "bin", "in_support"]
+            "steps_to_go", "time_to_go_s", "return_steps", "value", "bin", "in_support"]
     return pd.concat(parts, ignore_index=True)[cols]
 
 
@@ -86,7 +87,7 @@ def plot_examples(ft: pd.DataFrame, path: Path, per_outcome: int = 4, seed: int 
             elapsed = e.time_to_go_s.iloc[0] - e.time_to_go_s
             ax.plot(elapsed, e.value, color=color, lw=1.2, label=outcome if k == 0 else None)
     ax.axhline(-0.5, color="gray", ls="--", lw=0.8)
-    ax.set(xlabel="elapsed time in episode (s)", ylabel="target value v = R / 120 s",
+    ax.set(xlabel="elapsed time in episode (s)", ylabel="target value v = R / 1800 steps",
            ylim=(-1.02, 0.02), title="Monte Carlo value targets, random training episodes")
     ax.legend()
     path.parent.mkdir(parents=True, exist_ok=True)

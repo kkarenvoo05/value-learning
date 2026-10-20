@@ -5,21 +5,25 @@
 #   [lars]  = explicitly specified by Lars Ankile
 #   [ours]  = our experimental choice (documented, can be changed)
 #
-# Per episode with valid final frame T and frame rate fps, for t = 0..T:
-#   R_t = -(T - t) / fps - c_fail_s * [episode failed]      (seconds, undiscounted)
-#   v_t = R_t / (horizon_s + c_fail_s)                       (one task-wide scale)
+# Per episode with valid final frame T (one timestep = one frame), for t = 0..T:
+#   r_t = -1 per timestep; a failed episode also gets -c_fail_steps at its end
+#   R_t = -(T - t) - c_fail_steps * [episode failed]          (timesteps, undiscounted)
+#   v_t = R_t / (horizon_steps + c_fail_steps)                 (one task-wide scale)
 # Frames after T are never targets.
 
-# [paper] reward -1 per step, no discounting; [ours] measured in seconds, not steps,
-# so later advantage lookaheads are defined in time.
-units: seconds
+# [paper] reward -1 per step, no discounting. [Karen + mentor, 2026-10-19] returns are counted
+# in timesteps, not seconds. Every repo is 15 fps, so these are exactly the former seconds-based
+# targets (60 s = 900 steps): same values and bins. Lookaheads in Stage 6 are converted from
+# seconds to steps at 15 fps.
+units: steps
 
-# [ours] Longest valid episode is 56.0 s (840 frames), so 60 s covers every observed episode.
-horizon_s: 60.0
+# [ours] Longest valid episode is 840 steps (56.0 s at 15 fps), so 900 steps covers every
+# observed episode.
+horizon_steps: 900
 
-# [paper] large negative terminal reward for failure; [ours] value = horizon_s, which puts
-# every success in (-0.5, 0] and every failure in [-1, -0.5] for episodes up to horizon_s.
-c_fail_s: 60.0
+# [paper] large negative terminal reward for failure; [ours] value = horizon_steps, which puts
+# every success in (-0.5, 0] and every failure in [-1, -0.5] for episodes up to horizon_steps.
+c_fail_steps: 900
 
 # [lars] timeouts are failures, as in RECAP (2026-10-17). Not treated as censored.
 failure_outcomes: [failure, timeout]
