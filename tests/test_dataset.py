@@ -55,3 +55,38 @@ def test_normalize_roundtrip():
     y = normalize(x, MEAN, STD)
     assert y.dtype == torch.float32 and abs(float(y.mean())) < 3
     assert torch.equal(unnormalize(y, MEAN, STD), x)
+
+
+AUG = {"brightness": 0.3, "contrast": 0.3, "saturation": 0.3, "hue": 0.03, "crop_shift_px": 6, "crop_scale": [0.9, 1.0]}
+
+
+def test_no_augment_is_byte_identical(tmp_path):
+    a, b = FrameDataset(index(tmp_path), cfg()), FrameDataset(index(tmp_path), cfg(), augment={})
+    for i in range(3):
+        for c in cfg()["cameras"]:
+            assert torch.equal(a[i]["images"][c], b[i]["images"][c])
+
+
+def test_augment_keeps_shape_dtype_and_labels_and_changes_pixels(tmp_path):
+    plain, aug = FrameDataset(index(tmp_path), cfg()), FrameDataset(index(tmp_path), cfg(), augment=AUG)
+    torch.manual_seed(0)
+    changed = 0
+    for i in range(5):
+        p, q = plain[i], aug[i]
+        assert (q["bin"], q["value"], q["row"]) == (p["bin"], p["value"], p["row"])
+        for c in cfg()["cameras"]:
+            assert q["images"][c].shape == p["images"][c].shape and q["images"][c].dtype == torch.uint8
+            changed += not torch.equal(q["images"][c], p["images"][c])
+    assert changed >= 8
+
+
+def test_jittered_box_stays_square_and_inside_the_frame():
+    from vl.dataset import jitter_box
+    torch.manual_seed(0)
+    for box in ([80, 0, 560, 480], [140, 0, 560, 420]):     # the real wrist / side crops
+        for _ in range(500):
+            x0, y0, x1, y1 = jitter_box(box, {"crop_shift_px": 24, "crop_scale": [0.9, 1.0]}, (480, 640))
+            side = x1 - x0
+            assert y1 - y0 == side and 0.9 * 420 - 1 <= side <= box[2] - box[0]
+            assert 0 <= x0 and x1 <= 640 and 0 <= y0 and y1 <= 480
+            assert abs((x0 + x1) / 2 - (box[0] + box[2]) / 2) <= 24 + 1

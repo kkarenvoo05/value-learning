@@ -120,7 +120,8 @@ def main():
     print(f"constant predictor on val: CE {trivial['val_ce']:.4f}, MAE {trivial['val_mae']:.4f} "
           f"(median constant MAE {trivial['val_mae_median']:.4f})", flush=True)
 
-    train_dl = DataLoader(FrameDataset(train, dcfg), batch_size=cfg["batch_size"], shuffle=True, drop_last=True,
+    # Training-only augmentation (Stage 5); validation is never augmented.
+    train_dl = DataLoader(FrameDataset(train, dcfg, augment=bc.get("augment")), batch_size=cfg["batch_size"], shuffle=True, drop_last=True,
                           num_workers=workers, persistent_workers=True, pin_memory=True, prefetch_factor=4,
                           generator=torch.Generator().manual_seed(cfg["seed"]))
     val_dl = DataLoader(FrameDataset(val, dcfg), batch_size=bc["eval_batch_size"], shuffle=False,

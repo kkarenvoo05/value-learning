@@ -1,8 +1,8 @@
 #!/bin/bash
-# Stage 5 ablation 1 (cameras): the settled recipe (baseline_lowlr) on one camera, seeds 0-2 in
-# sequence on one GPU. The wrist + side arm is the existing lowlr_8k / _s1 / _s2 runs.
+# Stage 5 ablations: one config section (default baseline_lowlr), seeds 0-2 in sequence on one GPU.
 #   NAME=side  CAMS=side_1     sbatch scripts/cameras.sbatch   -> data/runs/side_s{0,1,2}/
 #   NAME=wrist CAMS=wrist_left sbatch scripts/cameras.sbatch   -> data/runs/wrist_s{0,1,2}/
+#   NAME=aug_photo SECTION=baseline_lowlr_aug_photo sbatch scripts/cameras.sbatch  (both cameras)
 #SBATCH --job-name=job
 #SBATCH --account=move
 #SBATCH --partition=move
@@ -18,6 +18,6 @@ echo "host $(hostname)  gpu $(nvidia-smi --query-gpu=name --format=csv,noheader)
 echo "git $(git rev-parse HEAD)  dirty: $(git status --porcelain -- src configs | wc -l) files"
 df -h ~ | tail -1
 for s in ${SEEDS:-0 1 2}; do
-  .venv/bin/python -u -m vl.train_baseline --run "${NAME}_s${s}" --section baseline_lowlr --seed "$s" --cameras $CAMS
+  .venv/bin/python -u -m vl.train_baseline --run "${NAME}_s${s}" --section "${SECTION:-baseline_lowlr}" --seed "$s" ${CAMS:+--cameras $CAMS}
 done
 echo "end $(date -Is)"

@@ -51,5 +51,40 @@ baseline_lowlr:             # decision 2(b): baseline_cosine with both learning 
   lr_backbone: 1.0e-5       # overrides the top-level lr_backbone / lr_head for this section
   lr_head: 1.0e-4
 
+# Stage 5 augmentation arms (reports/stage5_augmentation_plan.md): baseline_lowlr plus a
+# training-only `augment` block (see vl.dataset). Validation is never augmented. [ours]
+baseline_lowlr_aug_photo:   # A1 photometric, per camera
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {brightness: 0.3, contrast: 0.3, saturation: 0.3, hue: 0.03}
+
+baseline_lowlr_aug_crop:    # A2 geometric: crop box shifted up to +-24 px, scaled 0.9-1.0
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.9, 1.0]}
+
+baseline_lowlr_aug_both:    # A3 = A1 + A2
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {brightness: 0.3, contrast: 0.3, saturation: 0.3, hue: 0.03, crop_shift_px: 24, crop_scale: [0.9, 1.0]}
+
 paths:
   runs: data/runs            # checkpoints + logs (gitignored, on Karen's NFS storage)
