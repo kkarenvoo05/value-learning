@@ -3,6 +3,7 @@
 #   NAME=side  CAMS=side_1     sbatch scripts/cameras.sbatch   -> data/runs/side_s{0,1,2}/
 #   NAME=wrist CAMS=wrist_left sbatch scripts/cameras.sbatch   -> data/runs/wrist_s{0,1,2}/
 #   NAME=aug_photo SECTION=baseline_lowlr_aug_photo sbatch scripts/cameras.sbatch  (both cameras)
+#   PRE_DIST=lowlr_8k: first write val_probs.npz for that existing run; DIST=1: val_probs.npz after each seed
 #SBATCH --job-name=job
 #SBATCH --account=move
 #SBATCH --partition=move
@@ -17,7 +18,9 @@ cd /move/u/karenvo/Projects/value-learning
 echo "host $(hostname)  gpu $(nvidia-smi --query-gpu=name --format=csv,noheader)  start $(date -Is)"
 echo "git $(git rev-parse HEAD)  dirty: $(git status --porcelain -- src configs | wc -l) files"
 df -h ~ | tail -1
+if [ -n "${PRE_DIST:-}" ]; then .venv/bin/python -u -m vl.value_dist --run "$PRE_DIST"; fi
 for s in ${SEEDS:-0 1 2}; do
   .venv/bin/python -u -m vl.train_baseline --run "${NAME}_s${s}" --section "${SECTION:-baseline_lowlr}" --seed "$s" ${CAMS:+--cameras $CAMS}
+  if [ -n "${DIST:-}" ]; then .venv/bin/python -u -m vl.value_dist --run "${NAME}_s${s}"; fi
 done
 echo "end $(date -Is)"

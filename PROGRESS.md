@@ -378,12 +378,15 @@ One change at a time, in this order:
       the mentor's concern that V before the last ~10 s looks random. Distribution plots show two
       humps (success/failure) with V their average: real outcome uncertainty (not fixable by
       augmentation) plus flicker of the hump balance between near-identical frames (maybe fixable).
-      - [ ] Step 0: pre-end flicker metrics on the baseline (needs full-val distributions, job 17973560)
+      - [ ] Step 0: pre-end flicker metrics on the baseline (needs full-val distributions; humanoid job 17973560 cancelled
+            unstarted 2026-10-20, now run first inside job 17978977 via `PRE_DIST=lowlr_8k`)
       - [ ] Step 1: arms A1 photometric, A2 crop shift/scale, A3 both; 3 seeds each, val never augmented
             Implemented 2026-10-19 (`vl.dataset` augment, sections `baseline_lowlr_aug_{photo,crop,both}`,
             tests; real-frame check `reports/figures/stage5/augment_examples.jpg`: marker, gripper and
-            holder stay in view). Submitted on humanoid: jobs 17977330 (photo), 17977331 (crop),
-            17977332 (both), runs `aug_<arm>_s{0,1,2}`, seeds in sequence
+            holder stay in view). Humanoid jobs 17977330-2 cancelled unstarted (queue full);
+            resubmitted 2026-10-20 on move rtxpro6000 (Karen: max 3 GPUs on move): jobs 17978977 (photo),
+            17978978 (crop), 17978979 (both), runs `aug_<arm>_s{0,1,2}`, seeds in sequence, each seed
+            followed by `vl.value_dist` (`DIST=1`) for the flicker metrics
       - [ ] Step 2: pre-set rule: accuracy within 2 sd, pre-end |ΔV| and |Δp_succ| ≥ 25% lower and
             better than 0.5 s smoothing, real uncertainty kept (failure/stall plots stay two-humped)
 - [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
