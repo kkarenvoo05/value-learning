@@ -378,14 +378,20 @@ One change at a time, in this order:
       the mentor's concern that V before the last ~10 s looks random. Distribution plots show two
       humps (success/failure) with V their average: real outcome uncertainty (not fixable by
       augmentation) plus flicker of the hump balance between near-identical frames (maybe fixable).
-      - [ ] Step 0: pre-end flicker metrics on the baseline (needs full-val distributions; humanoid job 17973560 cancelled
-            unstarted 2026-10-20, now run first inside job 17978977 via `PRE_DIST=lowlr_8k`)
+      - [x] Step 0 (seed 0; s1/s2 distributions run first inside job 17979141): `vl.flicker` ->
+            `reports/flicker_stage5.md`, `vl.value_dist --plots` -> `reports/value_dist_lowlr_8k.md`.
+            Pre-end (> 2 s before T): |dV| 0.0176/frame, |dp_succ| 0.031, TV 0.067, R2(hump flip) 0.97
+            (frame jumps are almost all hump-balance flips; success hump tracks the target, MAE 0.031).
+            A centred 0.5 s average cuts |dV| 4x (0.0042) at equal MAE and better shape MAE (0.042 vs
+            0.046); 1 s: 0.0026. So frame flicker is free to remove; the rule's "beat 0.5 s smoothing"
+            needs a ~76% cut. Slower wander |V(t)-V(t-1s)| 0.040 (target 0.008/s), smoothing only to
+            0.026-0.030: this is the part augmentation could still help (report-only metric)
       - [ ] Step 1: arms A1 photometric, A2 crop shift/scale, A3 both; 3 seeds each, val never augmented
             Implemented 2026-10-19 (`vl.dataset` augment, sections `baseline_lowlr_aug_{photo,crop,both}`,
             tests; real-frame check `reports/figures/stage5/augment_examples.jpg`: marker, gripper and
             holder stay in view). Humanoid jobs 17977330-2 cancelled unstarted (queue full);
             resubmitted 2026-10-20 on move rtxpro6000 (Karen: max 3 GPUs on move): jobs 17978977 (photo),
-            17978978 (crop), 17978979 (both), runs `aug_<arm>_s{0,1,2}`, seeds in sequence, each seed
+            17978978 (crop), 17979141 (both; replaced unstarted 17978979), runs `aug_<arm>_s{0,1,2}`, seeds in sequence, each seed
             followed by `vl.value_dist` (`DIST=1`) for the flicker metrics
       - [ ] Step 2: pre-set rule: accuracy within 2 sd, pre-end |ΔV| and |Δp_succ| ≥ 25% lower and
             better than 0.5 s smoothing, real uncertainty kept (failure/stall plots stay two-humped)
