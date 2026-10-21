@@ -364,7 +364,7 @@ One change at a time, in this order:
       constant 0.140). The side view carries most of the signal **and the round cue** (side-only
       frame-0 V has the baseline's round ordering; wrist-only's is reversed). The drops when the arm
       leaves the side view vanish in wrist only, so they come from `side_1`
-- [~] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
+- [x] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
       first; normalize with training statistics only). `vl.proprio`, `tests/test_proprio.py` (4)
       - [x] **Timing recheck (2026-10-20, `reports/proprio_sync.{md,png}`): video frame t = state row t
             (lag 0)** for both cameras. 220 train episodes, pooled lag curves for side~EE speed,
@@ -395,11 +395,12 @@ One change at a time, in this order:
             `vl.train_baseline`; off by default, image-only items and checkpoints unchanged. Tests: item
             is row t, missing frame raises, normalization inside, proprio changes the output (63 pass).
             Real-data check: dataset proprio = parquet state to 3e-8; CPU smoke run trains and reloads
-      - [ ] Run: job 17996700 (`NAME=proprio EXTRA=--proprio DIST=1 sbatch --gres=gpu:rtxpro6000:1
-            scripts/cameras.sbatch`, move5 RTX PRO 6000; L40S job 17996474 cancelled while queued, move4 full;
-            git `d12ed67`, `proprio_s{0,1,2}`, `baseline_lowlr`, seeds in sequence + `vl.value_dist`). Compare vs
-            `lowlr_8k` 3 seeds (differences < ~2 sd are not evidence); then look at the hold phase
-            (stall vs late-seat p_succ) and whether proprio adds a round/repo shortcut
+      - [x] Run: job 17996700 (move5 RTX PRO 6000, git `d12ed67`, `proprio_s{0,1,2}`, ~13 min/seed).
+            **Result (`reports/stage5_ablations.md` §2): no gain.** Val CE 3.733 ± 0.021 vs 3.730 ± 0.002,
+            MAE 0.125 ± 0.003 vs 0.121 ± 0.004, eval-repo MAE 0.197 vs 0.196, AUC 1/5/10 s 0.69/0.63/0.82 vs
+            0.67/0.64/0.84. Hold-phase success-vs-stuck AUC 0.765 vs 0.778; worst-case stuck timeouts drift
+            slightly toward fail within seed noise, late-seat successes unchanged. No new round shortcut.
+            **Keep the image-only baseline**; move on to short history / elapsed time
 - [ ] 3. Frozen vs fine-tuned encoder. Fine-tuned arm = `lowlr_8k` / `_s1` / `_s2` (backbone at
       `lr_backbone` 1e-5). Frozen arm: `--freeze-backbone` [ours], same `baseline_lowlr` recipe,
       cameras and head LR; ImageNet backbone gets no optimizer group and stays in eval mode, so
@@ -553,31 +554,52 @@ One change at a time, in this order:
   - Not specified in the paper (so ours can't be checked against it): optimizer, LR, batch size, steps,
     schedule, early stopping / checkpoint selection, validation split, web-data mixture ratio. Ours:
     AdamW, backbone 1e-5 / head 1e-4, batch 32, 8k steps cosine, checkpoint = lowest val CE
-- [ ] **Next experiments, ranked (2026-10-20; each vs the 3-seed `lowlr_8k` baseline, one change at a
-      time).** Replaces the old "Later" list (short history; categorical vs scalar head; other ways of
-      combining the two images; larger backbone only if ResNet-18 underfits)
-      - [ ] 1. **Proprioception** (= Stage 5 item 2; RECAP's input set, inferred). Exact gripper/marker pose
+- [ ] **Next experiments, ranked (re-ordered by Karen 2026-10-20; each vs the 3-seed `lowlr_8k`
+      baseline, one change at a time).** Replaces the old "Later" list (short history; categorical vs
+      scalar head; other ways of combining the two images; larger backbone only if ResNet-18 underfits).
+      V stays memoryless (single frame, like RECAP) for now.
+      - No more training data: the 30 other repos in the HF collection are views of the 13 we use
+        (checked 2026-10-20). `c0N-dagger-{baseline,mulligan,mulligan-no-cf}` are "training-view"
+        repos whose parent is `c0N-dagger-mixed` (c01: the three views' `source_episode_index` cover
+        112 of the 115 mixed episodes); per-policy `r0N-eval-b01-*-policy-rollouts` split up `r0N-eval`
+        (r03, r04: frames sum exactly); `c00-teleop-{baseline,sobol,validation}` sum exactly to
+        c00-mixed. Only r05 is unused, and it is the test set
+      - [x] 1. **Proprioception** (= Stage 5 item 2; done, no gain, see item 2 above; RECAP's input set, inferred). Exact gripper/marker pose
             at the holder may separate "about to insert" from "stuck". First recheck video ↔ proprio timing
             (0 vs +6 frames, Stage 3 note)
-      - [ ] 2. **Short frame history (2–4 frames over 1–2 s) or elapsed time** [ours, beyond RECAP]. Targets
-            both the stall ambiguity and the time-blind failure hump. Caveat: most timeouts end at a
-            reviewer-chosen soft-truncation frame, so elapsed time does not give time left there
-      - [ ] 3. **Stronger pretrained backbone fine-tuned at low LR** (SigLIP or DINOv2 ViT-S/B, or a small VLM):
-            RECAP's biggest difference. Frozen ResNet (MAE 0.234) says the encoder matters. Run if 1 and 2
-            don't close the gap at the holder
-      - [ ] 4. **Condition V on the policy round** (r00–r04, DAgger, teleop) [ours; loosely like RECAP's
-            metadata in the prompt]. V^π depends on the policy; the model currently guesses the round from
-            side-view cues. Explicit conditioning could remove that shortcut. Stage 6 stays valid (each
-            episode's policy is known)
+      - [ ] 2. **Stronger pretrained backbone fine-tuned at low LR**: RECAP's biggest difference (670M VLM).
+            Frozen ResNet (MAE 0.234 vs fine-tuned 0.121) says the image features matter. Not a bigger
+            head: the model overfits rather than underfits. First arm: **DINOv2 ViT-S/14 with registers**
+            (~21M params; strong fine-grained spatial features for "marker tip under the hole"; same
+            ImageNet mean/std; LayerNorm, so the shared-backbone BatchNorm mixing goes away). Second arm
+            if it helps: SigLIP ViT-B/16 (closest to RECAP's VLM encoder; needs mean/std 0.5). Judge on
+            within-round AUC and hold-phase success-vs-stall AUC, not only MAE (a gain could be better
+            round recognition)
+      - [ ] 3. **Condition V on the collecting policy** [ours; NOT RECAP: RECAP's V is the value of the
+            mixed behavior data, and neither the paper nor the π0.6 model card lists metadata fields;
+            π0.7's are speed/quality/mistake/control mode, none identify the policy]. Mainly a control for
+            2: does a gain come from guessing the policy? Label = `producer_model_id` from the view
+            sidecars (round alone mixes baseline-dp / mulligan-dp / mulligan-idql in r03–r04),
+            `human` for teleop. Small learned embedding concatenated to the image features before
+            the head; replace the label with `unknown` on ~20% of training samples, since r05 is an
+            unseen policy. Report val with true label and with `unknown`; must beat repo + time constant
+            (0.146). Expected gain small: a per-policy offset cancels in Stage 6's V(o_{t+n}) − V(o_t),
+            and the main error (holder ambiguity) is within-policy
+      - [ ] 4. **Target change, ask Lars now** (runs when he answers): count soft-truncated timeouts down
+            to the 800-step cap instead of the reviewer's cut point (matches RECAP's fixed time limits,
+            removes arbitrary endpoints). Changing C_fail won't help (see above); normalization already
+            matches. Score on both old and new targets
       - [ ] 5. **Cheap substitute for web co-training:** HL-Gauss soft targets (label change: needs Karen's
             OK) or an auxiliary task-phase head. Web co-training itself probably not worth it at this scale
-      - [ ] 6. **Target change, ask Lars:** count soft-truncated timeouts down to the 800-step cap instead of
-            the reviewer's cut point (matches RECAP's fixed time limits, removes arbitrary endpoints).
-            Changing C_fail won't help (see above); normalization already matches
+      - [ ] Deferred (Karen, 2026-10-20): **short frame history (2–4 frames over 1–2 s) or elapsed time**
+            [ours, beyond RECAP]. Would target the stall ambiguity and the time-blind failure hump.
+            Caveat: most timeouts end at a reviewer-chosen soft-truncation frame, so elapsed time does not
+            give time left there
       - [ ] Also: 0.5 s centred smoothing as the default at inference; optional p_succ calibration
             (temperature on the success/failure split) for the overconfident timeouts; crop decision
             (Step 2 above)
-      Suggested order: 1 and 2 first (do the remaining errors come from missing inputs?), then 3
+      Order: 1 → 2 → 3, with 4 inserted when Lars answers. If a stronger backbone wins, make it the
+      new baseline and re-test proprio on top of it
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
 - [x] Not needed (Stage 4: V does not react to the operator). Was: if Stage 4 shows V reacting to the operator: masked `wrist_left` bottom-left corner vs
       unmasked (see Stage 4 operator check)

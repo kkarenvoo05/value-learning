@@ -53,3 +53,51 @@ Trivial baselines: global constant MAE 0.257, repo-only constant 0.140 (eval rep
   that moment. Whether that is a real event (pulling back after a miss) or a viewpoint artifact is
   still open. Side only also gets slightly worse on high-occlusion frames (matched ΔMAE +0.011…+0.024
   vs +0.004…+0.008 for both cameras), so the wrist view helps when the arm blocks the side view.
+
+## 2. Images vs images + proprioception (2026-10-20)
+
+Setup [ours]: the `baseline_lowlr` recipe, both cameras, plus 10 proprio numbers per frame (EE xyz,
+6D rotation, gripper; state row t paired with video frame t, lag 0 per `reports/proprio_sync.md`),
+z-scored with training stats inside the model and concatenated with the 2×512 image features before
+the head. Runs `proprio_s{0,1,2}`, job 17996700, move5 RTX PRO 6000 (baseline seeds ran on L40S), git
+`d12ed67`, ~13 min per seed. Compared with `lowlr_8k`, `_s1`, `_s2`.
+
+| val, best checkpoint, 3 seeds | baseline | + proprio |
+|---|---|---|
+| CE | 3.730 ± 0.002 | 3.733 ± 0.021 |
+| MAE | 0.121 ± 0.004 | 0.125 ± 0.003 |
+| MAE per episode | 0.101 ± 0.002 | 0.104 ± 0.004 |
+| eval-repo MAE | 0.196 ± 0.008 | 0.197 ± 0.010 |
+| shape (offset-free MAE; flat 0.037) | 0.047 ± 0.004 | 0.048 ± 0.003 |
+| within-repo AUC 1 / 5 / 10 s | 0.67 / 0.64 / 0.84 | 0.69 / 0.63 / 0.82 |
+| best step | 3k, 2k, 2k | 2k, 2k, 2k |
+
+- **No gain on any metric**; all differences are within ~1–2 sd. Val CE overfits on the same schedule
+  (best at 2k, then rises to ~3.87–3.91 by 8k, like the baseline's 3.88). Seed spread of CE is 10×
+  larger with proprio (0.021 vs 0.002), driven by s2 (3.756).
+- **The target case is not fixed.** Hold phase of autonomous eval episodes (> 5 s in, > 2 s before T;
+  45 successes vs 45 VLM `timeout_holding_marker`): AUC of per-episode mean p_succ 0.778 baseline vs
+  0.765 proprio (per seed 0.771/0.783/0.780 vs 0.753/0.791/0.753). Worst-case mirror pairs, hold-phase
+  p_succ (mean ± sd over seeds):
+
+  | episode | outcome | baseline | + proprio |
+  |---|---|---|---|
+  | r04/101 | timeout | 0.74 ± 0.01 | 0.67 ± 0.20 |
+  | r02/45 | timeout | 0.88 ± 0.07 | 0.80 ± 0.10 |
+  | r02/44 | timeout | 0.76 ± 0.14 | 0.62 ± 0.10 |
+  | r01/48 | timeout | 0.65 ± 0.25 | 0.50 ± 0.28 |
+  | r03/68 | success | 0.27 ± 0.09 | 0.27 ± 0.06 |
+  | r02/42 | success | 0.33 ± 0.05 | 0.28 ± 0.09 |
+  | r01/103 | success | 0.24 ± 0.04 | 0.21 ± 0.13 |
+  | r03/132 | success | 0.36 ± 0.06 | 0.37 ± 0.04 |
+
+  The stuck timeouts drift a little toward "fail", within seed noise, and the late-seating successes
+  don't move. This matches the earlier look at EE height (`reports/figures/stage5/proprio/holder_z_compare.png`):
+  during the hold, stuck and about-to-seat episodes sit at the same ~230–250 mm.
+- Pre-end jitter unchanged (|ΔV| per frame 0.015 vs 0.016). Frame-0 V by round unchanged (r00 −0.51
+  vs −0.53, r04 −0.41 vs −0.40): proprio adds no visible round shortcut and doesn't remove the image one.
+- **Reading:** the 10 state numbers carry nothing about progress that the two images don't already
+  show. That fits the stall ambiguity being about *how long* the robot has been stuck, not *where* it is.
+  **Recommendation: keep the image-only baseline**; next is short frame history / elapsed time
+  (ranked item 2). Untested variants: force/torque telemetry (`ee_wrench`; contact force while
+  pressing might separate stuck from seating), joint positions, a separate proprio encoder.
