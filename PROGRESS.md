@@ -395,8 +395,9 @@ One change at a time, in this order:
             `vl.train_baseline`; off by default, image-only items and checkpoints unchanged. Tests: item
             is row t, missing frame raises, normalization inside, proprio changes the output (63 pass).
             Real-data check: dataset proprio = parquet state to 3e-8; CPU smoke run trains and reloads
-      - [ ] Run: job 17996474 (`NAME=proprio EXTRA=--proprio DIST=1 sbatch scripts/cameras.sbatch`, move
-            L40S, `proprio_s{0,1,2}`, `baseline_lowlr`, seeds in sequence + `vl.value_dist`). Compare vs
+      - [ ] Run: job 17996700 (`NAME=proprio EXTRA=--proprio DIST=1 sbatch --gres=gpu:rtxpro6000:1
+            scripts/cameras.sbatch`, move5 RTX PRO 6000; L40S job 17996474 cancelled while queued, move4 full;
+            git `d12ed67`, `proprio_s{0,1,2}`, `baseline_lowlr`, seeds in sequence + `vl.value_dist`). Compare vs
             `lowlr_8k` 3 seeds (differences < ~2 sd are not evidence); then look at the hold phase
             (stall vs late-seat p_succ) and whether proprio adds a round/repo shortcut
 - [ ] 3. Frozen vs fine-tuned encoder. Fine-tuned arm = `lowlr_8k` / `_s1` / `_s2` (backbone at
