@@ -40,7 +40,7 @@ from torch.utils.data import DataLoader
 from vl.config import load_config
 from vl.dataset import FrameDataset, load_split
 from vl.metrics import repo_medians, score
-from vl.model import BACKBONES, build_model, model_inputs, value_loss
+from vl.model import BACKBONES, build_model, layer_decay_groups, model_inputs, value_loss
 from vl.train import amp_dtype
 
 
@@ -152,7 +152,14 @@ def main():
     # no optimizer group, so the head's LR and schedule are unchanged.
     groups = [{"params": model.head.parameters(), "lr": bc.get("lr_head", cfg["lr_head"])}]
     if not args.freeze_backbone:
-        groups.insert(0, {"params": model.backbone.parameters(), "lr": bc.get("lr_backbone", cfg["lr_backbone"])})
+        lr_bb = bc.get("lr_backbone", cfg["lr_backbone"])
+        if bc.get("layer_decay"):
+            # ViT layer-wise LR decay: one group per layer, `lr_bb` at the top (Stage 5 backbone arm).
+            groups[:0] = layer_decay_groups(model, lr_bb, bc["layer_decay"])
+            print(f"layer decay {bc['layer_decay']}: backbone LR {groups[0]['lr']:.2e} (embeddings) "
+                  f"... {groups[-2]['lr']:.2e} (final norm)", flush=True)
+        else:
+            groups.insert(0, {"params": model.backbone.parameters(), "lr": lr_bb})
     opt = torch.optim.AdamW(groups, weight_decay=cfg["weight_decay"])
     print(f"trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
           f"{' (backbone frozen)' if args.freeze_backbone else ''}", flush=True)

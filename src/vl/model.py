@@ -62,6 +62,28 @@ class DinoV2Features(nn.Module):
         return torch.cat([t[:, 0], t[:, self.vit.num_prefix_tokens:].mean(1)], dim=1)
 
 
+def layer_decay_groups(model: "ValueModel", lr: float, decay: float) -> list[dict]:
+    """Layer-wise LR decay for the DINOv2 backbone (BEiT / DINOv2-style fine-tuning) [ours].
+    Layer ids: embeddings (patch_embed, cls/reg tokens, pos_embed) 0, block i -> i + 1, final norm
+    depth + 1. Parameters of layer l get lr * decay ** (depth + 1 - l): the final norm gets `lr`,
+    the last block lr * decay, the embeddings lr * decay ** (depth + 1). The head is not included."""
+    if model.backbone_name != "dinov2_vits14_reg":
+        raise ValueError(f"layer decay is only defined for the ViT backbone, not {model.backbone_name}")
+    vit = model.backbone.vit
+    depth = len(vit.blocks)
+    by_layer: dict[int, list] = {}
+    for name, p in vit.named_parameters():
+        if name.startswith("blocks."):
+            layer = int(name.split(".")[1]) + 1
+        elif name.startswith(("patch_embed.", "cls_token", "reg_token", "pos_embed")):
+            layer = 0
+        else:                                             # final norm
+            layer = depth + 1
+        by_layer.setdefault(layer, []).append(p)
+    return [{"params": ps, "lr": lr * decay ** (depth + 1 - layer), "layer": layer}
+            for layer, ps in sorted(by_layer.items())]
+
+
 class ValueModel(nn.Module):
     def __init__(self, cams: list[str], n_bins: int = 201, v_min: float = -1.0, v_max: float = 0.0,
                  hidden: int = 256, pretrained: bool = True,

@@ -221,3 +221,22 @@ def test_run_data_config_reads_the_backbone(tmp_path):
     assert run_data_config(base, tmp_path)["backbone"] == "resnet18"
     (tmp_path / "config.json").write_text(json.dumps({"cameras": CAMS, "backbone": "dinov2_vits14_reg"}))
     assert run_data_config(base, tmp_path)["backbone"] == "dinov2_vits14_reg"
+
+
+def test_layer_decay_groups_cover_the_backbone_once_with_decaying_lrs(dino, model):
+    from vl.model import layer_decay_groups
+    groups = layer_decay_groups(dino, 1e-5, 0.75)
+    ids = [id(p) for g in groups for p in g["params"]]
+    assert len(ids) == len(set(ids)) == len(list(dino.backbone.parameters()))   # each param exactly once
+    head = {id(p) for p in dino.head.parameters()}
+    assert not head & set(ids)                                                 # head is separate
+    lr = {g["layer"]: g["lr"] for g in groups}
+    assert sorted(lr) == list(range(14))                                       # embeddings, 12 blocks, norm
+    assert lr[13] == pytest.approx(1e-5)                                       # final norm: top LR
+    assert lr[12] == pytest.approx(7.5e-6)                                     # last block
+    assert lr[0] == pytest.approx(1e-5 * 0.75 ** 13)                           # embeddings
+    vit = dino.backbone.vit
+    emb = {id(p) for p in [vit.cls_token, vit.reg_token, vit.pos_embed, *vit.patch_embed.parameters()]}
+    assert emb == {id(p) for p in next(g for g in groups if g["layer"] == 0)["params"]}
+    with pytest.raises(ValueError):
+        layer_decay_groups(model, 1e-5, 0.75)                                  # ResNet: not defined

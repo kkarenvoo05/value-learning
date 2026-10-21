@@ -63,6 +63,21 @@ baseline_lowlr_bb3e6:
   lr_backbone: 3.0e-6
   lr_head: 1.0e-4
 
+# Stage 5 stronger backbone, layer-decay arm (DINOv2 only): baseline_lowlr with ViT layer-wise LR
+# decay. Top of the backbone (final norm) at lr_backbone 1e-5, x0.75 per layer going down: last
+# block 7.5e-6 ... embeddings 1e-5 * 0.75^13 = 2.4e-7 (vl.model.layer_decay_groups). Head LR
+# unchanged. [ours; 0.75 is a common value for ViT-S/B fine-tuning]
+baseline_lowlr_llrd:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  layer_decay: 0.75
+
 # Stage 5 augmentation arms (reports/stage5_augmentation_plan.md): baseline_lowlr plus a
 # training-only `augment` block (see vl.dataset). Validation is never augmented. [ours]
 baseline_lowlr_aug_photo:   # A1 photometric, per camera

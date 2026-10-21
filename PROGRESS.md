@@ -17,6 +17,10 @@ Details for finished items are in `reports/dataset_audit.md`.
       **Permanent:** `/iris/u/karenvo` does not exist and Karen is not in the `finnlab` group that
       owns `/iris/u`. Ask Lars to get it created, then move `vl-data` there and re-point `data`.
       No other NFS mount on move2 is writable for this account (`/scr` is a local move2 disk).
+      **2026-10-20: quota ran out** (96%, 855 MB free; each DINOv2 run is 363 MB). Job 17999270 seed 2
+      died writing a checkpoint, and at 22:46 the uv Python binaries in `~/.local/share/uv/python`
+      (3.11.16, which `.venv` uses, plus 3.8 / 3.9) were left as 0-byte files (cause unknown), so
+      `.venv/bin/python` silently does nothing until it is reinstalled
 - [ ] Compute (GPU for Stage 3+): ask Lars (Q6)
 - [ ] Phase 2 compute (π₀.₅ fine-tuning): IRIS cluster
 - [x] First commit
@@ -604,13 +608,26 @@ One change at a time, in this order:
                   1,500 on all seeds (ResNet 2–3k); val CE passes the constant (4.53) by ~4.5k and ends at
                   4.76–4.96; train loss 2.54 at 8k (ResNet 3.23). Not yet conclusive about DINOv2 (recipe
                   untuned for it; next lever: lower backbone LR, as Decision 2(b) did for ResNet)
-            - [ ] LR arm (Karen, 2026-10-20): backbone LR 3e-6, everything else identical (section
+            - [x] LR arm (Karen, 2026-10-20): backbone LR 3e-6, everything else identical (section
                   `baseline_lowlr_bb3e6`; differs from `baseline_lowlr` only in `lr_backbone`). Job
                   17999270 (`NAME=dinov2s_bb3e6 SECTION=baseline_lowlr_bb3e6 EXTRA="--backbone
                   dinov2_vits14_reg" DIST=1 sbatch --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch` ->
                   `dinov2s_bb3e6_s{0,1,2}`); code diff `data/runs/dinov2s_bb3e6_code_vs_4ff53f0.diff`. Success =
                   best val CE below ResNet's 3.730 and a later best step, with AUC/MAE at least equal. If it
-                  still peaks early with no gain: layer-wise LR decay before ruling DINOv2 out
+                  still peaks early with no gain: layer-wise LR decay before ruling DINOv2 out.
+                  **Result: fails on seeds 0–1; seed 2 died** (home quota full while saving its step-500
+                  checkpoint; `last.pt` truncated). s0/s1: best step 1,500 / 2,000, val CE 3.822 / 3.786,
+                  MAE 0.128 / 0.123, AUC 1/5/10 s 0.60/0.56/0.81 and 0.54/0.61/0.79 (ResNet s0/s1 3.727 /
+                  3.732, 0.117 / 0.123). Overfits more slowly (val CE at 8k 4.29–4.46 vs 4.76–4.96) but
+                  still peaks early. Seed 2 not rerun (Karen: go to layer decay instead)
+            - [ ] Layer-decay arm (Karen, 2026-10-20), set up: section `baseline_lowlr_llrd` = `baseline_lowlr`
+                  + `layer_decay: 0.75` (only difference, checked). `vl.model.layer_decay_groups`: final
+                  norm 1e-5, block 12 7.5e-6, ... block 1 3.2e-7, embeddings 2.4e-7; head 1e-4 as before
+                  [ours]. Test: every backbone param in exactly one group, LRs as above, ResNet raises
+                  (70 pass, run with a scratch copy of Python 3.11.16 because the venv's interpreter
+                  was emptied, see Stage 0). Not yet run: needs home-quota space first. Command:
+                  `NAME=dinov2s_llrd SECTION=baseline_lowlr_llrd EXTRA="--backbone dinov2_vits14_reg"
+                  DIST=1 sbatch --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch`
             - [ ] Still to do: `vl.value_plots --run dinov2s_s0 --episodes-from lowlr_8k --dist`
                   (same 11 episodes as `reports/figures/stage4/lowlr_8k/`; the episode rule is
                   run-dependent without `--episodes-from`), `vl.flicker`, hold-phase AUC
