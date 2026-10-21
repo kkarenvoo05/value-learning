@@ -575,6 +575,45 @@ One change at a time, in this order:
             if it helps: SigLIP ViT-B/16 (closest to RECAP's VLM encoder; needs mean/std 0.5). Judge on
             within-round AUC and hold-phase success-vs-stall AUC, not only MAE (a gain could be better
             round recognition)
+            - [x] Set up (2026-10-20): `--backbone dinov2_vits14_reg` in `vl.train_baseline` (recorded as
+                  `backbone` in the run's config.json; `vl.predict` / `vl.value_dist` rebuild it from
+                  there, older runs default to resnet18). timm 1.0.20 `vit_small_patch14_reg4_dinov2`,
+                  weights `timm/vit_small_patch14_reg4_dinov2.lvd142m` pinned to commit `c04b519` (loaded
+                  from the file directly: timm's hub check fails with huggingface_hub 2.2). Readout per
+                  camera [CLS, mean patch] = 768 (DINOv2 linear-eval readout) [ours]; head 1536 → 256 → 201.
+                  22.1M params (ResNet arm 11.5M). Tests (`tests/test_model.py`, +6, 69 pass): shape, one
+                  shared ViT, no BatchNorm, each camera matters, readout = CLS + mean patch, the pinned
+                  file's weights are really loaded (pos embed resampled 37² → 16²), run_data_config.
+                  Real batch at init: CE 5.354 (ResNet 5.380), V ≈ −0.50. CPU smoke: trains, evals, reloads
+            - Fair comparison vs `lowlr_8k` / `_s1` / `_s2`, checked: same frame index (val 64,906 frames,
+              bins identical, values within 1.1e-16; train 373,947), split, crops, 224², no augmentation,
+              `baseline_lowlr` section (8k steps, batch 32, warmup 500 + cosine, AdamW wd 0.01, backbone
+              1e-5 / head 1e-4, bf16, eval every 500 on full val, best.pt = lowest val CE), seeds 0/1/2.
+              The ResNet code path for this config is unchanged since `8ada382` (later changes only add
+              opt-in aug/proprio/freeze). Differences: the treatment (pretraining + architecture), 2×
+              parameters, GPU (RTX PRO 6000 vs L40S; only nondeterminism), and **the recipe was tuned on
+              ResNet** (the LR was chosen to stop ResNet overfitting), so it is not tuned for the ViT:
+              a loss would not rule out DINOv2 at another LR. Code ran uncommitted on top of `4ff53f0`;
+              exact diff in `data/runs/dinov2s_code_vs_4ff53f0.diff`
+            - [x] Run: job 17998154 (`NAME=dinov2s EXTRA="--backbone dinov2_vits14_reg" DIST=1 sbatch
+                  --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch` -> `dinov2s_s{0,1,2}`, each followed by
+                  `vl.value_dist`), move5 RTX PRO 6000, 45 min for all 3 seeds. **Result (from
+                  `result.json`, 3 seeds): no gain with the ResNet recipe.** Val MAE 0.122 ± 0.003 (ResNet
+                  0.121 ± 0.004), val CE 3.795 ± 0.030 (3.730), eval-repo MAE 0.195 (0.196), shape 0.050
+                  (0.047), AUC 1/5/10 s 0.61/0.62/0.81 (0.67/0.64/0.84). **Overfits earlier:** best step
+                  1,500 on all seeds (ResNet 2–3k); val CE passes the constant (4.53) by ~4.5k and ends at
+                  4.76–4.96; train loss 2.54 at 8k (ResNet 3.23). Not yet conclusive about DINOv2 (recipe
+                  untuned for it; next lever: lower backbone LR, as Decision 2(b) did for ResNet)
+            - [ ] LR arm (Karen, 2026-10-20): backbone LR 3e-6, everything else identical (section
+                  `baseline_lowlr_bb3e6`; differs from `baseline_lowlr` only in `lr_backbone`). Job
+                  17999270 (`NAME=dinov2s_bb3e6 SECTION=baseline_lowlr_bb3e6 EXTRA="--backbone
+                  dinov2_vits14_reg" DIST=1 sbatch --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch` ->
+                  `dinov2s_bb3e6_s{0,1,2}`); code diff `data/runs/dinov2s_bb3e6_code_vs_4ff53f0.diff`. Success =
+                  best val CE below ResNet's 3.730 and a later best step, with AUC/MAE at least equal. If it
+                  still peaks early with no gain: layer-wise LR decay before ruling DINOv2 out
+            - [ ] Still to do: `vl.value_plots --run dinov2s_s0 --episodes-from lowlr_8k --dist`
+                  (same 11 episodes as `reports/figures/stage4/lowlr_8k/`; the episode rule is
+                  run-dependent without `--episodes-from`), `vl.flicker`, hold-phase AUC
       - [ ] 3. **Condition V on the collecting policy** [ours; NOT RECAP: RECAP's V is the value of the
             mixed behavior data, and neither the paper nor the π0.6 model card lists metadata fields;
             π0.7's are speed/quality/mistake/control mode, none identify the policy]. Mainly a control for

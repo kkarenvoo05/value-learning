@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 video = ["av", "matplotlib", "pillow"]
-train = ["torch", "torchvision"]
+train = ["torch", "torchvision", "timm==1.0.20", "safetensors"]   # timm: DINOv2 backbone (Stage 5)
 dev = ["pytest"]
 
 [build-system]

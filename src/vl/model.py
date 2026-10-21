@@ -14,6 +14,12 @@
   inside `forward`, so a caller cannot forget it or apply it twice. Optional raw proprio
   [ours]: z-scored inside `forward` with training-split statistics stored as buffers, then
   concatenated with the image features; no separate proprio encoder (simplest version).
+- Backbone (Stage 5 "stronger backbone" [ours]): `resnet18` (default, the baseline) or
+  `dinov2_vits14_reg`, DINOv2 ViT-S/14 with 4 registers (timm weights pinned to a commit). Its
+  per-camera feature is [CLS token, mean of the patch tokens] (2 × 384 = 768), the readout of
+  DINOv2's linear evaluation. Same ImageNet mean/std, same 224×224 input (16×16 patches; timm
+  resamples the 37×37 position embeddings). LayerNorm only, so no BatchNorm statistics are shared
+  between the two cameras.
 
 Sanity check on a real batch (CPU):
     .venv/bin/python -m vl.model
@@ -32,18 +38,49 @@ import torchvision
 from vl.config import load_config
 
 
+BACKBONES = ("resnet18", "dinov2_vits14_reg")
+DINOV2_HF = ("timm/vit_small_patch14_reg4_dinov2.lvd142m", "c04b5193082a8d5b0c4856c7937384a48136c5de")
+
+
+class DinoV2Features(nn.Module):
+    """DINOv2 ViT-S/14 with registers -> (B, 768) = [CLS, mean of patch tokens] after the final norm."""
+
+    def __init__(self, pretrained: bool, image_size: int):
+        super().__init__()
+        import timm
+        overlay = {}
+        if pretrained:
+            from huggingface_hub import hf_hub_download
+            repo, rev = DINOV2_HF
+            overlay = {"file": hf_hub_download(repo, "model.safetensors", revision=rev)}
+        self.vit = timm.create_model("vit_small_patch14_reg4_dinov2", pretrained=pretrained, num_classes=0,
+                                     img_size=image_size, pretrained_cfg_overlay=overlay)
+        self.out_dim = 2 * self.vit.num_features
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        t = self.vit.forward_features(x)                  # (B, 1 CLS + 4 registers + 256 patches, 384)
+        return torch.cat([t[:, 0], t[:, self.vit.num_prefix_tokens:].mean(1)], dim=1)
+
+
 class ValueModel(nn.Module):
     def __init__(self, cams: list[str], n_bins: int = 201, v_min: float = -1.0, v_max: float = 0.0,
                  hidden: int = 256, pretrained: bool = True,
                  mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225),
-                 proprio_mean=None, proprio_std=None):
+                 proprio_mean=None, proprio_std=None, backbone: str = "resnet18", image_size: int = 224):
         super().__init__()
         self.cams = list(cams)
-        weights = torchvision.models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
-        backbone = torchvision.models.resnet18(weights=weights)
-        feat = backbone.fc.in_features        # 512
-        backbone.fc = nn.Identity()           # keep the pooled 512-d feature, drop the 1000 classes
-        self.backbone = backbone              # one backbone, shared by both cameras
+        if backbone == "resnet18":
+            weights = torchvision.models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
+            net = torchvision.models.resnet18(weights=weights)
+            feat = net.fc.in_features         # 512
+            net.fc = nn.Identity()            # keep the pooled 512-d feature, drop the 1000 classes
+        elif backbone == "dinov2_vits14_reg":
+            net = DinoV2Features(pretrained, image_size)
+            feat = net.out_dim                # 768
+        else:
+            raise ValueError(f"backbone {backbone!r} not in {BACKBONES}")
+        self.backbone_name = backbone
+        self.backbone = net                   # one backbone, shared by both cameras
         self.proprio_dim = 0 if proprio_mean is None else len(proprio_mean)
         if self.proprio_dim:
             self.register_buffer("proprio_mean", torch.tensor(proprio_mean, dtype=torch.float32))
@@ -79,8 +116,8 @@ class ValueModel(nn.Module):
             raise ValueError(f"model proprio_dim={self.proprio_dim} but proprio {'missing' if proprio is None else 'given'}")
         x = torch.cat([images[c] for c in self.cams])               # (n_cams * B, 3, H, W)
         x = (x.float() / 255.0 - self.mean) / self.std
-        f = self.backbone(x)                                        # (n_cams * B, 512)
-        f = torch.cat(f.chunk(len(self.cams)), dim=1)               # (B, n_cams * 512), cam order fixed
+        f = self.backbone(x)                                        # (n_cams * B, 512 or 768)
+        f = torch.cat(f.chunk(len(self.cams)), dim=1)               # (B, n_cams * feat), cam order fixed
         if self.proprio_dim:
             z = (proprio.float() - self.proprio_mean) / self.proprio_std
             f = torch.cat([f, z.to(f.dtype)], dim=1)                # (B, n_cams * 512 + 10)
@@ -102,16 +139,20 @@ def build_model(data_cfg: dict, target_cfg: dict, pretrained: bool = True) -> Va
         st = json.loads(Path(data_cfg["proprio"]["stats"]).read_text())
         assert st["split"] == "train", st["split"]
         pm, ps = st["mean"], st["std"]
+    # DINOv2 was trained with the same ImageNet mean/std; a backbone that isn't needs its own entry.
     return ValueModel(data_cfg["cameras"], target_cfg["n_bins"], target_cfg["v_min"], target_cfg["v_max"],
                       pretrained=pretrained, mean=data_cfg["imagenet_mean"], std=data_cfg["imagenet_std"],
-                      proprio_mean=pm, proprio_std=ps)
+                      proprio_mean=pm, proprio_std=ps, backbone=data_cfg.get("backbone", "resnet18"),
+                      image_size=data_cfg["image_size"])
 
 
 def run_data_config(data_cfg: dict, run_dir: Path) -> dict:
-    """The data config a finished run was trained with: its cameras and proprio switch from the
-    run's config.json (camera / proprio ablations), everything else from `data_cfg`."""
+    """The data config a finished run was trained with: its cameras, backbone and proprio switch
+    from the run's config.json (camera / backbone / proprio ablations), everything else from
+    `data_cfg`. Runs from before the backbone option are ResNet-18."""
     meta = json.loads((Path(run_dir) / "config.json").read_text())
-    cfg = dict(data_cfg, cameras=meta.get("cameras", data_cfg["cameras"]))
+    cfg = dict(data_cfg, cameras=meta.get("cameras", data_cfg["cameras"]),
+               backbone=meta.get("backbone", "resnet18"))
     if meta.get("proprio"):
         cfg["proprio"] = dict(data_cfg["proprio"], enabled=True)
     return cfg
@@ -130,8 +171,10 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch-size", type=int, default=16)
+    ap.add_argument("--backbone", choices=BACKBONES, default="resnet18")
     args = ap.parse_args()
     dcfg, tcfg = load_config("configs/data.yaml"), load_config("configs/targets.yaml")
+    dcfg["backbone"] = args.backbone
     torch.manual_seed(0)
     model = build_model(dcfg, tcfg).eval()
     n_backbone = sum(p.numel() for p in model.backbone.parameters())

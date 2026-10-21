@@ -8,6 +8,7 @@ Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run side_s0 --section baseline_lowlr --cameras side_1
     .venv/bin/python -u -m vl.train_baseline --run frozen_s0 --section baseline_lowlr --freeze-backbone
     .venv/bin/python -u -m vl.train_baseline --run proprio_s0 --section baseline_lowlr --proprio
+    .venv/bin/python -u -m vl.train_baseline --run dinov2s_s0 --section baseline_lowlr --backbone dinov2_vits14_reg
 
 - Sampling [ours]: uniform over every valid training frame (shuffled passes, fixed seed),
   frames decoded on the fly by FrameDataset (Stage 3.3 decision).
@@ -39,7 +40,7 @@ from torch.utils.data import DataLoader
 from vl.config import load_config
 from vl.dataset import FrameDataset, load_split
 from vl.metrics import repo_medians, score
-from vl.model import build_model, model_inputs, value_loss
+from vl.model import BACKBONES, build_model, model_inputs, value_loss
 from vl.train import amp_dtype
 
 
@@ -94,6 +95,8 @@ def main():
                     help="train only the head; ImageNet backbone fixed (Stage 5 encoder ablation)")
     ap.add_argument("--proprio", action="store_true",
                     help="add the 10-d proprio input (data.yaml `proprio`; Stage 5 ablation 2)")
+    ap.add_argument("--backbone", choices=BACKBONES,
+                    help="override the ResNet-18 image backbone (Stage 5 stronger-backbone experiment)")
     ap.add_argument("--steps", type=int, help="override baseline.steps (smoke tests)")
     ap.add_argument("--val-limit", type=int, help="use only the first N validation episodes (smoke tests)")
     args = ap.parse_args()
@@ -106,6 +109,8 @@ def main():
         dcfg["cameras"] = args.cameras
     if args.proprio:
         dcfg["proprio"] = dict(dcfg["proprio"], enabled=True)
+    if args.backbone:
+        dcfg["backbone"] = args.backbone
     steps = args.steps or bc["steps"]
     run = Path(cfg["paths"]["runs"]) / args.run
     run.mkdir(parents=True, exist_ok=True)
@@ -132,7 +137,7 @@ def main():
     val_dl = DataLoader(FrameDataset(val, dcfg), batch_size=bc["eval_batch_size"], shuffle=False,
                         num_workers=workers, persistent_workers=True, pin_memory=True, prefetch_factor=4)
 
-    meta = {"args": vars(args), "config": cfg, "cameras": dcfg["cameras"],
+    meta = {"args": vars(args), "config": cfg, "cameras": dcfg["cameras"], "backbone": dcfg.get("backbone", "resnet18"),
             "proprio": bool(dcfg.get("proprio", {}).get("enabled")), "steps": steps, "trivial_baseline": trivial,
             "n_train": len(train), "n_val": len(val),
             "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu", "amp": str(dtype),

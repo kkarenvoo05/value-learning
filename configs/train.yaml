@@ -51,6 +51,18 @@ baseline_lowlr:             # decision 2(b): baseline_cosine with both learning 
   lr_backbone: 1.0e-5       # overrides the top-level lr_backbone / lr_head for this section
   lr_head: 1.0e-4
 
+# Stage 5 stronger backbone, LR arm: baseline_lowlr with the backbone LR 3.3x lower (DINOv2 ViT-S
+# peaked at step 1.5k and then overfit under baseline_lowlr). Head LR unchanged. [ours]
+baseline_lowlr_bb3e6:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 3.0e-6
+  lr_head: 1.0e-4
+
 # Stage 5 augmentation arms (reports/stage5_augmentation_plan.md): baseline_lowlr plus a
 # training-only `augment` block (see vl.dataset). Validation is never augmented. [ours]
 baseline_lowlr_aug_photo:   # A1 photometric, per camera

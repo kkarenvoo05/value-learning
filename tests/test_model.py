@@ -159,3 +159,65 @@ def test_proprio_presence_must_match_the_model(model):
 
 def test_image_only_state_dict_unchanged(model):
     assert not any(k.startswith("proprio") for k in model.state_dict())   # old checkpoints still load
+
+
+# Stage 5 stronger backbone: DINOv2 ViT-S/14 with registers (random init here, except the weight test).
+DINO_SIZE = 56                                       # 4 x 4 patches of 14 px: small and fast on CPU
+
+
+@pytest.fixture(scope="module")
+def dino():
+    torch.manual_seed(0)
+    return ValueModel(CAMS, pretrained=False, backbone="dinov2_vits14_reg", image_size=DINO_SIZE).eval()
+
+
+def test_dino_shape_and_one_shared_backbone(dino):
+    with torch.no_grad():
+        assert dino(images(b=3, size=DINO_SIZE)).shape == (3, 201)
+    vits = [m for m in dino.modules() if m.__class__.__name__ == "VisionTransformer"]
+    assert len(vits) == 1
+    assert dino.head[0].in_features == 2 * 768       # [CLS, mean patch] per camera
+    assert not any(isinstance(m, torch.nn.BatchNorm2d) for m in dino.modules())
+
+
+@pytest.mark.parametrize("cam", CAMS)
+def test_dino_each_camera_changes_the_output(dino, cam):
+    x = images(size=DINO_SIZE)
+    with torch.no_grad():
+        assert not torch.allclose(dino(x), dino({**x, cam: torch.zeros_like(x[cam])}))
+
+
+def test_dino_readout_is_cls_and_mean_patch(dino):
+    x = torch.randn(2, 3, DINO_SIZE, DINO_SIZE)
+    with torch.no_grad():
+        t = dino.backbone.vit.forward_features(x)
+        f = dino.backbone(x)
+    assert t.shape[1] == 1 + 4 + (DINO_SIZE // 14) ** 2            # CLS + 4 registers + patches
+    assert torch.equal(f[:, :384], t[:, 0])
+    assert torch.allclose(f[:, 384:], t[:, 5:].mean(1))
+
+
+def test_dino_pretrained_weights_are_loaded():
+    """The pinned DINOv2 file really ends up in the backbone (not a silent random init)."""
+    from huggingface_hub import try_to_load_from_cache
+    from safetensors.torch import load_file
+    from vl.model import DINOV2_HF
+    f = try_to_load_from_cache(DINOV2_HF[0], "model.safetensors", revision=DINOV2_HF[1])
+    if not isinstance(f, str):
+        pytest.skip("DINOv2 weights not in the local HF cache")
+    sd = load_file(f)
+    m = ValueModel(CAMS, pretrained=True, backbone="dinov2_vits14_reg", image_size=224)
+    vit = m.backbone.vit.state_dict()
+    for k in ["patch_embed.proj.weight", "blocks.0.attn.qkv.weight", "blocks.11.mlp.fc2.weight", "norm.weight", "reg_token"]:
+        assert torch.equal(vit[k], sd[k]), k
+    assert sd["pos_embed"].shape[1] == 37 * 37 and vit["pos_embed"].shape[1] == 16 * 16   # resampled for 224
+
+
+def test_run_data_config_reads_the_backbone(tmp_path):
+    import json
+    from vl.model import run_data_config
+    base = {"cameras": CAMS, "image_size": 224}
+    (tmp_path / "config.json").write_text(json.dumps({"cameras": CAMS}))      # run from before the option
+    assert run_data_config(base, tmp_path)["backbone"] == "resnet18"
+    (tmp_path / "config.json").write_text(json.dumps({"cameras": CAMS, "backbone": "dinov2_vits14_reg"}))
+    assert run_data_config(base, tmp_path)["backbone"] == "dinov2_vits14_reg"

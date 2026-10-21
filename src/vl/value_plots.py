@@ -20,6 +20,8 @@ Episodes, one per kind, chosen with a fixed rule:
   typical: median MAE over all val episodes; worst: highest MAE; worst success: lowest mean V
   among successes; drop failure: median MAE among episodes whose VLM failure mode (a machine
   label, diagnostic only) is a dropped, slipped or released marker.
+With --episodes-from <run>, the episodes are the ones that rule picks on *that* run's predictions,
+so two models are drawn on the same episodes (e.g. `--run dinov2s_s0 --episodes-from lowlr_8k`).
 """
 
 import argparse
@@ -193,6 +195,7 @@ def main():
     ap.add_argument("--train-config", default="configs/train.yaml")
     ap.add_argument("--dist", action="store_true", help="shade the full predicted distribution behind the curves")
     ap.add_argument("--no-video", action="store_true")
+    ap.add_argument("--episodes-from", help="choose the episodes on this run's predictions (same episodes as it)")
     args = ap.parse_args()
     tc = load_config(args.train_config)
     cfg = load_config(tc["data_config"])
@@ -212,7 +215,8 @@ def main():
         dist = {(u, int(t)): i for i, (u, t) in enumerate(zip(z["episode_uid"], z["frame_index"]))}
         probs_all, V_dist = z["probs"].astype(np.float32), z["V"]
     rows = []
-    for k, (kind, uid) in enumerate(choose_episodes(pred, man), 1):
+    ref = pred if not args.episodes_from else pd.read_parquet(Path(tc["paths"]["runs"]) / args.episodes_from / "val_predictions.parquet")
+    for k, (kind, uid) in enumerate(choose_episodes(ref, man), 1):
         e = pred[pred.episode_uid == uid].sort_values("frame_index")
         ir = idx[idx.episode_uid == uid].iloc[0]
         mr = man.set_index("episode_uid").loc[uid]
