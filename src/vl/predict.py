@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 
 from vl.config import load_config
 from vl.dataset import FrameDataset, load_split
-from vl.model import build_model
+from vl.model import build_model, run_data_config
 from vl.train import amp_dtype
 from vl.train_baseline import predict
 
@@ -42,6 +42,7 @@ def main():
     sub = train[train.episode_uid.isin(uids)].reset_index(drop=True)
     print(f"{run}: {len(sub):,} frames from {args.episodes} training episodes", flush=True)
 
+    dcfg = run_data_config(dcfg, run)
     model = build_model(dcfg, tcfg).to(device)
     ck = torch.load(run / "best.pt", map_location=device)
     model.load_state_dict(ck["model"])

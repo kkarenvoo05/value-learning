@@ -3,21 +3,26 @@
     wrist_left ─┐                        ┌─ 512 ─┐
                 ├─ shared ResNet-18 ─────┤       ├─ concat 1024 → 256 → ReLU → 201 logits
     side_1 ─────┘   (ImageNet weights)   └─ 512 ─┘
+    proprio (optional, 10) ── z-score ──────── 10 ─┘   (Stage 5 ablation 2: concat 1034 → 256 → 201)
 
 - Categorical head [paper: RECAP, B = 201 bins on the normalized value range]; architecture
   details (shared backbone, MLP sizes) are ours.
 - Trained with cross-entropy against the hard target bin (`vl.targets`).
 - Scalar prediction V = Σ_b p_b · v_b, the expected value under the predicted distribution,
   with v_b the 201 bin centers evenly spaced on [-1, 0].
-- Input is the uint8 images only (as `vl.dataset` produces them); ImageNet normalization happens
-  inside `forward`, so a caller cannot forget it or apply it twice.
+- Input is the uint8 images (as `vl.dataset` produces them); ImageNet normalization happens
+  inside `forward`, so a caller cannot forget it or apply it twice. Optional raw proprio
+  [ours]: z-scored inside `forward` with training-split statistics stored as buffers, then
+  concatenated with the image features; no separate proprio encoder (simplest version).
 
 Sanity check on a real batch (CPU):
     .venv/bin/python -m vl.model
 """
 
 import argparse
+import json
 import math
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -30,7 +35,8 @@ from vl.config import load_config
 class ValueModel(nn.Module):
     def __init__(self, cams: list[str], n_bins: int = 201, v_min: float = -1.0, v_max: float = 0.0,
                  hidden: int = 256, pretrained: bool = True,
-                 mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+                 mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225),
+                 proprio_mean=None, proprio_std=None):
         super().__init__()
         self.cams = list(cams)
         weights = torchvision.models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
@@ -38,8 +44,12 @@ class ValueModel(nn.Module):
         feat = backbone.fc.in_features        # 512
         backbone.fc = nn.Identity()           # keep the pooled 512-d feature, drop the 1000 classes
         self.backbone = backbone              # one backbone, shared by both cameras
+        self.proprio_dim = 0 if proprio_mean is None else len(proprio_mean)
+        if self.proprio_dim:
+            self.register_buffer("proprio_mean", torch.tensor(proprio_mean, dtype=torch.float32))
+            self.register_buffer("proprio_std", torch.tensor(proprio_std, dtype=torch.float32))
         self.head = nn.Sequential(
-            nn.Linear(feat * len(self.cams), hidden),
+            nn.Linear(feat * len(self.cams) + self.proprio_dim, hidden),
             nn.ReLU(),
             nn.Linear(hidden, n_bins),
         )
@@ -62,12 +72,18 @@ class ValueModel(nn.Module):
             self.backbone.eval()
         return self
 
-    def forward(self, images: dict[str, torch.Tensor]) -> torch.Tensor:
-        """images: {cam: uint8 (B, 3, H, W)} -> logits (B, n_bins)."""
+    def forward(self, images: dict[str, torch.Tensor], proprio: torch.Tensor | None = None) -> torch.Tensor:
+        """images: {cam: uint8 (B, 3, H, W)}, proprio: raw float (B, 10) iff the model has a
+        proprio input -> logits (B, n_bins)."""
+        if (proprio is None) != (self.proprio_dim == 0):
+            raise ValueError(f"model proprio_dim={self.proprio_dim} but proprio {'missing' if proprio is None else 'given'}")
         x = torch.cat([images[c] for c in self.cams])               # (n_cams * B, 3, H, W)
         x = (x.float() / 255.0 - self.mean) / self.std
         f = self.backbone(x)                                        # (n_cams * B, 512)
         f = torch.cat(f.chunk(len(self.cams)), dim=1)               # (B, n_cams * 512), cam order fixed
+        if self.proprio_dim:
+            z = (proprio.float() - self.proprio_mean) / self.proprio_std
+            f = torch.cat([f, z.to(f.dtype)], dim=1)                # (B, n_cams * 512 + 10)
         return self.head(f)
 
     def expected_value(self, logits: torch.Tensor) -> torch.Tensor:
@@ -81,8 +97,31 @@ def value_loss(logits: torch.Tensor, bins: torch.Tensor) -> torch.Tensor:
 
 
 def build_model(data_cfg: dict, target_cfg: dict, pretrained: bool = True) -> ValueModel:
+    pm = ps = None
+    if data_cfg.get("proprio", {}).get("enabled"):
+        st = json.loads(Path(data_cfg["proprio"]["stats"]).read_text())
+        assert st["split"] == "train", st["split"]
+        pm, ps = st["mean"], st["std"]
     return ValueModel(data_cfg["cameras"], target_cfg["n_bins"], target_cfg["v_min"], target_cfg["v_max"],
-                      pretrained=pretrained, mean=data_cfg["imagenet_mean"], std=data_cfg["imagenet_std"])
+                      pretrained=pretrained, mean=data_cfg["imagenet_mean"], std=data_cfg["imagenet_std"],
+                      proprio_mean=pm, proprio_std=ps)
+
+
+def run_data_config(data_cfg: dict, run_dir: Path) -> dict:
+    """The data config a finished run was trained with: its cameras and proprio switch from the
+    run's config.json (camera / proprio ablations), everything else from `data_cfg`."""
+    meta = json.loads((Path(run_dir) / "config.json").read_text())
+    cfg = dict(data_cfg, cameras=meta.get("cameras", data_cfg["cameras"]))
+    if meta.get("proprio"):
+        cfg["proprio"] = dict(data_cfg["proprio"], enabled=True)
+    return cfg
+
+
+def model_inputs(b: dict, device) -> tuple[dict, torch.Tensor | None]:
+    """A batch's model inputs on `device`: (images, proprio or None)."""
+    x = {c: v.to(device, non_blocking=True) for c, v in b["images"].items()}
+    p = b["proprio"].to(device, non_blocking=True) if "proprio" in b else None
+    return x, p
 
 
 def main():

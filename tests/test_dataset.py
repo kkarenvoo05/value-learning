@@ -90,3 +90,29 @@ def test_jittered_box_stays_square_and_inside_the_frame():
             assert y1 - y0 == side and 0.9 * 420 - 1 <= side <= box[2] - box[0]
             assert 0 <= x0 and x1 <= 640 and 0 <= y0 and y1 <= 480
             assert abs((x0 + x1) / 2 - (box[0] + box[2]) / 2) <= 24 + 1
+
+
+def test_proprio_item_is_row_t_of_its_episode(tmp_path):
+    from vl.proprio import INPUT_NAMES
+    idx = index(tmp_path).assign(repo="r", episode_index=7)
+    tab = pd.DataFrame({"repo": "r", "episode_index": 7, "frame_index": np.arange(10)[::-1]}   # shuffled order
+                       ).assign(**{n: np.arange(10)[::-1] * 10.0 + j for j, n in enumerate(INPUT_NAMES)})
+    tab.to_parquet(tmp_path / "proprio.parquet")
+    c = cfg() | {"proprio": {"enabled": True, "table": str(tmp_path / "proprio.parquet")}}
+    item = FrameDataset(idx, c)[4]
+    assert set(item) == {"images", "bin", "value", "row", "proprio"}
+    assert item["proprio"].dtype == torch.float32
+    assert torch.equal(item["proprio"], torch.arange(10, dtype=torch.float32) + 40)
+    # Disabled (the baseline): no proprio key, even if a table is configured.
+    c["proprio"]["enabled"] = False
+    assert "proprio" not in FrameDataset(idx, c)[4]
+
+
+def test_proprio_missing_frame_raises(tmp_path):
+    import pytest
+    from vl.proprio import INPUT_NAMES
+    idx = index(tmp_path).assign(repo="r", episode_index=7)
+    pd.DataFrame({"repo": "r", "episode_index": 7, "frame_index": np.arange(9)}).assign(
+        **{n: 0.0 for n in INPUT_NAMES}).to_parquet(tmp_path / "p.parquet")
+    with pytest.raises(ValueError):
+        FrameDataset(idx, cfg() | {"proprio": {"enabled": True, "table": str(tmp_path / "p.parquet")}})

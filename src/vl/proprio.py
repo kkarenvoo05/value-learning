@@ -3,6 +3,7 @@
 Usage:
     .venv/bin/python -m vl.proprio --sync --per-repo 10 --workers 4   # -> reports/proprio_sync.md
     .venv/bin/python -m vl.proprio --stats                            # -> data/proprio/stats.json
+    .venv/bin/python -m vl.proprio --table                            # -> data/proprio/frame_proprio.parquet
     .venv/bin/python -m vl.proprio --videos                           # -> data/review_videos/stage5_proprio/
 
 Timing. Stage 3 found camera motion vs end-effector speed peaking at lag 0 or +6 frames. The eval
@@ -237,6 +238,24 @@ def plot_curves(curves: dict, ac: pd.DataFrame, path: Path):
 
 # ---------------------------------------------------------------- statistics
 
+def frame_table(idx: pd.DataFrame, video_root: Path, out: Path):
+    """Raw (unnormalized) 10-d input for every frame in the frame index (train + val; never test),
+    keyed by (repo, episode_index, frame_index). Read by FrameDataset when proprio is enabled."""
+    keys = idx[["repo", "episode_index", "frame_index"]]
+    parts = []
+    for repo, g in keys.groupby("repo"):
+        for f in sorted((video_root / repo / "data").rglob("*.parquet")):
+            d = pd.read_parquet(f, columns=["episode_index", "frame_index", "observation.state"]).merge(g, on=["episode_index", "frame_index"])
+            if len(d):
+                X = proprio_vector(arr(d, "observation.state")).astype(np.float32)
+                parts.append(d[["repo", "episode_index", "frame_index"]].assign(**{n: X[:, i] for i, n in enumerate(INPUT_NAMES)}))
+    tab = pd.concat(parts, ignore_index=True)
+    assert len(tab) == len(keys) and not tab.duplicated(["repo", "episode_index", "frame_index"]).any(), (len(tab), len(keys))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tab.to_parquet(out, index=False)
+    print(f"{len(tab):,} frames -> {out}")
+
+
 def stats(idx: pd.DataFrame, video_root: Path, out: Path):
     """Mean/std of the 10-d input over valid training frames (t <= T) only."""
     tr = idx[idx.split == "train"][["repo", "episode_index", "frame_index"]]
@@ -414,6 +433,7 @@ def main():
     ap.add_argument("--sync", action="store_true")
     ap.add_argument("--stats", action="store_true")
     ap.add_argument("--videos", action="store_true")
+    ap.add_argument("--table", action="store_true")
     ap.add_argument("--per-repo", type=int, default=10)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=0)
@@ -427,6 +447,8 @@ def main():
         sync(idx, vroot, args.per_repo, args.workers, args.seed, Path("reports/proprio_sync.md"))
     if args.stats:
         stats(idx, vroot, stats_path)
+    if args.table:
+        frame_table(idx, vroot, Path(cfg["proprio"]["table"]))
     if args.videos:
         man = pd.read_parquet(load_config(cfg["dataset_config"])["paths"]["manifest"])
         videos(idx, man, vroot, cfg, json.loads(stats_path.read_text()), args.lag,

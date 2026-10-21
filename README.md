@@ -86,11 +86,12 @@ uv pip install --python .venv/bin/python -e ".[dev,video]"
 sbatch scripts/check_c.sbatch             # Check C on a GPU -> data/runs/check_c/
 sbatch scripts/baseline.sbatch            # baseline -> data/runs/baseline/
 NAME=side CAMS=side_1 sbatch scripts/cameras.sbatch   # camera ablation, seeds 0-2 -> data/runs/side_s*/
+NAME=proprio EXTRA=--proprio DIST=1 sbatch scripts/cameras.sbatch   # images + proprio -> data/runs/proprio_s*/
 RUN=<run> sbatch scripts/predict.sbatch   # train-episode predictions (train/val gap)
 .venv/bin/python -m vl.metrics --run baseline       # -> data/runs/<run>/metrics.json
 .venv/bin/python -m vl.value_plots --run baseline   # -> reports/figures/stage4/, data/review_videos/stage4/
 .venv/bin/python -m vl.proprio --sync --per-repo 20   # -> reports/proprio_sync.{md,png}
-.venv/bin/python -m vl.proprio --stats --videos       # -> data/proprio/stats.json, data/review_videos/stage5_proprio/
+.venv/bin/python -m vl.proprio --stats --table --videos   # -> data/proprio/{stats.json,frame_proprio.parquet}, review videos
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```

@@ -129,3 +129,33 @@ def test_frozen_backbone_trains_only_the_head():
     assert not m.backbone.training
     assert all(torch.equal(v, before[k]) for k, v in m.backbone.state_dict().items())
     assert not torch.equal(m.head[2].weight, head_before)
+
+
+def proprio_model():
+    torch.manual_seed(0)
+    return ValueModel(CAMS, pretrained=False, proprio_mean=[1.0] * 10, proprio_std=[2.0] * 10).eval()
+
+
+def test_proprio_is_used_and_normalized_inside():
+    m = proprio_model()
+    assert m.head[0].in_features == 2 * 512 + 10
+    x, p = images(), torch.randn(2, 10)
+    with torch.no_grad():
+        out = m(x, p)
+        assert out.shape == (2, 201)
+        assert not torch.allclose(out, m(x, p + 1))                       # proprio changes the output
+        # z-scoring inside: a model with mean 0 / std 1 fed the z-scored input gives the same logits.
+        m0 = ValueModel(CAMS, pretrained=False, proprio_mean=[0.0] * 10, proprio_std=[1.0] * 10).eval()
+        m0.load_state_dict({k: v for k, v in m.state_dict().items() if not k.startswith("proprio_")}, strict=False)
+        assert torch.allclose(out, m0(x, (p - 1) / 2), atol=1e-5)
+
+
+def test_proprio_presence_must_match_the_model(model):
+    with pytest.raises(ValueError):
+        proprio_model()(images())
+    with pytest.raises(ValueError):
+        model(images(), torch.zeros(2, 10))
+
+
+def test_image_only_state_dict_unchanged(model):
+    assert not any(k.startswith("proprio") for k in model.state_dict())   # old checkpoints still load

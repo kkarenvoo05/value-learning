@@ -29,6 +29,16 @@ crops:
 imagenet_mean: [0.485, 0.456, 0.406]
 imagenet_std: [0.229, 0.224, 0.225]
 
+# Stage 5 ablation 2: proprioception [ours]. 10 numbers per frame from observation.state, row t
+# paired with video frame t (lag 0, reports/proprio_sync.md): EE xyz (m), rotation matrix first two
+# columns (Euler extrinsic xyz -> R; avoids the roll wrap at +-pi), gripper position. z-scored inside
+# the model with training-split mean/std (`vl.proprio --stats`). Off for the image-only baseline;
+# `vl.train_baseline --proprio` turns it on.
+proprio:
+  enabled: false
+  table: data/proprio/frame_proprio.parquet   # vl.proprio --table (train + val frames, raw)
+  stats: data/proprio/stats.json              # vl.proprio --stats (train frames, t <= T)
+
 paths:
   video_root: data/videos
   frame_targets: data/targets/frame_targets.parquet

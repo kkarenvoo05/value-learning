@@ -2,7 +2,9 @@
 
 One item = one row of data/frames/frame_index.parquet (a valid frame t <= T):
     {"images": {cam: uint8 tensor (3, 224, 224)}, "bin": int, "value": float, "row": int}
-Only `images` may go into the model. `bin` / `value` are the loss target, and `row` points back
+With `proprio.enabled` in the data config (Stage 5 ablation 2), items also carry
+    "proprio": float32 tensor (10,), the raw state of row t (`vl.proprio`; z-scored inside the model).
+Only `images` (and `proprio` when enabled) may go into the model. `bin` / `value` are the loss target, and `row` points back
 into the frame index for breakdowns (outcome, repo, ...). Everything else that defines the label
 (T, outcome, elapsed time, time-to-go, policy, proprioception) never leaves the index.
 
@@ -102,6 +104,7 @@ class FrameDataset(Dataset):
         self.fps = self.index.fps.to_numpy()
         self.bin = self.index.bin.to_numpy()
         self.value = self.index.value.to_numpy()
+        self.proprio = load_proprio(self.index, cfg) if cfg.get("proprio", {}).get("enabled") else None
         self._reader, self._pid = None, None
 
     def __len__(self):
@@ -123,7 +126,22 @@ class FrameDataset(Dataset):
             if any(self.augment.get(k) for k in ("brightness", "contrast", "saturation", "hue")):
                 x = color_jitter(x, self.augment)
             images[c] = x
-        return {"images": images, "bin": int(self.bin[i]), "value": float(self.value[i]), "row": i}
+        item = {"images": images, "bin": int(self.bin[i]), "value": float(self.value[i]), "row": i}
+        if self.proprio is not None:
+            item["proprio"] = torch.from_numpy(self.proprio[i].copy())
+        return item
+
+
+def load_proprio(index: pd.DataFrame, cfg: dict) -> np.ndarray:
+    """(len(index), 10) float32 raw proprio, row-aligned with the index; every frame must be found."""
+    from vl.proprio import INPUT_NAMES
+    keys = ["repo", "episode_index", "frame_index"]
+    tab = pd.read_parquet(cfg["proprio"]["table"])
+    m = index[keys].merge(tab, on=keys, how="left", validate="one_to_one")
+    X = m[INPUT_NAMES].to_numpy(np.float32)
+    if np.isnan(X).any():
+        raise ValueError(f"{np.isnan(X).any(1).sum()} frames have no proprio row in {cfg['proprio']['table']}")
+    return X
 
 
 def load_split(cfg: dict, split: str) -> pd.DataFrame:

@@ -7,6 +7,7 @@ Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run lowlr_8k_s1 --section baseline_lowlr --seed 1
     .venv/bin/python -u -m vl.train_baseline --run side_s0 --section baseline_lowlr --cameras side_1
     .venv/bin/python -u -m vl.train_baseline --run frozen_s0 --section baseline_lowlr --freeze-backbone
+    .venv/bin/python -u -m vl.train_baseline --run proprio_s0 --section baseline_lowlr --proprio
 
 - Sampling [ours]: uniform over every valid training frame (shuffled passes, fixed seed),
   frames decoded on the fly by FrameDataset (Stage 3.3 decision).
@@ -38,7 +39,7 @@ from torch.utils.data import DataLoader
 from vl.config import load_config
 from vl.dataset import FrameDataset, load_split
 from vl.metrics import repo_medians, score
-from vl.model import build_model, value_loss
+from vl.model import build_model, model_inputs, value_loss
 from vl.train import amp_dtype
 
 
@@ -62,9 +63,9 @@ def predict(model, loader, val: pd.DataFrame, device, dtype) -> pd.DataFrame:
     V = np.empty(len(val), np.float32)
     ce = np.empty(len(val), np.float32)
     for b in loader:
-        x = {c: v.to(device, non_blocking=True) for c, v in b["images"].items()}
+        x, p = model_inputs(b, device)
         with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
-            logits = model(x)
+            logits = model(x, p)
         rows = b["row"].numpy()
         V[rows] = model.expected_value(logits).cpu().numpy()
         ce[rows] = F.cross_entropy(logits.float(), b["bin"].to(device), reduction="none").cpu().numpy()
@@ -91,6 +92,8 @@ def main():
     ap.add_argument("--cameras", nargs="+", help="override data.yaml cameras (Stage 5 camera ablation)")
     ap.add_argument("--freeze-backbone", action="store_true",
                     help="train only the head; ImageNet backbone fixed (Stage 5 encoder ablation)")
+    ap.add_argument("--proprio", action="store_true",
+                    help="add the 10-d proprio input (data.yaml `proprio`; Stage 5 ablation 2)")
     ap.add_argument("--steps", type=int, help="override baseline.steps (smoke tests)")
     ap.add_argument("--val-limit", type=int, help="use only the first N validation episodes (smoke tests)")
     args = ap.parse_args()
@@ -101,6 +104,8 @@ def main():
     dcfg, tcfg = load_config(cfg["data_config"]), load_config(cfg["target_config"])
     if args.cameras:
         dcfg["cameras"] = args.cameras
+    if args.proprio:
+        dcfg["proprio"] = dict(dcfg["proprio"], enabled=True)
     steps = args.steps or bc["steps"]
     run = Path(cfg["paths"]["runs"]) / args.run
     run.mkdir(parents=True, exist_ok=True)
@@ -127,7 +132,8 @@ def main():
     val_dl = DataLoader(FrameDataset(val, dcfg), batch_size=bc["eval_batch_size"], shuffle=False,
                         num_workers=workers, persistent_workers=True, pin_memory=True, prefetch_factor=4)
 
-    meta = {"args": vars(args), "config": cfg, "cameras": dcfg["cameras"], "steps": steps, "trivial_baseline": trivial,
+    meta = {"args": vars(args), "config": cfg, "cameras": dcfg["cameras"],
+            "proprio": bool(dcfg.get("proprio", {}).get("enabled")), "steps": steps, "trivial_baseline": trivial,
             "n_train": len(train), "n_val": len(val),
             "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu", "amp": str(dtype),
             "torch": str(torch.__version__),
@@ -166,10 +172,10 @@ def main():
             f = lr_factor(step, steps, bc)
             for g, lr in zip(opt.param_groups, base_lr):
                 g["lr"] = lr * f
-            x = {c: v.to(device, non_blocking=True) for c, v in b["images"].items()}
+            x, p = model_inputs(b, device)
             y = b["bin"].to(device, non_blocking=True)
             with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
-                logits = model(x)
+                logits = model(x, p)
             loss = value_loss(logits, y)
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()

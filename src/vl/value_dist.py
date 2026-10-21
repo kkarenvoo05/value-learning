@@ -23,7 +23,7 @@ from torch.utils.data import DataLoader
 
 from vl.config import load_config
 from vl.dataset import FrameDataset, load_split
-from vl.model import build_model
+from vl.model import build_model, model_inputs, run_data_config
 from vl.train import amp_dtype
 
 
@@ -151,6 +151,7 @@ def main():
         val = val[val.episode_uid.isin(uids)].reset_index(drop=True)
         out = run / "val_probs_plotted.npz"
         print(f"{len(uids)} plotted episodes, {len(val):,} frames", flush=True)
+    dcfg = run_data_config(dcfg, run)
     model = build_model(dcfg, tcfg).to(device).eval()
     ck = torch.load(run / "best.pt", map_location=device)
     model.load_state_dict(ck["model"])
@@ -160,9 +161,9 @@ def main():
     V = np.empty(len(val), np.float32)
     with torch.no_grad():
         for i, b in enumerate(dl):
-            x = {c: v.to(device, non_blocking=True) for c, v in b["images"].items()}
+            x, p = model_inputs(b, device)
             with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
-                logits = model(x)
+                logits = model(x, p)
             rows = b["row"].numpy()
             probs[rows] = torch.softmax(logits.float(), dim=1).cpu().numpy()
             V[rows] = model.expected_value(logits).cpu().numpy()
