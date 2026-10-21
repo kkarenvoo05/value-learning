@@ -175,8 +175,8 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       Section 8 formula): 8/8 agree
 - [x] Sync, measured: camera motion vs end-effector speed peaks at lag 0 for `side_1` in 16/16
       clear episodes and for `wrist_left` in 17/22 (other 5: flat curve, +6 within 0.06).
-      Video ↔ proprio timing is ambiguous at 0 or +6 frames (probably 6-frame action chunks):
-      recheck before the Stage 5 proprio ablation
+      Video ↔ proprio timing looked ambiguous at 0 or +6 frames. **Rechecked in Stage 5: lag 0;
+      +6 is the 6-step action chunk** (`reports/proprio_sync.md`)
 - [x] Review videos of what the model sees, `data/review_videos/` (5 episodes)
 - **You check:** both views show the same moment (gripper pose agrees between wrist and side),
   late frames have v_t near 0 (success) or near −0.5 (failure), and t never exceeds T
@@ -364,8 +364,32 @@ One change at a time, in this order:
       constant 0.140). The side view carries most of the signal **and the round cue** (side-only
       frame-0 V has the baseline's round ordering; wrist-only's is reversed). The drops when the arm
       leaves the side view vanish in wrist only, so they come from `side_1`
-- [ ] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
-      first; normalize with training statistics only)
+- [~] 2. Images vs images + proprioception (end-effector coordinates; inspect fields and frames
+      first; normalize with training statistics only). `vl.proprio`, `tests/test_proprio.py` (4)
+      - [x] **Timing recheck (2026-10-20, `reports/proprio_sync.{md,png}`): video frame t = state row t
+            (lag 0)** for both cameras. 220 train episodes, pooled lag curves for side~EE speed,
+            wrist~EE speed, wrist~EE rotation, wrist fingers~gripper; all 12 peak at 0, sub-frame within
+            −0.10…+0.26 frames. Teleop (no chunks) has a single peak at 0. The Stage 3 "+6" is the
+            6-step action chunk (`n_action_steps: 6`; autonomous speed autocorrelation bumps at 6 and 12)
+      - [x] Fields: `observation.state` = EE xyz (m) + Euler extrinsic `xyz` (rad; roll wraps at ±π) +
+            gripper (= `cartesian_position` + `gripper_position` exactly). Reported cartesian velocity is
+            ~1–2 rows ahead of position differences
+      - [x] Candidate input [ours]: xyz (3) + 6D rotation (first 2 columns of R) + gripper (1) = 10,
+            z-scored with train-split stats (`data/proprio/stats.json`, 373,947 frames). **Excluded:**
+            velocities (not synchronous), actions (policy outputs, leak policy identity), `pen_*` /
+            `holder_*` (per-episode constants = start layout, not proprio), telemetry wrench/torques
+            (possible later variant: contact force may separate "pressing, stuck" from "seating"),
+            `steps_to_go`/`success`/`done` (labels). Joint positions are an alternative to EE pose
+      - [x] Review videos (`data/review_videos/stage5_proprio/`, 7; PNGs in
+            `reports/figures/stage5/proprio/`): both crops + the 10 z-scored inputs as bars + curves
+            with a cursor. Incl. the val worst-case pairs r04/101, r02/45 (timeouts held at the holder)
+            and r03/68 (late seat), plus teleop and DAgger. **For Karen to watch**
+      - Early look, 8 val mirror-pair episodes (`holder_z_compare.png`, by eye, not a test): during the
+        hold, EE height is ~230–250 mm for both timeouts and successes; successes drop ~30 mm only in
+        the last ~1 s (the seat, already visible in the images). So EE height may not separate stuck
+        from about-to-seat. Gripper width at hold differs (0.77 vs 0.81) in 2 timeouts: probably grasp
+        position on the marker; unchecked
+      - [ ] Model: add a proprio MLP branch concatenated with the image features; 3 seeds vs `lowlr_8k`
 - [ ] 3. Frozen vs fine-tuned encoder. Fine-tuned arm = `lowlr_8k` / `_s1` / `_s2` (backbone at
       `lr_backbone` 1e-5). Frozen arm: `--freeze-backbone` [ours], same `baseline_lowlr` recipe,
       cameras and head LR; ImageNet backbone gets no optimizer group and stays in eval mode, so
@@ -374,6 +398,12 @@ One change at a time, in this order:
       fine-tuned arm's L40S; seeds in sequence, git `2eeb32c`, `scripts/frozen.sbatch` with
       `--partition=move --gres=gpu:rtxpro6000:1 --cpus-per-task=32`; humanoid job 17971059
       cancelled while queued)
+      **Result (2026-10-20, from `data/runs/frozen_s{0,1,2}/result.json`; not yet written into
+      `reports/stage5_ablations.md`): frozen is much worse.** Val MAE 0.234 / 0.235 / 0.234, val CE
+      4.081 / 4.088 / 4.083 (fine-tuned: 0.121 / 3.730), eval-repo MAE ~0.275 (worse than the
+      repo-only constant 0.222), AUC 1/5/10 s ~0.62 / 0.54 / 0.59. Best step 7.5k, 8k, 8k = the end
+      of training, so the frozen arm may also be under-trained. ImageNet features alone don't carry
+      the signal; fine-tuning the encoder matters (relevant to the backbone experiment below)
 - [ ] Image augmentation (Karen, 2026-10-19; plan: `reports/stage5_augmentation_plan.md`), aimed at
       the mentor's concern that V before the last ~10 s looks random. Distribution plots show two
       humps (success/failure) with V their average: real outcome uncertainty (not fixable by
@@ -386,17 +416,158 @@ One change at a time, in this order:
             0.046); 1 s: 0.0026. So frame flicker is free to remove; the rule's "beat 0.5 s smoothing"
             needs a ~76% cut. Slower wander |V(t)-V(t-1s)| 0.040 (target 0.008/s), smoothing only to
             0.026-0.030: this is the part augmentation could still help (report-only metric)
-      - [ ] Step 1: arms A1 photometric, A2 crop shift/scale, A3 both; 3 seeds each, val never augmented
+      - [x] Step 1: arms A1 photometric, A2 crop shift/scale, A3 both; 3 seeds each, val never augmented
             Implemented 2026-10-19 (`vl.dataset` augment, sections `baseline_lowlr_aug_{photo,crop,both}`,
             tests; real-frame check `reports/figures/stage5/augment_examples.jpg`: marker, gripper and
             holder stay in view). Humanoid jobs 17977330-2 cancelled unstarted (queue full);
             resubmitted 2026-10-20 on move rtxpro6000 (Karen: max 3 GPUs on move): jobs 17978977 (photo),
             17978978 (crop), 17979141 (both; replaced unstarted 17978979), runs `aug_<arm>_s{0,1,2}`, seeds in sequence, each seed
             followed by `vl.value_dist` (`DIST=1`) for the flicker metrics
-      - [ ] Step 2: pre-set rule: accuracy within 2 sd, pre-end |ΔV| and |Δp_succ| ≥ 25% lower and
+            **All 9 runs finished (2026-10-20).** Val, best checkpoint, 3 seeds:
+
+            | arm | val MAE | val CE | best step |
+            |---|---|---|---|
+            | baseline lowlr_8k | 0.121 ± 0.004 | 3.729 ± 0.002 | 2–3k |
+            | A1 photometric | 0.118 ± 0.005 | 3.725 ± 0.003 | 2–4k |
+            | A2 crop | 0.116 ± 0.003 | 3.656 ± 0.006 | 7–8k |
+            | A3 both | 0.119 ± 0.001 | 3.665 ± 0.001 | 6.5–7.5k |
+
+            MAE is the same for every arm within seed spread. Both crop arms lower CE by ~0.07 (well
+            beyond noise) and peak later (7–8k vs 2–3k), i.e. they overfit later. Crop's best step is at
+            or near the end of training, so 8k steps may be too few for it
+      - [~] Step 2: pre-set rule: accuracy within 2 sd, pre-end |ΔV| and |Δp_succ| ≥ 25% lower and
             better than 0.5 s smoothing, real uncertainty kept (failure/stall plots stay two-humped)
-- [ ] Later: current frame vs short history; categorical vs scalar head; other ways of combining
-      the two images; larger backbone only if ResNet-18 underfits
+            **Computed 2026-10-20, verdict: no arm passes; augmentation fails its goal.** Pre-end (> 2 s
+            before T), 3 seeds:
+
+            | arm | \|ΔV\| per frame | \|Δp_succ\| | 1 s wander |
+            |---|---|---|---|
+            | baseline | 0.0158 ± 0.0019 | 0.0274 ± 0.0040 | 0.0366 |
+            | A1 photometric | 0.0155 (−2%) | 0.0269 | 0.0367 |
+            | A2 crop | 0.0169 (+7%) | 0.0300 | 0.0390 |
+            | A3 both | 0.0154 (−3%) | 0.0272 | 0.0366 |
+            | baseline smoothed 0.5 s | 0.0042 (−73%) | 0.0074 | 0.0301 |
+
+            Best arm cuts flicker 3% (rule: ≥ 25% and beat 0.5 s smoothing). The 1 s wander doesn't move
+            either; two-hump structure unchanged (R² of hump flips ~0.97 in every arm). So the jitter
+            is not overfitting to pixel-level appearance; 0.5 s smoothing at inference stays the cheap fix.
+            **Still to do:** these numbers are only in the draft `data/runs/flicker_aug_draft.md` (copied
+            from another session's scratchpad). Make them official by regenerating
+            `reports/flicker_stage5.md` with the same `vl.flicker` command (the 3-seed baseline replaces
+            the old seed-0-only rows), and write the Step 2 verdict into `reports/stage5_ablations.md`.
+            **Decision for Karen:** crop's CE gain could justify adopting crop for accuracy, as a
+            separate decision from flicker; if considered, first check whether crop keeps improving past
+            8k steps
+- [x] **Worst-case analysis of `lowlr_8k` (2026-10-20, seed 0, val, `val_probs.npz`)**: why some
+      episodes' predicted V is nowhere near the target. Per-episode table:
+      `data/runs/lowlr_8k/worst_case_episodes.csv`; filmstrips with the distribution shaded:
+      `reports/figures/stage4/lowlr_8k/mismatch/` (rendered with `vl.value_plots.episode_outputs`,
+      ad-hoc script, not in `src/`). p_succ = probability mass above −0.5; "success hump" / "failure
+      hump" = the mean of the distribution above / below −0.5.
+      - **Most error is picking the wrong outcome, not a bad value inside it.** MAE 0.117 as predicted
+        vs 0.045 if the correct hump's own mean were used (~62% of MAE is hump choice). By outcome,
+        total vs within-hump: success 0.086 / 0.028, failure 0.141 / 0.089, timeout 0.186 / 0.072.
+        Every top-30 episode shows sensible hump means (~−0.1 / ~−0.64) with p_succ on the wrong side
+      - **The worst cases are mirror pairs at the holder.** Timeouts with p_succ ≈ 0.85–0.95 held for
+        10–40 s, success mass at −0.02…−0.1 ("about to seat"): r02/44, r02/45, r01/48, r02/91, r04/101
+        (worst, MAE 0.484). Successes with p_succ ≈ 0.2–0.35 that seat only in the last 1–2 s, then V
+        jumps: r03/68, r02/42, r01/103, r03/132. The end of r02/45 (timeout) and 8–12 s of r03/68
+        (success) look the same (marker tip under the hole). Same stall ambiguity as audit §5a; the bins
+        show the model commits rather than hedges
+      - **The commitment is a per-episode judgement with real signal, not flicker or a leak.** Hold
+        phase (> 5 s in, > 2 s before T; 45 successes vs 45 `timeout_holding_marker` episodes): 72% of
+        p_succ variance is between episodes; AUC(success vs stall) 0.77 from mean p_succ (episode length
+        alone 0.65), 0.80 within the same start (only 25 pairs). p_succ clusters by start config
+        (permutation p = 0.004) but so does the outcome itself (p = 0.03); no start is shared between
+        train and val. So the worst cases are the confident tail of a useful but imperfect classifier
+      - **Overconfident on the success side** (autonomous eval frames): p_succ ≈ 0.80 → 56% actually
+        succeed; p_succ ≈ 0.96 → 75%. Low bins are calibrated (0.05 → 3.5%, 0.20 → 22%)
+      - **The failure hump is time-blind.** Failure-hump mean vs target by time to T: 0–2 s −0.60 vs
+        −0.51; 20–30 s −0.63 vs −0.70; 40–60 s −0.66 vs −0.89. corr(failure-hump mean, target) 0.32 vs
+        0.69 for the success hump; min V anywhere −0.608. A stalled robot's time left is not in one
+        frame, so long timeouts keep ~0.22 error even with the right hump
+      - Early-failure modes are fine (missed grasp, pregrasp misalignment: MAE 0.04–0.09). The hard
+        class is `timeout_holding_marker` (also when labelled failure) vs success
+      - **c03/97** (DAgger failure, p_succ ≈ 1 throughout, MAE 0.464): label checked at full resolution
+        (`mismatch/c03_97_end.jpg`) and it is **correct**: the marker topples in the last 2 frames during
+        the takeover (frame 145–147). Not predictable earlier; DAgger failures are rare (10 train vs 469
+        successes)
+      - Repo-level p_succ roughly tracks each round's success rate (r00 0.24, r04 0.61)
+- [x] **Q: would a harsher failure penalty fix the two-outcome problem? No** (reasoning, not run).
+      The humps exist because the frame is ambiguous; C_fail only sets where the failure hump sits and
+      adds no information. Hump gap = c_fail/(H + c_fail): 0.5 now, 0.75 with c_fail = 2700, so a wrong
+      call costs more and blended V swings more. The countdown slope halves (1/1800 → 1/3600 per step;
+      one bin ≈ 1.2 s instead of 0.6 s). Stage 6 advantages would mostly be p_succ changes × a larger gap.
+      A smaller penalty only hides the problem. Cheap offline check if wanted: rescale existing
+      predictions to the new target scale, no retraining. `c_fail_steps` is a label choice made with Lars
+- **Mentor update (2026-10-20, for Lars)**, answering "from 10 s to the end looks reasonable, before
+  that it seems random": he is right, for two reasons. (1) The model picks between two outcomes and
+  wrong picks (at the holder) cause ~60% of error; the end looks good because insertion is visible.
+  (2) Frame-to-frame jitter in the hump balance (~97% of V's jumps). Augmentation didn't reduce (2);
+  0.5 s smoothing removes 73% for free. Next: proprio, short history / elapsed time, inference
+  smoothing, maybe calibration, crop decision, then the rest of Stage 5. Suggested figures:
+  `09_worst_error_r04-eval_ep0101_dist.png`, `10_worst_success_r01-eval_ep0103_dist.png`
+- **RECAP (π*0.6, arXiv 2511.14759v2) vs ours: value-function training only (2026-10-20).** Full paper text:
+  `data/refs/pi06_2511.14759v2.txt` (read §IV-A, §V-C, §V-D, Alg. 1, App. A-B…A-F). The paper has **no
+  value-function hyperparameter table** and **no quantitative value metrics**. **No official code**:
+  openpi has no value/RECAP code; issues #857, #860, #925, #791 unanswered. Community reimplementations:
+  lerobot PR #3245 (WIP, unvalidated: PaliGemma 2B cut to 10 layers, mostly frozen; c_fail 500; 50 bins,
+  hard one-hot via `bucketize`, CE; per-task max-length normalization clamped to [−1, 0]; lr 1e-4, batch
+  4 × 4 accumulation), exla-ai/pi-openpi (SigLIP + "gemma_670m" + MLP head; 201 bins over raw steps 0–200,
+  one-hot CE, no C_fail, no normalization), small forks (hzm8341/pi0.6, wpjNB/pi0.6, liudi159/pi05-recap;
+  not inspected). None reproduces the web-data co-training or a 670M Gemma 3 value model.
+  **Same as ours (targets already match):**
+  - Reward −1/step, −C_fail at the end of a failure, success terminal 0 (Eq. 5); undiscounted Monte Carlo
+    return = value of the behavior policy (§III, §IV-A Eq. 1)
+  - Normalized to (−1, 0) per task by max episode length (§V-C); how C_fail fits inside is not specified
+    (ours: divide by horizon 900 + c_fail 900). C_fail value not given ("a large constant")
+  - Timeouts: success is defined with time limits (§VI-A), so running out of time = failure (inference)
+  - Human interventions: whole episodes (autonomous parts + corrections) go into the data, nothing special
+    in the value targets (§V-D)
+  - 201 bins, cross-entropy, V = expectation over bins (§IV-A; distributional ref is C51 [72]). Target
+    encoding (one-hot / two-hot / HL-Gauss) **not specified**; HL-Gauss is not cited
+  - No history or timestep input; they assume o_t is Markovian (§III). **RECAP has the same stall blind
+    spot.** Fig. 13 (App. A-B) shows "oscillating values" as its only acknowledged failure mode, the same
+    thing the mentor flagged
+  **Different from ours:**
+  - Backbone: 670M VLM initialized from Gemma 3, "same architecture as the VLA policy" (§IV-A, §V-C);
+    frozen/fine-tuned parts not specified. Ours: ImageNet ResNet-18, fine-tuned
+  - Overfitting control: "co-train the value function on a small mixture of multi-modal web data" (§V-C).
+    Ours: low LR only (overfit from ~0.09 passes)
+  - Inputs: images (3 cameras on their robot) + robot state q (inference: shares the VLA's inputs) + the
+    same language input as the VLA, task prompt + metadata (§V-A, §V-C). Ours: 2 images only
+  - Training data and stages: V is first pre-trained multi-task on the demonstrations ("tens of thousands
+    of hours", §IV step 2), then fine-tuned "on all of the data collected for the task so far" (§V-D).
+    Ours: one stage, ~375k frames of one task, no value pre-training beyond ImageNet
+  - Retrained from the pre-trained V each iteration "to avoid drift" (Alg. 1 line 8, §V-D). Ours: one run
+  - Not specified in the paper (so ours can't be checked against it): optimizer, LR, batch size, steps,
+    schedule, early stopping / checkpoint selection, validation split, web-data mixture ratio. Ours:
+    AdamW, backbone 1e-5 / head 1e-4, batch 32, 8k steps cosine, checkpoint = lowest val CE
+- [ ] **Next experiments, ranked (2026-10-20; each vs the 3-seed `lowlr_8k` baseline, one change at a
+      time).** Replaces the old "Later" list (short history; categorical vs scalar head; other ways of
+      combining the two images; larger backbone only if ResNet-18 underfits)
+      - [ ] 1. **Proprioception** (= Stage 5 item 2; RECAP's input set, inferred). Exact gripper/marker pose
+            at the holder may separate "about to insert" from "stuck". First recheck video ↔ proprio timing
+            (0 vs +6 frames, Stage 3 note)
+      - [ ] 2. **Short frame history (2–4 frames over 1–2 s) or elapsed time** [ours, beyond RECAP]. Targets
+            both the stall ambiguity and the time-blind failure hump. Caveat: most timeouts end at a
+            reviewer-chosen soft-truncation frame, so elapsed time does not give time left there
+      - [ ] 3. **Stronger pretrained backbone fine-tuned at low LR** (SigLIP or DINOv2 ViT-S/B, or a small VLM):
+            RECAP's biggest difference. Frozen ResNet (MAE 0.234) says the encoder matters. Run if 1 and 2
+            don't close the gap at the holder
+      - [ ] 4. **Condition V on the policy round** (r00–r04, DAgger, teleop) [ours; loosely like RECAP's
+            metadata in the prompt]. V^π depends on the policy; the model currently guesses the round from
+            side-view cues. Explicit conditioning could remove that shortcut. Stage 6 stays valid (each
+            episode's policy is known)
+      - [ ] 5. **Cheap substitute for web co-training:** HL-Gauss soft targets (label change: needs Karen's
+            OK) or an auxiliary task-phase head. Web co-training itself probably not worth it at this scale
+      - [ ] 6. **Target change, ask Lars:** count soft-truncated timeouts down to the 800-step cap instead of
+            the reviewer's cut point (matches RECAP's fixed time limits, removes arbitrary endpoints).
+            Changing C_fail won't help (see above); normalization already matches
+      - [ ] Also: 0.5 s centred smoothing as the default at inference; optional p_succ calibration
+            (temperature on the success/failure split) for the overconfident timeouts; crop decision
+            (Step 2 above)
+      Suggested order: 1 and 2 first (do the remaining errors come from missing inputs?), then 3
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
 - [x] Not needed (Stage 4: V does not react to the operator). Was: if Stage 4 shows V reacting to the operator: masked `wrist_left` bottom-left corner vs
       unmasked (see Stage 4 operator check)

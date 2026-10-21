@@ -58,6 +58,7 @@ src/vl/
   value_plots.py           synchronized camera / V-vs-target plots and videos for val episodes
   analysis.py              breakdowns (outcome/kind/repo, timeouts, stalls, operator, shape)
   side_occlusion.py        occlusion check: arm covering side camera vs V (pixel-difference proxy)
+  proprio.py               Stage 5 proprio: video<->state timing, 10-d input + train stats, review videos
 scripts/*.sbatch           SLURM jobs (Check C, baseline, camera ablation, predict)
 tests/                     synthetic unit tests + integrity checks on the built manifest
 reports/                   audit findings, data checks, targets summary, run analyses, figures
@@ -88,6 +89,8 @@ NAME=side CAMS=side_1 sbatch scripts/cameras.sbatch   # camera ablation, seeds 0
 RUN=<run> sbatch scripts/predict.sbatch   # train-episode predictions (train/val gap)
 .venv/bin/python -m vl.metrics --run baseline       # -> data/runs/<run>/metrics.json
 .venv/bin/python -m vl.value_plots --run baseline   # -> reports/figures/stage4/, data/review_videos/stage4/
+.venv/bin/python -m vl.proprio --sync --per-repo 20   # -> reports/proprio_sync.{md,png}
+.venv/bin/python -m vl.proprio --stats --videos       # -> data/proprio/stats.json, data/review_videos/stage5_proprio/
 .venv/bin/python -m pytest -q
 .venv/bin/python -m vl.preview --repo real-marker-d2-r04-eval --episodes 0 1   # needs ffmpeg w/ AV1
 ```
