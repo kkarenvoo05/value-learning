@@ -389,7 +389,16 @@ One change at a time, in this order:
         the last ~1 s (the seat, already visible in the images). So EE height may not separate stuck
         from about-to-seat. Gripper width at hold differs (0.77 vs 0.81) in 2 timeouts: probably grasp
         position on the marker; unchecked
-      - [ ] Model: add a proprio MLP branch concatenated with the image features; 3 seeds vs `lowlr_8k`
+      - [x] Model (2026-10-20, git `a39e42a`) [ours]: the 10 raw numbers are z-scored inside `forward`
+            (train stats as buffers) and concatenated with the 2×512 image features into the same head
+            (1034 → 256 → 201); no separate proprio encoder. +2,560 parameters. `--proprio` on
+            `vl.train_baseline`; off by default, image-only items and checkpoints unchanged. Tests: item
+            is row t, missing frame raises, normalization inside, proprio changes the output (63 pass).
+            Real-data check: dataset proprio = parquet state to 3e-8; CPU smoke run trains and reloads
+      - [ ] Run: job 17996474 (`NAME=proprio EXTRA=--proprio DIST=1 sbatch scripts/cameras.sbatch`, move
+            L40S, `proprio_s{0,1,2}`, `baseline_lowlr`, seeds in sequence + `vl.value_dist`). Compare vs
+            `lowlr_8k` 3 seeds (differences < ~2 sd are not evidence); then look at the hold phase
+            (stall vs late-seat p_succ) and whether proprio adds a round/repo shortcut
 - [ ] 3. Frozen vs fine-tuned encoder. Fine-tuned arm = `lowlr_8k` / `_s1` / `_s2` (backbone at
       `lr_backbone` 1e-5). Frozen arm: `--freeze-backbone` [ours], same `baseline_lowlr` recipe,
       cameras and head LR; ImageNet backbone gets no optimizer group and stays in eval mode, so
