@@ -50,7 +50,7 @@ src/vl/
   data_figures.py          crop sheets, Check B, sync checks, review videos
   preview.py               labeled multi-camera contact sheets from remote videos
   operator_visibility.py   person-segmenter audit of operator visibility per camera
-  model.py                 ValueModel: shared ResNet-18 over cameras -> 201-bin value head
+  model.py                 ValueModel: shared (or per-camera, C1) ResNet-18 over cameras -> 201-bin value head
   train.py                 training loop (Check C tiny-subset overfit)
   train_baseline.py        baseline: full train set, val-CE checkpointing
   metrics.py               validation metrics; re-scores a finished run's saved predictions
@@ -58,8 +58,12 @@ src/vl/
   value_plots.py           synchronized camera / V-vs-target plots and videos for val episodes
   analysis.py              breakdowns (outcome/kind/repo, timeouts, stalls, operator, shape)
   side_occlusion.py        occlusion check: arm covering side camera vs V (pixel-difference proxy)
+  history_series.py        Stage 5.5 B1: current + past frames at several gaps, stalls vs successes
+  success_pauses.py        Stage 5.5 B1 follow-up: how long successes sit still vs stalls, their targets/predictions
+  history_gain.py          Stage 5.5 B3: history arm vs baseline by hold-phase group, time into episode, length
   proprio.py               Stage 5 proprio: video<->state timing, 10-d input + train stats, review videos
 scripts/*.sbatch           SLURM jobs (Check C, baseline, camera ablation, predict)
+scripts/compare_arms.py    arm table + paired episode x seed bootstrap test vs a reference arm (the win rule)
 tests/                     synthetic unit tests + integrity checks on the built manifest
 reports/                   audit findings, data checks, targets summary, run analyses, figures
 data/                      (gitignored) pinned metadata, manifest, targets, videos, runs

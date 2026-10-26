@@ -161,9 +161,8 @@ def main():
     V = np.empty(len(val), np.float32)
     with torch.no_grad():
         for i, b in enumerate(dl):
-            x, p = model_inputs(b, device)
             with torch.autocast("cuda", dtype=dtype, enabled=dtype is not None):
-                logits = model(x, p)
+                logits = model(**model_inputs(b, device))
             rows = b["row"].numpy()
             probs[rows] = torch.softmax(logits.float(), dim=1).cpu().numpy()
             V[rows] = model.expected_value(logits).cpu().numpy()

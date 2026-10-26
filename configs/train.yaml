@@ -113,5 +113,248 @@ baseline_lowlr_aug_both:    # A3 = A1 + A2
   lr_head: 1.0e-4
   augment: {brightness: 0.3, contrast: 0.3, saturation: 0.3, hue: 0.03, crop_shift_px: 24, crop_scale: [0.9, 1.0]}
 
+# Stage 5 crop sweep (2026-10-21). Step 1 (length): A2 crop unchanged at 16k steps; at 8k its val CE
+# was still falling when the cosine LR reached 0. Step 2 (strength, seed 0 screen): crop_pad lets the
+# box leave the frame (ImageNet-mean fill), so shifts and zoom-out are no longer clamped; p24 is A2
+# with padding, the reference that separates "pad" from "stronger". All: baseline_lowlr + 16k steps,
+# eval every 1000 (every 500 would add ~15 min per run). [ours]
+baseline_lowlr_crop16k:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.9, 1.0]}
+
+baseline_lowlr_crop16k_p24:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.9, 1.0], crop_pad: true}
+
+baseline_lowlr_crop16k_s48:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 48, crop_scale: [0.9, 1.0], crop_pad: true}
+
+baseline_lowlr_crop16k_s72:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 72, crop_scale: [0.9, 1.0], crop_pad: true}
+
+baseline_lowlr_crop16k_z75:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.75, 1.0], crop_pad: true}
+
+baseline_lowlr_crop16k_z60:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.6, 1.0], crop_pad: true}
+
+baseline_lowlr_crop16k_zout:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [1.0, 1.15], crop_pad: true}
+
+baseline_lowlr_crop16k_strong:
+  steps: 16000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 1000
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 48, crop_scale: [0.75, 1.0], crop_pad: true}
+
+# Stage 5 crop sweep, 8k re-screen (2026-10-21): the 16k screen ran on the wrong schedule (step 1:
+# the 8k cosine anneal is what helps crop), so the same padded arms again on A2's own recipe:
+# baseline_lowlr_aug_crop with only `augment` changed. [ours]
+baseline_lowlr_crop8k_p24:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.9, 1.0], crop_pad: true}
+
+baseline_lowlr_crop8k_s48:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 48, crop_scale: [0.9, 1.0], crop_pad: true}
+
+baseline_lowlr_crop8k_s72:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 72, crop_scale: [0.9, 1.0], crop_pad: true}
+
+baseline_lowlr_crop8k_z75:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.75, 1.0], crop_pad: true}
+
+baseline_lowlr_crop8k_z60:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [0.6, 1.0], crop_pad: true}
+
+baseline_lowlr_crop8k_zout:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 24, crop_scale: [1.0, 1.15], crop_pad: true}
+
+baseline_lowlr_crop8k_strong:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment: {crop_shift_px: 48, crop_scale: [0.75, 1.0], crop_pad: true}
+
+# Stage 5 "full image augmentation" (2026-10-21; standard settings suggested by Lars, LeRobot
+# ImageTransforms scheme reimplemented in vl.dataset): per image exactly 3 of the 6 transforms,
+# applied in this order, on the 224 px crop. baseline_lowlr + `augment` only; no crop jitter, so
+# the affine translate (5% = ~11 px at 224, ~ +-21-24 px in the source) stands in for A2's shift.
+baseline_lowlr_aug_full:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment:
+    full: {n: 3, brightness: 0.2, contrast: 0.2, saturation: 0.5, hue: 0.05, sharpness: 0.5,
+           affine: {degrees: 5.0, translate: 0.05}}
+
+# Stage 5 crop + full augmentation (2026-10-21): baseline_lowlr_aug_crop (A2 crop jitter) + the
+# `full` block of baseline_lowlr_aug_full with affine translate 0, so position jitter stays at A2's
+# level (stronger shifts all lost in the crop sweep); rotation kept. [ours]
+baseline_lowlr_aug_crop_full:
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment:
+    crop_shift_px: 24
+    crop_scale: [0.9, 1.0]
+    full: {n: 3, brightness: 0.2, contrast: 0.2, saturation: 0.5, hue: 0.05, sharpness: 0.5,
+           affine: {degrees: 5.0, translate: 0.0}}
+
+# Stage 5 per-camera split (2026-10-22): A2 crop jitter on one camera, the full block of
+# baseline_lowlr_aug_full (unchanged) on the other. Tests hypothesis (b): crop's success cost comes
+# from shifting the fixed side camera, whose absolute pixel position encodes arm pose. [ours]
+baseline_lowlr_aug_split_cropwrist:   # crop on wrist_left, full on side_1
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment:
+    per_camera:
+      wrist_left: {crop_shift_px: 24, crop_scale: [0.9, 1.0]}
+      side_1:
+        full: {n: 3, brightness: 0.2, contrast: 0.2, saturation: 0.5, hue: 0.05, sharpness: 0.5,
+               affine: {degrees: 5.0, translate: 0.05}}
+
+baseline_lowlr_aug_split_cropside:    # crop on side_1, full on wrist_left
+  steps: 8000
+  warmup_steps: 500
+  schedule: cosine
+  eval_every: 500
+  eval_batch_size: 128
+  workers: 28
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  augment:
+    per_camera:
+      side_1: {crop_shift_px: 24, crop_scale: [0.9, 1.0]}
+      wrist_left:
+        full: {n: 3, brightness: 0.2, contrast: 0.2, saturation: 0.5, hue: 0.05, sharpness: 0.5,
+               affine: {degrees: 5.0, translate: 0.05}}
+
 paths:
   runs: data/runs            # checkpoints + logs (gitignored, on Karen's NFS storage)

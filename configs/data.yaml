@@ -21,6 +21,8 @@ image_size: 224
 #   side_1:     420 px, shifted to the top and 30 px right. The scene (marker, holder, gripper
 #               at insertion) sits in the upper middle; the bottom of the frame is empty table,
 #               and the centre crop cut the gripper at the top edge.
+# Stage 5.5 Gate 0 (confirmed by Karen 2026-10-24): these boxes (arm R0) kept; no realigned box,
+# squash or letterbox arm beat them (PROGRESS.md 5.5.1).
 crops:
   wrist_left: [80, 0, 560, 480]
   side_1: [140, 0, 560, 420]
@@ -38,6 +40,14 @@ proprio:
   enabled: false
   table: data/proprio/frame_proprio.parquet   # vl.proprio --table (train + val frames, raw)
   stats: data/proprio/stats.json              # vl.proprio --stats (train frames, t <= T)
+
+# Stage 5.5 B3 follow-up: upper bound for history [ours]. One number per frame: seconds the gripper
+# has been still (speed over 0.5 s < still_mps, the B1 / B3 rule), causal, from the proprio table.
+# `vl.train_baseline --still-time` turns it on.
+still_time:
+  enabled: false
+  table: data/proprio/frame_proprio.parquet
+  still_mps: 0.01
 
 paths:
   video_root: data/videos
