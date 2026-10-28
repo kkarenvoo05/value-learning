@@ -30,6 +30,14 @@
   and the past images; the head input is [current features (cams), has_past · past features (cams),
   has_past] (2 × 1024 + 1 for ResNet-18). Without a past (has_past = 0) the past features are zeroed,
   so the head sees zeros plus the flag whatever the placeholder image is.
+- Channel stacking (Stage 5.5 C2a [Lars, alternative to B2]; details ours): `history_stack=True` (with
+  `history=True`, ResNet-18 only) feeds each camera's current and past frame as one 6-channel image
+  (early fusion; B2 encodes them separately and joins the features). conv1 is widened with the
+  pretrained weights copied to both halves and scaled ½ (`stack_conv1`), so past = now gives the
+  pretrained response. Head input [features (cams), has_past] (1024 + 1). No past: the past channels
+  are 0 after normalization (ImageNet-mean grey), so "no past" is not "nothing moved".
+  C2b: `history_frames=k` stacks k past frames (data config `gaps_s`), 3 (k + 1) channels, conv1 weights
+  scaled 1 / (k + 1), one has_past flag per past frame (head input 1024 + k). Stacking only.
 - Still time (Stage 5.5 B3 follow-up [ours]): `still_time=True` appends log1p(seconds the gripper has
   been still) (`vl.dataset` `still_time`) to the head input, one extra number: an upper bound for
   what image history can tell the head about a stall.
@@ -166,13 +174,23 @@ class TokenFusionHead(nn.Module):
         return (logits, torch.stack(attn, dim=1)) if return_attn else logits
 
 
+def stack_conv1(net: nn.Module, k: int) -> nn.Module:
+    """Widen a ResNet's conv1 to k stacked RGB frames: the weights copied k times and scaled 1/k."""
+    w = net.conv1.weight.data
+    conv = nn.Conv2d(3 * k, w.shape[0], net.conv1.kernel_size, net.conv1.stride, net.conv1.padding, bias=False)
+    conv.weight.data = torch.cat([w / k] * k, dim=1)
+    net.conv1 = conv
+    return net
+
+
 class ValueModel(nn.Module):
     def __init__(self, cams: list[str], n_bins: int = 201, v_min: float = -1.0, v_max: float = 0.0,
                  hidden: int = 256, pretrained: bool = True,
                  mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225),
                  proprio_mean=None, proprio_std=None, backbone: str = "resnet18", image_size: int = 224,
                  per_camera_backbone: bool = False, history: bool = False, still_time: bool = False,
-                 fusion: str = "concat", fusion_cfg: dict | None = None, cam_dropout: dict | None = None):
+                 fusion: str = "concat", fusion_cfg: dict | None = None, cam_dropout: dict | None = None,
+                 history_stack: bool = False, history_frames: int = 1):
         super().__init__()
         self.cams = list(cams)
         if backbone not in BACKBONES:
@@ -184,6 +202,12 @@ class ValueModel(nn.Module):
         if fusion_cfg and fusion != "attention":
             raise ValueError(f"fusion_cfg {fusion_cfg} is only for attention fusion")
         self.fusion = fusion
+        if history_stack and (not history or backbone != "resnet18"):
+            raise ValueError("history_stack needs history=True and the resnet18 backbone")
+        if history_frames > 1 and not history_stack:
+            raise ValueError("several past frames are built for channel stacking only")
+        self.history_stack = history_stack
+        self.history_frames = history_frames
         self.cam_dropout = dict(cam_dropout or {})
         if self.cam_dropout:
             if fusion != "concat" or history:
@@ -198,6 +222,8 @@ class ValueModel(nn.Module):
                 net = torchvision.models.resnet18(weights=weights)
                 feat = net.fc.in_features     # 512
                 net.fc = nn.Identity()        # keep the pooled 512-d feature, drop the 1000 classes
+                if history_stack:             # C2a: [now, past] as 6 input channels
+                    stack_conv1(net, 1 + history_frames)
                 return net, feat
             net = DinoV2Features(pretrained, image_size)
             return net, net.out_dim           # 768
@@ -217,7 +243,8 @@ class ValueModel(nn.Module):
             self.register_buffer("proprio_std", torch.tensor(proprio_std, dtype=torch.float32))
         self.history = history
         self.still_time = still_time
-        n_img = feat * len(self.cams) * (2 if history else 1) + (1 if history else 0)
+        n_img = (feat * len(self.cams) * (2 if history and not history_stack else 1)
+                 + ((history_frames if history_stack else 1) if history else 0))
         if fusion == "attention":             # C3: same head(f) interface, attention readout over cameras
             self.head = TokenFusionHead(len(self.cams), feat, n_bins, hidden=hidden, **(fusion_cfg or {}))
         else:
@@ -263,7 +290,13 @@ class ValueModel(nn.Module):
             raise ValueError(f"model history={self.history} but past {'missing' if past is None else 'given'}")
         if (still is None) == self.still_time:
             raise ValueError(f"model still_time={self.still_time} but still {'missing' if still is None else 'given'}")
-        if self.history:
+        if self.history_stack:
+            m = past["has_past"].float()
+            m = m.view(-1, 1) if m.dim() == 1 else m             # (B, k)
+            if m.shape[1] != self.history_frames:
+                raise ValueError(f"model has {self.history_frames} past frames but has_past has {m.shape[1]}")
+            f = torch.cat([self.stacked_features(images, past["images"], m), m], dim=1)
+        elif self.history:
             B = len(images[self.cams[0]])
             both = {c: torch.cat([images[c], past["images"][c]]) for c in self.cams}   # one backbone pass
             f_now, f_past = self.features(both).split(B)
@@ -277,6 +310,22 @@ class ValueModel(nn.Module):
         if self.still_time:
             f = torch.cat([f, torch.log1p(still.float()).to(f.dtype)], dim=1)
         return self.head(f)
+
+    def stacked_features(self, images: dict, past_images: dict, has_past: torch.Tensor) -> torch.Tensor:
+        """C2a/C2b: per camera [normalized now, has_past_j · normalized past_j for each j] (B, 3 (k + 1), H, W)
+        -> (B, n_cams * feat). past_images[c]: (B, 3, H, W) (one past frame) or (B, k, 3, H, W); has_past (B, k)."""
+        m = has_past.view(len(has_past), -1)
+
+        def stack(c):
+            p = past_images[c]
+            p = p.unsqueeze(1) if p.dim() == 4 else p
+            return torch.cat([self.normalize(images[c])]
+                             + [self.normalize(p[:, j]) * m[:, j].view(-1, 1, 1, 1) for j in range(p.shape[1])], dim=1)
+        x = {c: stack(c) for c in self.cams}
+        if self.per_camera_backbone:
+            return torch.cat([self.backbone[c](x[c]) for c in self.cams], dim=1)
+        f = self.backbone(torch.cat([x[c] for c in self.cams]))
+        return torch.cat(f.chunk(len(self.cams)), dim=1)
 
     def drop_cameras(self, f: torch.Tensor) -> torch.Tensor:
         """Training only: zero camera c's feature block of each row with probability cam_dropout[c]."""
@@ -315,10 +364,13 @@ def build_model(data_cfg: dict, target_cfg: dict, pretrained: bool = True) -> Va
                       proprio_mean=pm, proprio_std=ps, backbone=data_cfg.get("backbone", "resnet18"),
                       image_size=data_cfg["image_size"],
                       per_camera_backbone=bool(data_cfg.get("per_camera_backbone", False)),
-                      history=(data_cfg.get("history") or {}).get("gap_s") is not None,
+                      history=bool({"gap_s", "gaps_s"} & {k for k, v in (data_cfg.get("history") or {}).items()
+                                                          if v is not None}),
+                      history_frames=len((data_cfg.get("history") or {}).get("gaps_s") or [None]),
                       still_time=bool((data_cfg.get("still_time") or {}).get("enabled")),
                       fusion=data_cfg.get("fusion", "concat"), fusion_cfg=data_cfg.get("fusion_cfg") or {},
-                      cam_dropout=data_cfg.get("cam_dropout") or {})
+                      cam_dropout=data_cfg.get("cam_dropout") or {},
+                      history_stack=bool((data_cfg.get("history") or {}).get("stack")))
 
 
 # The crop boxes every run used before runs recorded their own (Stage 3, configs/data.yaml until

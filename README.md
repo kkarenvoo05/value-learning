@@ -62,6 +62,7 @@ src/vl/
   success_pauses.py        Stage 5.5 B1 follow-up: how long successes sit still vs stalls, their targets/predictions
   history_gain.py          Stage 5.5 B3: history arm vs baseline by hold-phase group, time into episode, length
   proprio.py               Stage 5 proprio: video<->state timing, 10-d input + train stats, review videos
+  advantages.py            Stage 6 first step: RECAP advantage labels from R0 on val, checks vs a clock control
 scripts/*.sbatch           SLURM jobs (Check C, baseline, camera ablation, predict)
 scripts/compare_arms.py    arm table + paired episode x seed bootstrap test vs a reference arm (the win rule)
 tests/                     synthetic unit tests + integrity checks on the built manifest

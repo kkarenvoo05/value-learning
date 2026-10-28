@@ -12,6 +12,8 @@ Usage (on a GPU node; see scripts/baseline.sbatch):
     .venv/bin/python -u -m vl.train_baseline --run c1_s0 --section baseline_lowlr_aug_full --per-camera-backbone
     .venv/bin/python -u -m vl.train_baseline --run c3_attn_s0 --section baseline_lowlr_aug_full --per-camera-backbone --fusion attention
     .venv/bin/python -u -m vl.train_baseline --run b2_gap2_s0 --section baseline_lowlr_aug_full --history-gap 2
+    .venv/bin/python -u -m vl.train_baseline --run c2a_stack2_s0 --section baseline_lowlr_aug_full --history-gap 2 --history-stack
+    .venv/bin/python -u -m vl.train_baseline --run c2b_s0 --section baseline_lowlr_aug_full --history-gaps 1 2 4 --history-stack
     .venv/bin/python -u -m vl.train_baseline --run b3_still_s0 --section baseline_lowlr_aug_full --still-time
     .venv/bin/python -u -m vl.train_baseline --run camdrop_s0 --section baseline_lowlr_aug_full --cam-dropout wrist_left=0.25
     .venv/bin/python -u -m vl.train_baseline --run r2_squash_s0 --section baseline_lowlr_aug_full \
@@ -129,6 +131,10 @@ def main():
                     help="override data.yaml image_size, the square model input per camera (Stage 5.5 Gate 0)")
     ap.add_argument("--history-gap", type=float, metavar="S",
                     help="add one past frame S seconds back per camera, masked before the episode start (Stage 5.5 B2)")
+    ap.add_argument("--history-gaps", type=float, nargs="+", metavar="S",
+                    help="several past frames, ascending (C2b; needs --history-stack)")
+    ap.add_argument("--history-stack", action="store_true",
+                    help="with --history-gap: stack current + past frame as 6 input channels (C2a early fusion)")
     ap.add_argument("--still-time", action="store_true",
                     help="add the seconds the gripper has been still to the head input (Stage 5.5 B3 upper bound)")
     ap.add_argument("--cam-dropout", action="append", metavar="CAM=P",
@@ -155,6 +161,14 @@ def main():
         dcfg["image_size"] = args.image_size
     if args.history_gap is not None:
         dcfg["history"] = {"gap_s": args.history_gap}
+        if args.history_stack:
+            dcfg["history"]["stack"] = True
+    if args.history_gaps is not None:
+        if args.history_gap is not None or not args.history_stack:
+            raise SystemExit("--history-gaps needs --history-stack and excludes --history-gap")
+        dcfg["history"] = {"gaps_s": args.history_gaps, "stack": True}
+    elif args.history_stack and args.history_gap is None:
+        raise SystemExit("--history-stack needs --history-gap or --history-gaps")
     if args.still_time:
         dcfg["still_time"] = dict(dcfg["still_time"], enabled=True)
     dcfg["cam_dropout"] = {c: float(p) for c, p in (a.split("=") for a in args.cam_dropout or [])}

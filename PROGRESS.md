@@ -1595,20 +1595,45 @@ of data).
       ~0.4 × 1e-3 MSE; other failure (14 episodes) still + motion −5.5%, not credible. Sensitivity caveat:
       still time itself, which b3_still showed carries a little signal, registers only +0.4% here, so the
       probe rules out large missing information, not effects the size of b3_still's
-- [ ] **1b. More seeds for the still-time upper bound** (Karen, 2026-10-26) [ours]: is b3_still's
+- [x] **1b. More seeds for the still-time upper bound** (Karen, 2026-10-26) [ours]: is b3_still's
       −0.016 CE real? Seeds 3–9 for R0 and b3_still (10 per arm, 1a projects ±0.016), same section /
       flags / GPU type as seeds 0–2 (config.json of g0_r0_s0 vs b3_still_s0 differs only in
       `still_time`; code since then only adds branches that are off by default: C3 attention head
       gated on `fusion`, 127 tests pass). `NAME=g0_r0|b3_still SEEDS="3 4 5 6"|"7 8 9"
       SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 [EXTRA=--still-time] sbatch
       --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch` → jobs **18107218 / 18107219** (R0 3–6 / 7–9),
-      **18107220 / 18107221** (b3_still 3–6 / 7–9). `seeds()` in compare_arms / power_split /
+      **18107220 / 18107221** (b3_still 3–6 / 7–9); all four cancelled by hand at 12:06 before
+      training. Resubmitted as one RTX PRO job 18110430, cancelled while queued (est. start 22:52).
+      **Now all 10 seeds on L40S** (Karen, 2026-10-26): seeds 0–9 of both arms re-run on L40S as new
+      arms **`g0_r0_l40s` / `b3_still_l40s`** (seeds 0–2 included, so the pool is one GPU type; the
+      RTX PRO `g0_r0` / `b3_still` s0–2 stay as they were). First try 18111044–48 failed in 5 s
+      (the snapshot had no `.git`, which `code_snapshot` needs; it is now a git repo at 2df9f76 with
+      the frozen files as its uncommitted diff, code sha 17f1117e98cb). Jobs **18111662–18111666**
+      (name `vl1b_seeds`, `Dependency=singleton` so one GPU, one job at a time, ~7–13 h total) = seeds
+      0–1 / 2–3 / 4–5 / 6–7 / 8–9, 4 runs each (L40S ~20–40 min/run, under the 8 h limit),
+      `SEEDS="…" sbatch /move/u/karenvo/Projects/vl-snap-1b-seeds/scripts/seeds_1b.sbatch`, arms
+      interleaved per seed. Read: `compare_arms.py g0_r0_l40s b3_still_l40s` (same win rule). It runs
+      from a frozen code copy in `Projects/vl-snap-1b-seeds` (src/configs/scripts/tests copied
+      14:49, 132 tests pass there, `PYTHONPATH` → its src) because the repo's model.py was being
+      edited live; its train config equals g0_r0_s0's / b3_still_s0's apart from seed [ours].
+      `seeds()` in compare_arms / power_split /
       history_gain now finds every `<arm>_s<n>`, not just 0–2 (3-seed table reproduces exactly).
       Read: `.venv/bin/python scripts/compare_arms.py g0_r0 b3_still` (+ `power_split.py` for the
       new seed share). **Reading fixed before results:** same win rule as B2/B3 (CE interval
       excludes 0, AUC 1 s guard). If CE still does not resolve at 10 seeds, the stillness bound is
       below what this val set can detect and Track B closes with no history; if it does, history
       carries a small real stall signal (≈0.016 CE upper bound) and Gate B weighs that against cost
+      **Done 2026-10-27, no win** (all 20 L40S runs, jobs 18111662–66 completed 00:08).
+      `compare_arms.py g0_r0_l40s b3_still_l40s`, Δ vs R0 [95%], n = 10 vs 10: val CE −0.0073
+      [−0.0212, +0.0060], per-episode CE −0.0079 [−0.0204, +0.0038], stall_auc +0.021 [−0.005,
+      +0.047], frozen_auc +0.011 [−0.032, +0.051], AUC 1 s −0.010 [−0.048, +0.027]; verdict "no win",
+      targeted "no change". R0 10-seed val CE 3.6662 (seeds 3.643–3.681), b3_still 3.6589 ± 0.0088.
+      The RTX PRO 3-seed −0.016 shrank to −0.007 with more seeds. `power_split.py`: seeds now 65% of
+      the variance, projected half-width 0.009 at 20 seeds, so even 20 seeds would not resolve −0.007.
+      Reading (Claude, to be checked): gripper still time adds at most ~0.02 CE and probably ~0.007.
+      Per the fixed reading this closes the *still-time* question, but it no longer closes Track B:
+      C2a (pixel-stacked history) wins −0.045 CE, so still time was not an upper bound for image
+      history. Side product: a 10-seed L40S R0 reference (`g0_r0_l40s`) for a same-GPU C2a check
 - **You check:** B2 table and B3 breakdown
 - [ ] **Gate B: Karen confirms** whether history goes into the baseline, and at which gap
 
@@ -1656,6 +1681,165 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
 - [ ] C2. Channel stacking for history [Lars, alternative]: current + past RGB stacked as 6
       channels into one per-camera ResNet (first conv widened, pretrained weights copied to both
       halves and scaled ½). Needs Gate B's gap
+      **C2a: started without Gate B (Karen, 2026-10-26)** [ours]: Gate B's 1b test (still time) decides
+      *whether* history goes in, not the gap, so C2a reuses B2's 2 s gap and asks a different question:
+      does early fusion (pixels of now + past through one conv stack) see motion that B2's late fusion
+      (separate passes, joined features) misses? One change vs **`b2_gap2`** (primary reference; R0
+      secondary): same shared ResNet-18, gap, same-augmentation-draw past frame, has_past flag, section.
+      Code: `ValueModel(history=True, history_stack=True)` / `vl.train_baseline --history-gap 2
+      --history-stack` → data config `history: {gap_s: 2, stack: true}` (read back by `run_data_config`;
+      B2 runs: late fusion). `stack_conv1` widens conv1 to 6 channels, pretrained weights copied to both
+      halves and scaled ½ (past = now gives the pretrained response). Per camera [normalized now,
+      has_past · normalized past]: no past = ImageNet-mean grey past channels, so "no past" ≠ "nothing
+      moved"; head input [1024 feats, has_past] = 1025 → 256 → 201 (B2: 2049). ResNet-18 only. 11.50M
+      params (R0 11.49M). +6 tests (widened conv1 on [x, x] = original conv on x; head size, one shared
+      ResNet; past ignored when has_past = 0 and the grey stand-in exact; "no past" ≠ "still"; per-item
+      mask; gradients reach the past half of conv1; unbuilt combinations refused; config round trip);
+      138 pass. `b2_gap2_s0/best.pt` still loads strict. CPU smoke (2 steps) ok. Job **18112032** (one
+      **A5000**, as `b2_gap2`; seeds 0–2 back to back, ~2.5 h): `NAME=c2a_stack2
+      SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 EXTRA="--history-gap 2 --history-stack" sbatch
+      --job-name=vl-c2a --gres=gpu:a5000:1 scripts/cameras.sbatch` → `c2a_stack2_s{0,1,2}`. Read:
+      `compare_arms.py b2_gap2 c2a_stack2` and `compare_arms.py g0_r0 c2a_stack2`
+      **Reading fixed before results:** same win rule (CE interval excludes 0, shape MAE / AUC 1 s no
+      worse), plus stall_auc / frozen_auc as the targeted metric (paused successes were where B2 hurt).
+      B2-size effects are not resolvable here (1a: episodes dominate, ±0.026 even at 20 seeds), so only a
+      clearly larger effect counts. If it ties, that adds to the signal-limit reading. C2b (3 past frames,
+      1 / 2 / 4 s; needs a multi-frame loader) only if C2a looks promising
+      **Result (2026-10-26, job 18112032 COMPLETED on move3 A5000, 2 h 09 min; history {gap_s 2, stack true}
+      in all 3 configs; code_sha256 s0 368c372b9bb3 vs s1/s2 724b34f6f2cf, the only difference an untracked
+      `src/vl/advantages.py` that training does not import): **WIN, the first in Stage 5.5.**
+
+      | arm | best step | val CE (per seed) | val CE / episode | MAE | shape MAE | eval-repo MAE | AUC 1 s | stall_auc | frozen_auc |
+      |---|---|---|---|---|---|---|---|---|---|
+      | R0 | 6.5k / 7.5k / 4k | 3.672 (3.670 / 3.663 / 3.682) | 3.376 | 0.1136 | 0.0487 | 0.1826 | 0.621 | 0.800 | 0.820 |
+      | B2 gap 2 s (late fusion) | 7.5k × 3 | 3.667 (3.659 / 3.671 / 3.672) | 3.381 | 0.1110 | 0.0504 | 0.1776 | 0.606 | 0.823 | 0.830 |
+      | C2a gap 2 s stacked (early fusion) | 7.5k / 7.5k / 8k | **3.627** (3.615 / 3.625 / 3.639) | 3.360 | 0.1102 | 0.0501 | 0.1745 | 0.621 | **0.912** | **0.897** |
+
+      (C2a MAE / shape / eval-repo / AUC values = R0 + the paired Δ below.) Paired [95%] vs B2 gap 2: val CE
+      **−0.041 [−0.075, −0.008]**, stall_auc **+0.089 [+0.033, +0.163]**, frozen_auc +0.067 [−0.004, +0.184],
+      per-episode CE −0.021 [−0.051, +0.009], every other metric n.s. Vs R0: val CE **−0.045 [−0.080, −0.012]**,
+      stall_auc **+0.112 [+0.044, +0.201]**, frozen_auc **+0.077 [+0.010, +0.178]**, per-episode CE −0.016
+      [−0.045, +0.014], shape +0.0014 n.s., AUC 1 s 0.000. Every C2a seed is below every R0 and B2 seed.
+      Where (`vl.history_gain --arms b2_gap2 c2a_stack2 --report reports/c2a_gain.md`, vs R0): hold-phase
+      stalls still ≥ 4 s ΔCE **−0.242 [−0.379, −0.134]**, Δp_succ **−0.128** (B2 −0.041; b3_still −0.040),
+      ΔV −0.064; frames 20–40 s in ΔCE −0.204*, > 40 s −0.268*; long failures −0.123*. Not moved: first 2 s
+      (no past: ΔCE 0.000 / −0.006, so the grey stand-in is no shortcut), short and medium successes,
+      moving stalls. Cost: frozen successes that are still now also lose p_succ (−0.084*, V −0.060*), as
+      expected if they look like stalls, though their CE improves (−0.217 n.s.).
+      Reading (Claude, to be checked): (1) early fusion finds the stall signal Lars described, and B2's late
+      fusion of the same frames does not: the gain is about the fusion point, not the gap (same gap, frames,
+      flag; second differences: head 1025 vs 2049 inputs, grey vs feature masking). (2) It exceeds what
+      still time bought (Δp_succ on still stalls −0.128 vs −0.040), so **b3_still was not an upper bound on
+      image history** and the Track B "signal limit" reading (and the residual probe's "no missing
+      information") does not hold for pixels: the stacked frames carry something proprio stillness does
+      not (candidates: marker / holder state, sub-threshold motion; untested). (3) The gain is frame-weighted
+      from long episodes (per-episode CE n.s.), i.e. long stalls, which is where V was most optimistic.
+      Caveats: 3 seeds; A5000 like B2 but not R0's RTX PRO; best steps late (7.5k / 7.5k / 8k), no early overfit
+      **C2a gap 4 s (Karen, 2026-10-26)**: does the stacking gain hold or grow at a longer gap (slow stalls)?
+      One change vs `c2a_stack2` (gap 2 → 4 s); also paired vs `b2_gap4` (late fusion at 4 s, but that ran on
+      L40S, so GPU type is a second difference there). Runs from a **frozen code snapshot**
+      `Projects/vl-snap-c2a` (clone of 7deffba + the working-tree src/configs/scripts/tests at submission; its
+      `cameras.sbatch` cds there and sets `PYTHONPATH=$PWD/src`, log to the repo's data/runs) because C2b and
+      the visual check edit the live `src/` while its seeds start ~40 min apart; the snapshot's model gives
+      byte-identical outputs to the live code on `c2a_stack2_s0` and `b2_gap2_s0` (checked). Job **18115976**
+      (one A5000, move3, started 21:15): `NAME=c2a_stack4 SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1
+      EXTRA="--history-gap 4 --history-stack" sbatch --job-name=vl-c2a4 --gres=gpu:a5000:1 scripts/cameras.sbatch`
+      (in the snapshot) → `c2a_stack4_s{0,1,2}`. Read: `compare_arms.py c2a_stack2 c2a_stack4`, `compare_arms.py
+      b2_gap4 c2a_stack4`, `vl.history_gain --arms c2a_stack2 c2a_stack4`. A first submission from the live repo
+      (18115906) was cancelled while queued.
+      **Result (2026-10-26, job COMPLETED 2 h 06 min, best steps 7.5k × 3): no gain over 2 s; 2 s stays.**
+      Val CE 3.644 ± 0.011 (3.633 / 3.644 / 3.655) vs `c2a_stack2` 3.626: +0.017 [−0.007, +0.044] n.s., MAE
+      +0.003*; stall_auc +0.007 n.s. (0.912 ref). vs `b2_gap4` (L40S): CE −0.028 [−0.063, +0.008] n.s., stall_auc
+      +0.086*. vs R0: CE −0.028 [−0.065, +0.011] n.s., stall_auc +0.119*. So stacking still beats late fusion on
+      stalls at 4 s, but the CE win over R0 is no longer significant. `vl.history_gain --arms c2a_stack2
+      c2a_stack4 --report reports/c2a_gap4_gain.md` (vs R0, 2 s / 4 s): still stalls ΔCE −0.242* / −0.256*,
+      Δp_succ −0.128* / −0.147* (about the same); still frozen successes Δp_succ −0.084* / −0.149* (cost ~2×);
+      first 4 s of episodes ΔCE ≈ 0 / +0.01 to +0.02 (no past frame yet for 4 s); short-episode successes ΔCE
+      +0.027 / +0.062. Reading: a longer gap does not find more stalls; it only pays more on frozen successes
+      and early frames. For C2b this argues for short gaps (e.g. 0.5 / 1 / 2 s) rather than 1 / 2 / 4 s
+      **C2b setup (2026-10-26, code only, not submitted)** [ours]: several past frames stacked. Data config
+      `history: {gaps_s: [g1, g2, ...], stack: true}` (ascending, distinct, ≥ 1 frame; `gap_s` and `gaps_s`
+      exclusive); `FrameDataset` item `past = {images: {cam: (k, 3, H, W)}, has_past: (k,)}`, every past frame
+      through the same augmentation draw as frame t, each masked on its own (placeholder = frame t).
+      `ValueModel(history_stack=True, history_frames=k)`: conv1 3 (k + 1) channels, weights copied and scaled
+      1 / (k + 1); per camera [now, has_past_j · past_j …], head input 1024 + k flags; late fusion refuses k > 1;
+      a has_past width ≠ k raises. `vl.train_baseline --history-gaps 1 2 4 --history-stack` (11.52M params).
+      `build_model` / `run_data_config` read it back; single-gap runs unchanged (C2a and B2 checkpoints give
+      byte-identical outputs vs the snapshot). +8 tests (per-gap frames and masks, same augmentation draw,
+      config validation; conv1 width, flag count, each past frame used only when present per frame and item,
+      a still scene gives the pretrained first-layer response at k = 3, refusals, config round trip). CPU smoke
+      (2 steps, scratch train.yaml with `workers: 2`: the default 28 workers deadlock on a 4-core node, as in
+      Stage 5) ok. Cost: 4 decoded frames per camera per sample, so expect ~2× C2a (~80 min per seed on A5000).
+      Submit: `NAME=c2b_124 SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 EXTRA="--history-gaps 1 2 4
+      --history-stack" sbatch --job-name=vl-c2b --gres=gpu:a5000:1 scripts/cameras.sbatch` (reference
+      `c2a_stack2`). Gaps 1 / 2 / 4 s are a placeholder: pick after C2a gap 4 s reads.
+      **Submitted (Karen, 2026-10-26) with gaps 0.5 / 1 / 2 s** (short gaps, since 4 s only added cost; 0.5 s
+      rounds to 8 frames = 0.53 s at 15 fps): job **18118630**, one A5000, from frozen snapshot
+      `Projects/vl-snap-c2b` (same recipe as `vl-snap-c2a`; src identical to live at submission, 150 tests pass):
+      `NAME=c2b_05_1_2 SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 EXTRA="--history-gaps 0.5 1 2
+      --history-stack" sbatch --job-name=vl-c2b --gres=gpu:a5000:1 scripts/cameras.sbatch` → `c2b_05_1_2_s{0,1,2}`.
+      Read: `compare_arms.py c2a_stack2 c2b_05_1_2`, `vl.history_gain --arms c2a_stack2 c2b_05_1_2`.
+      **Result (2026-10-27, job COMPLETED 3 h 51 min on move3, best steps 7.5k / 7.5k / 8k): no win over C2a 2 s.**
+      Val CE 3.635 ± 0.009 (3.630 / 3.629 / 3.645) vs `c2a_stack2` 3.626: +0.008 [−0.015, +0.034] n.s.; CE /
+      episode −0.002 n.s., MAE +0.001 n.s., shape MAE +0.002 [−0.000, +0.004] (borderline), AUC 1 s 0.000, AUC 5 s
+      +0.023 n.s.; stall_auc −0.023 [−0.068, +0.012], frozen_auc −0.050 [−0.139, +0.011] (both n.s., both lean
+      worse). Verdict "no win / no change". Reading (Claude, to be checked): 3 past frames cost ~1.6× C2a and add
+      nothing, so *how long* things have been still (the C2b motivation) is not used, or not learnable, at this
+      data size. `vl.history_gain` not run yet
+      **C2a gap 1 s queued (Karen, 2026-10-27)**: the other side of 2 s (4 s was worse), before fixing C2a's gap.
+      Job **18121126**, one A5000, `--dependency=afterany:18118630` (starts after C2b), same snapshot
+      `vl-snap-c2b`: `NAME=c2a_stack1 ... EXTRA="--history-gap 1 --history-stack"` → `c2a_stack1_s{0,1,2}`.
+      Read: `compare_arms.py c2a_stack2 c2a_stack1`, `vl.history_gain --arms c2a_stack2 c2a_stack1`
+      **Result (2026-10-27, job COMPLETED 2 h 16 min on move3, started 03:35 right after C2b; best steps 7.5k × 3):
+      no win over 2 s by the rule, but at least as good.** Val CE 3.615 ± 0.007 (3.613 / 3.609 / 3.622) vs
+      `c2a_stack2` 3.626: −0.012 [−0.031, +0.007] n.s.; CE / episode −0.017 [−0.032, −0.001]*; MAE −0.001 n.s.,
+      shape MAE +0.001 n.s., AUC 1 s −0.002 n.s., AUC 5 s +0.065 [−0.011, +0.131] n.s.; stall_auc −0.021, frozen_auc
+      −0.020 (both n.s.). Verdict "no win / no change". CE across gaps: 4 s 3.644, 2 s 3.626, 1 s 3.615, i.e.
+      shorter is no worse, so 1 s or 2 s for C2a. `vl.history_gain` not run yet (would show whether 1 s gains on
+      early frames, as the 4 s read predicts)
+      **C2a same-GPU check (Karen, 2026-10-27)**: removes the A5000-vs-RTX PRO caveat by comparing C2a with the
+      10-seed L40S R0 (`g0_r0_l40s`). Same snapshot `Projects/vl-snap-c2a`, same flags as `c2a_stack2`, one seed per
+      job on L40S: job **18120760** (seed 0), then **18121003** (seeds 1–2 back to back, `--dependency=afterany`), one
+      GPU at a time (Karen, 2026-10-27; 18120761 / 18120762 cancelled 4 min in, partial run dirs deleted) →
+      `c2a_stack2_l40s_s{0,1,2}`. Read: `compare_arms.py g0_r0_l40s c2a_stack2_l40s` (same win rule; 10 vs 3 seeds)
+      **Result (2026-10-27, both jobs COMPLETED, 43 min + 1 h 32 min; best steps 7.5k / 7.5k / 8k): WIN, so the C2a
+      gain is not a GPU artefact.** Val CE 3.627 ± 0.013 (3.614 / 3.627 / 3.641) vs `g0_r0_l40s` 3.666 ± 0.012:
+      −0.039 [−0.073, −0.004]*; stall_auc +0.109 [+0.045, +0.186]* (ref 0.801), frozen_auc +0.085 [+0.011, +0.175]*
+      (ref 0.808); CE / episode −0.010, MAE −0.002, shape MAE 0.000, eval-repo MAE −0.006, AUC 1 s −0.007 (all
+      n.s.). Verdict "WIN, better: stall_auc, frozen_auc". The L40S C2a CE (3.627) matches the A5000 run (3.626)
+      **C2a visual check (2026-10-26, running on CPU)**: `.venv/bin/python -m vl.c2a_visual` (new; +1 test) →
+      `reports/c2a_visual.md`, `reports/figures/stage5_5/c2a_visual/`. (1) Counterfactual past frames on 100
+      sampled hold-phase frames per group, 3 seeds: V with the real past vs past = frame t − 1 ("nothing moved",
+      with real frame-to-frame noise) vs no past. An exact copy of frame t is also reported but is out of
+      distribution (no two decoded video frames are identical): on a tiny trial one still stall went from V −0.51
+      (real past) to −0.07 (exact copy), so the first design, which used the copy as "still", was dropped.
+      (2) Sheets: still stalls where C2a lowers p_succ most vs R0, still frozen successes (the cost), moving
+      successes (control): current / past / |diff| × 4 / blurred |gradient × input| over current and past frames
+      (seed 0; the hand-built saliency forward is asserted equal to the model's)
+      **Result (2026-10-26, CPU, 500 frames × 3 seeds; seed sd ≤ 0.02 everywhere):**
+
+      | group (hold phase) | episodes | target | V real past | V past = t − 1 | V no past | real − (t − 1) | real − none |
+      |---|---|---|---|---|---|---|---|
+      | stall, still ≥ 4 s | 32 | −0.581 | −0.508 | −0.519 | −0.411 | +0.011 | **−0.097** |
+      | stall, moving | 45 | −0.626 | −0.445 | −0.518 | −0.452 | **+0.073** | +0.007 |
+      | success frozen, still | 13 | −0.069 | −0.319 | −0.364 | −0.236 | +0.045 | **−0.083** |
+      | success frozen, moving | 13 | −0.173 | −0.373 | −0.493 | −0.379 | **+0.120** | +0.006 |
+      | success, pause < 2 s | 22 | −0.042 | −0.284 | −0.425 | −0.334 | **+0.142** | +0.050 |
+
+      (Exact copy of frame t: within 0.01 of t − 1 on still frames, 0.03–0.05 lower on moving ones.)
+      Reading (Claude, to be checked): **C2a is a pixel stillness detector.** On still frames the real 2 s-old
+      frame and a 1/15 s-old one give the same V (+0.011, +0.045), and both lower V by ~0.09 vs no past; on
+      moving frames the real past *raises* V by 0.07–0.14 vs a "nothing moved" past. So V reads "did anything
+      change in the last 2 s", both ways. The sheets agree: on the still stalls C2a lowers most, now and past
+      are visually identical (|diff| near 0 apart from an auto-exposure shift on one side-camera frame,
+      which V ignores: real ≈ t − 1), the marker hovers over the holder; the frozen successes C2a hurts look
+      the same (still, marker at the holder), so that cost is the same signal, not a separate error. Saliency
+      (gradient × input) sits on the gripper / marker tip and the holder in both frames and both groups: not
+      discriminative, it does not show a stall-specific cue. Open: why pixel stillness buys ~3× what
+      `b3_still`'s gripper still time did (Δp_succ −0.128 vs −0.040). Candidates: finer / whole-scene motion
+      (wrist rotation, marker in the gripper) vs a 1 cm/s gripper-position threshold, or that early fusion lets
+      stillness combine with scene features inside the backbone. Cheap check: correlate (real − none) with
+      `stall_s` per frame. C2b (1 / 2 / 4 s) would give the model *how long* things have been still
 - [ ] C3. Transformer fusion [Lars]: each image (per camera, per time step) → one token
       (ResNet feature + learned camera and time embeddings), a learnable readout/query token
       attends to all image tokens (1–2 small transformer layers), readout → same 201-bin head.
@@ -1776,6 +1960,54 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       weights track contributions in direction (per-frame rank correlation with the drop share
       0.40 ± 0.12) but overstate the wrist on failures (weight 0.55–0.59 vs share 0.40–0.43). History
       weight: not applicable (no history token in C3)
+- [x] **C5. Wrist camera dropout** (Karen, 2026-10-26) [ours; follow-up to C4 reading (2) and
+      `reports/wrist_optimism.md`]: does training without the wrist on some samples cut V's optimism on
+      not-success frames? One change vs R0: `ValueModel(cam_dropout={"wrist_left": 0.25})` /
+      `vl.train_baseline --cam-dropout wrist_left=0.25` zeroes the wrist's 512-d backbone feature for each
+      training sample with p = 0.25 before the head (no rescaling; p, zeroing and wrist-only are our
+      choices); eval mode unchanged, no new parameters, recorded as `cam_dropout` in config.json and read
+      back by `run_data_config`. Concat head without history only (raises otherwise). +5 tests (block
+      zeroed whole or not at all per sample at rate p, side untouched; off in eval and loads into a plain
+      R0 model; p = 1 makes the head ignore the wrist image; bad camera / p / history / attention refused;
+      config round trip); 132 pass. CPU smoke (2 steps) ok. `cameras.sbatch CONTRIB=1` now runs
+      `vl.camera_contrib` after each seed. Job **18110274** (seeds 0–2 back to back on one GPU; submitted for rtxpro6000, moved
+      while pending to **L40S** (Karen), so unlike R0's rtxpro6000 runs: GPU type differs from the reference):
+      `NAME=camdrop SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 CONTRIB=1 EXTRA="--cam-dropout
+      wrist_left=0.25" sbatch --job-name=vl-camdrop --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch`, then
+      `scontrol update JobId=18110274 TresPerNode=gres/gpu:l40s:1` →
+      `camdrop_s{0,1,2}`. Read: `compare_arms.py g0_r0 camdrop`, `vl.camera_contrib --report g0_r0 camdrop`.
+      **Reading fixed before results:** same win rule as B2/B3 (val CE interval excludes 0, shape MAE and
+      AUC 1 s no worse). Mechanism check: not-success bias (V − target, R0 +0.154) and wrist ΔV on
+      not-success frames (R0 +0.027) go down while the hold-phase stall AUC success vs not (R0 0.915 with
+      wrist) does not drop. Prior: the wrist explains only ~0.03 of the +0.15 optimism, so a CE gain, if
+      any, is likely below what 3 seeds resolve (power_split: ±0.024)
+      **Result (2026-10-26, job 18110274 COMPLETED on move4 L40S, 1 h 23 min for 3 seeds + masking): no win;
+      the wrist's share shrinks but the optimism does not.**
+
+      | arm | best step | val CE | MAE | shape MAE | eval-repo MAE | AUC 1 s | AUC 5 s | AUC 10 s |
+      |---|---|---|---|---|---|---|---|---|
+      | R0 | 6.5k / 7.5k / 4k | 3.672 ± 0.010 | 0.1136 | 0.0487 | 0.1826 | 0.621 | 0.610 | 0.821 |
+      | C5 wrist dropout 0.25 | 6.5k / 7.5k / 7.5k | 3.662 ± 0.007 | 0.1150 | 0.0473 | 0.1857 | 0.627 | 0.614 | 0.842 |
+
+      Paired vs R0 [95%]: val CE −0.010 [−0.037, +0.020] (lower on all 3 seeds: 3.655 / 3.662 / 3.668 vs
+      3.670 / 3.663 / 3.682), shape MAE −0.0014 [−0.0032, +0.0001], AUC 10 s +0.021 [−0.028, +0.075], stall_auc
+      −0.008, frozen_auc +0.010: nothing credible. Mechanism (`scripts/c5_mechanism.py`, `mean` masking, means
+      over 3 seeds):
+
+      | | R0 | C5 |
+      |---|---|---|
+      | not-success bias V − target (per seed) | +0.154 (0.146 / 0.161 / 0.157) | +0.156 (0.149 / 0.163 / 0.155) |
+      | not-success wrist ΔV / ΔCE | +0.027 / +0.133 | +0.010 / +0.076 |
+      | not-success bias with wrist masked | +0.127 | +0.146 |
+      | success wrist ΔV / ΔCE | +0.055 / −0.947 | +0.028 / −0.195 |
+      | hold-phase stall AUC success vs not, with / without wrist | 0.915 / 0.810 | 0.905 / 0.834 |
+
+      Reading (Claude, to be checked): dropout did what it mechanically should, the model leans less on the
+      wrist (its ΔV and ΔCE fall by half or more, and V without the wrist is better: AUC 0.81 → 0.83), but the
+      optimism on failures stays at +0.155: what the wrist stopped adding, the side-camera-only path now adds.
+      So the C4 "wrist makes failures look hopeful" effect is not the source of V's optimism; the optimism is
+      in what both cameras show (failures that look like successes up to the end), consistent with Track B's
+      signal limit. Small cost on the success-vs-stall separation (0.915 → 0.905, not tested). Not adopted
 - **You check:** C1–C3 results, C4 attention plots
 - [ ] **Gate C: Karen confirms** the architecture
 
@@ -1793,6 +2025,25 @@ and Rohan (rolls out the policy and keeps successes; 50% → 80–90%). The miss
 learning + RL, which is this project; likely done alongside Rohan.
 - [ ] 6.0 Setup with Lars/Rohan: π₀.₅ DROID checkpoint, compute (IRIS), their rollout data
       format and success labels; which task(s) to start on. **Gate: Karen confirms** the setup
+      **Prep (2026-10-27, offline, no robot)** [ours]: the lab's `pi05_droid` checkpoint is cached read-only at
+      `/iris/u/rbhowmik/cache/openpi/openpi-assets/checkpoints/pi05_droid` (12 GB; Rohan serves it from openpi
+      215abfb). Own clone of openpi at that commit in `/iris/u/ankile/karenvo/pi05/openpi` (env not built yet:
+      `uv sync` needs Karen's OK). `scripts/pi05_dump_frames.py` (done: 64 random val frames, side_1 as DROID's
+      exterior camera, joint/gripper state; joints in rad, gripper 0–1 like DROID) →
+      `/iris/u/ankile/karenvo/pi05/frames_val64.npz`; `scripts/pi05_smoke.py` (openpi env; sbatch
+      `/iris/u/ankile/karenvo/pi05/pi05_smoke.sbatch`, one L40S): load time / memory, `policy.infer` latency and
+      action ranges, final-layer prefix-token shape and extraction throughput (→ hours for all 439k frames),
+      pooled features saved for a quick probe. Prompt "insert the marker into the holder" [ours] (task string is
+      `marker_d2`). **Ran 2026-10-27** (Karen built the env; job 18121127, move4 L40S, 3.5 min; result copied to
+      `reports/pi05_smoke_result.json`): loads in 45 s, 6.3 GB GPU after load, 9.5 GB peak. `policy.infer` 84 ms
+      median (first call 33 s, compile): 15 × 8 chunks, finite, joint velocities in [−0.93, +1.07], gripper
+      [−0.01, 0.98], i.e. in DROID's range on Mulligan frames. Prefix tokens (final layer, final norm) 968 × 2048
+      bf16 per frame, 559 valid (2 cameras × 256 image tokens + prompt/state; the 3rd image slot is masked).
+      Extraction ~20 frames/s on one L40S at batch 1/8/32 (compute-bound) → ~6 GPU-hours for all 439k
+      train+val frames on one GPU (~1 h on 6–8). Full valid tokens = 2.3 MB/frame → ~1 TB, so pool or subsample as
+      planned. Units check on recorded Mulligan `action.joint_velocity`: bounded at |1.0| like DROID's normalized
+      actions, but its spread is close to the measured joint velocity in rad/s (std ratio ~1–2), so the scale is
+      still ambiguous: ask Lars before using it as a policy target. Actions not yet compared against recorded ones
 - [ ] 6.1 Value head on π₀.₅ [Lars]: a value head that cross-attends into the π₀.₅ DROID
       model's tokens (frozen VLA first, then low-LR fine-tune), same 201-bin targets and Stage 5.5
       inputs. Compare on the same val set against the Stage 5.5 baseline
@@ -1806,9 +2057,25 @@ learning + RL, which is this project; likely done alongside Rohan.
       same normalization, terminals handled explicitly, lookahead n chosen in seconds then
       converted to frames (do not copy RECAP's frame counts)
 - [ ] Threshold advantages into positive/negative indicators (as in RECAP)
-- [ ] Inspect advantage distributions and positive/negative examples first. A rising value is
+- [~] Inspect advantage distributions and positive/negative examples first. A rising value is
       not automatically a positive advantage (progress must beat the cost of elapsed time).
       An overfit V gives ~zero advantages on its training episodes: consider out-of-fold V.
+      **Done on val with R0 (2026-10-26, Karen's request ahead of the merge gate; no training)**:
+      `.venv/bin/python -m vl.advantages` → `reports/advantages.md`, `reports/figures/stage6/advantages/`,
+      tests `tests/test_advantages.py`. R0 = ensemble ×3 + centred 0.5 s; control = mean train target per
+      (repo, second); n = 1/2/5 s; RECAP's "30% percentile" threshold read both ways. Result: labels agree with
+      outcome in direction and are not a clock artefact, but weakly: mid-episode, time-matched, successes get
+      +6.1 pp more positives [+2.7, +9.3] at n = 2 s (+13.7 at 5 s); still-gripper pause-before-seat vs stall
+      +12.7 pp [+2.9, +25.2] (23 vs 13 episodes). Most of the raw 29 pp split (interior frames) comes from episode length and the
+      known outcome in the last n s. Labels flip 0.62/s (single unsmoothed model 2.1/s). **Caution:** 72% of
+      failure-ending frames are labelled positive (V already below −0.5). Proposed [ours]: n = 5 s first, 2 s as
+      an arm; decide on failure-ending frames before policy training. Still to do: out-of-fold R0 for train
+      episodes (after the freeze); fast-vs-slow success check time-matched
+      **C2a as V (2026-10-27, `reports/advantages.md` item 8)**: ensemble ×3 of `c2a_stack2` + centred 0.5 s added
+      as a fourth source. Stalls get fewer positives (mid-episode, n = 2 s: 53% → 43%), but so do pauses before a
+      seat (65% → 54%), so the time-matched pause-vs-stall split is unchanged (+13.1 pp [+6.5, +20.7] vs +12.7
+      [+2.9, +25.2]); successes vs failures +7.5 vs +6.1; flips 0.52/s vs 0.62/s; 73% label agreement with R0.
+      Neither a reason to prefer nor to reject C2a for advantages
 - [ ] π₀.₅ advantage-conditioned fine-tuning; compare with vs without V (IRIS cluster). Lars:
       conceptually simpler than learning V but needs more compute.
 - [ ] Fair comparison: matched initialization, budget, preprocessing and data mixture; include a

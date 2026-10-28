@@ -297,6 +297,44 @@ def test_history_gap_below_one_frame_is_refused(tmp_path):
         FrameDataset(index(tmp_path), hist_cfg(0.01))
 
 
+# C2b: several past frames (`history: {gaps_s: [...]}`), each with its own has_past flag [ours].
+
+def test_multi_gap_items_are_frames_t_minus_each_gap_with_per_gap_masks(tmp_path):
+    gaps = [1 / FPS, 2 / FPS, 4 / FPS]                  # 1, 2, 4 frames back
+    ds = FrameDataset(index(tmp_path), cfg() | {"history": {"gaps_s": gaps}})
+    for i in [0, 1, 3, 4, 9]:
+        item = ds[i]
+        assert item["past"]["has_past"].tolist() == [float(i >= 1), float(i >= 2), float(i >= 4)]
+        for c in cfg()["cameras"]:
+            past = item["past"]["images"][c]
+            assert past.shape == (3, 3, 16, 16) and past.dtype == torch.uint8
+            now = frame_number(item["images"][c].permute(1, 2, 0).numpy())
+            assert now == 5 + i
+            for j, k in enumerate([1, 2, 4]):
+                was = frame_number(past[j].permute(1, 2, 0).numpy())
+                assert was == (5 + i - k if i >= k else now)   # before the start: placeholder = frame t
+
+
+def test_multi_gap_past_frames_get_the_same_augmentation_draw(tmp_path):
+    idx = index(tmp_path)
+    ds = FrameDataset(idx, cfg() | {"history": {"gaps_s": [1 / FPS, 2 / FPS]}}, augment={"full": FULL} | AUG)
+    ds.t = np.full(len(idx), 6)
+    ds.gaps_frames = [np.zeros(len(idx), int)] * 2      # every past frame = frame t itself
+    torch.manual_seed(0)
+    for i in range(3):
+        item = ds[i]
+        for c in cfg()["cameras"]:
+            for j in range(2):
+                assert torch.equal(item["images"][c], item["past"]["images"][c][j])
+
+
+def test_multi_gap_config_is_validated(tmp_path):
+    import pytest
+    for h in ({"gaps_s": [0.01, 2 / FPS]}, {"gaps_s": [2 / FPS, 1 / FPS]}, {"gaps_s": [1 / FPS], "gap_s": 1 / FPS}):
+        with pytest.raises(ValueError):
+            FrameDataset(index(tmp_path), cfg() | {"history": h})
+
+
 def proprio_table(n=30):
     """One episode at 15 Hz: moving 0.5 m/s up to frame 11, then still. Speed compares frames t and t - 7,
     so frame 18 (vs 11) is the first still frame."""

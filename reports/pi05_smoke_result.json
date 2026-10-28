@@ -1,0 +1,57 @@
+{
+  "devices": [
+    "cuda:0"
+  ],
+  "checkpoint": "/iris/u/rbhowmik/cache/openpi/openpi-assets/checkpoints/pi05_droid",
+  "prompt": "insert the marker into the holder",
+  "n_frames": 64,
+  "load_s": 44.6,
+  "mem_after_load_gb": {
+    "bytes_in_use": 6.25,
+    "peak_bytes_in_use": 6.25
+  },
+  "infer": {
+    "first_call_s": 32.73,
+    "median_ms": 84.2,
+    "action_shape": [
+      15,
+      8
+    ],
+    "joint_vel_range": [
+      -0.9309280119673012,
+      1.0654884726592302
+    ],
+    "gripper_range": [
+      -0.011265300598025323,
+      0.9795148418070675
+    ],
+    "finite": true
+  },
+  "prefix": {
+    "tokens_shape": [
+      1,
+      968,
+      2048
+    ],
+    "dtype": "bfloat16",
+    "valid_tokens": 559,
+    "throughput": {
+      "1": {
+        "frames_per_s": 19.7,
+        "hours_all_frames": 6.2
+      },
+      "8": {
+        "frames_per_s": 20.2,
+        "hours_all_frames": 6.03
+      },
+      "32": {
+        "frames_per_s": 19.9,
+        "hours_all_frames": 6.12
+      }
+    }
+  },
+  "mem_peak_gb": {
+    "bytes_in_use": 6.3,
+    "peak_bytes_in_use": 9.52
+  }
+}

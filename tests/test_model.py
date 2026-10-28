@@ -651,3 +651,134 @@ def test_run_data_config_reads_cam_dropout(tmp_path):
     assert build_model(cfg, {"n_bins": 201, "v_min": -1.0, "v_max": 0.0}, pretrained=False).cam_dropout == {"wrist_left": 0.25}
     (tmp_path / "config.json").write_text(json.dumps({}))       # earlier runs: none
     assert run_data_config(base, tmp_path)["cam_dropout"] == {}
+
+
+# C2a channel stacking (Stage 5.5 C2 [Lars, alternative]; details ours): current + past frame stacked as
+# 6 channels into the shared ResNet-18 (early fusion), vs B2's separate passes (late fusion).
+
+def stack_model(**kw):
+    torch.manual_seed(0)
+    return ValueModel(CAMS, pretrained=False, history=True, history_stack=True, **kw).eval()
+
+
+def test_stacked_conv1_on_two_copies_equals_the_original_conv():
+    import torchvision
+    from vl.model import stack_conv1
+    torch.manual_seed(0)
+    net = torchvision.models.resnet18(weights=None).eval()
+    x = torch.randn(2, 3, 32, 32)
+    ref = net.conv1(x)
+    stack_conv1(net, 2)
+    assert net.conv1.weight.shape == (64, 6, 7, 7)
+    assert torch.allclose(net.conv1(torch.cat([x, x], dim=1)), ref, atol=1e-5)
+
+
+def test_stack_head_sees_one_feature_per_camera_plus_flag():
+    m = stack_model()
+    assert m.head[0].in_features == 2 * 512 + 1
+    assert m.backbone.conv1.in_channels == 6
+    assert len([k for k in m.modules() if k.__class__.__name__ == "ResNet"]) == 1
+
+
+def test_stack_past_matters_only_when_present_and_missing_past_is_grey():
+    m = stack_model()
+    x, a, b = images(), images(seed=1), images(seed=2)
+    with torch.no_grad():
+        assert not torch.allclose(m(x, past=past(a, [1, 1])), m(x, past=past(b, [1, 1])))
+        assert torch.allclose(m(x, past=past(a, [0, 0])), m(x, past=past(b, [0, 0])), atol=1e-6)
+        # no past: past channels = 0 after normalization (ImageNet-mean grey), flag 0
+        grey = torch.cat([m.normalize(x[c]) for c in CAMS])
+        f = m.backbone(torch.cat([grey, torch.zeros_like(grey)], dim=1))
+        f = torch.cat([*f.chunk(2), torch.zeros(2, 1)], dim=1)
+        assert torch.allclose(m(x, past=past(a, [0, 0])), m.head(f), atol=1e-5)
+        # "no past" differs from "nothing moved" (past = now)
+        assert not torch.allclose(m(x, past=past(x, [0, 0])), m(x, past=past(x, [1, 1])))
+        mixed, ref = m(x, past=past(a, [1, 0])), m(x, past=past(b, [1, 0]))
+        assert not torch.allclose(mixed[0], ref[0]) and torch.allclose(mixed[1], ref[1], atol=1e-6)
+
+
+def test_stack_gradients_reach_the_past_half_of_conv1():
+    m = stack_model().train()
+    x, xp, y = images(b=4), images(b=4, seed=1), torch.tensor([10, 60, 120, 190])
+    value_loss(m(x, past=past(xp, [1, 1, 1, 1])), y).backward()
+    assert m.backbone.conv1.weight.grad[:, 3:].abs().sum() > 0
+
+
+def test_stack_refuses_unbuilt_combinations():
+    with pytest.raises(ValueError):
+        ValueModel(CAMS, pretrained=False, history_stack=True)              # needs history
+    with pytest.raises(ValueError):
+        ValueModel(CAMS, pretrained=False, history=True, history_stack=True, backbone="dinov2_vits14_reg")
+
+
+def test_run_data_config_and_build_model_carry_history_stack(tmp_path):
+    import json
+    from vl.model import build_model, run_data_config
+    base = {"cameras": CAMS, "proprio": {"enabled": False}, "imagenet_mean": [0.485, 0.456, 0.406],
+            "imagenet_std": [0.229, 0.224, 0.225], "image_size": 224}
+    tc = {"n_bins": 201, "v_min": -1.0, "v_max": 0.0}
+    (tmp_path / "config.json").write_text(json.dumps({"history": {"gap_s": 2.0, "stack": True}}))
+    assert build_model(run_data_config(base, tmp_path), tc, pretrained=False).history_stack
+    (tmp_path / "config.json").write_text(json.dumps({"history": {"gap_s": 2.0}}))   # B2 runs: late fusion
+    m = build_model(run_data_config(base, tmp_path), tc, pretrained=False)
+    assert m.history and not m.history_stack
+
+
+# C2b: k past frames stacked as 3 (k + 1) channels, one has_past flag per past frame.
+
+def multi_past(xs, has):
+    return {"images": {c: torch.stack([x[c] for x in xs], dim=1) for c in CAMS},
+            "has_past": torch.tensor(has, dtype=torch.float32)}
+
+
+def test_multi_stack_widens_conv1_and_adds_one_flag_per_past_frame():
+    m = stack_model(history_frames=3)
+    assert m.backbone.conv1.in_channels == 12
+    assert m.head[0].in_features == 2 * 512 + 3
+
+
+def test_multi_stack_each_past_frame_matters_only_when_present():
+    m = stack_model(history_frames=3)
+    x, a, b = images(), images(seed=1), images(seed=2)
+    with torch.no_grad():
+        base = m(x, past=multi_past([a, a, a], [[1, 1, 1]] * 2))
+        assert not torch.allclose(base, m(x, past=multi_past([a, b, a], [[1, 1, 1]] * 2)))   # middle frame used
+        # a missing frame's image is ignored, per frame and per item
+        assert torch.allclose(m(x, past=multi_past([a, a, a], [[1, 1, 0]] * 2)),
+                              m(x, past=multi_past([a, a, b], [[1, 1, 0]] * 2)), atol=1e-6)
+        mixed = m(x, past=multi_past([a, b, a], [[1, 0, 1], [1, 1, 1]]))
+        ref = m(x, past=multi_past([a, x, a], [[1, 0, 1], [1, 1, 1]]))
+        assert torch.allclose(mixed[0], ref[0], atol=1e-6) and not torch.allclose(mixed[1], ref[1])
+
+
+def test_multi_stack_still_scene_gives_the_pretrained_first_layer_response():
+    import torchvision
+    from vl.model import stack_conv1
+    torch.manual_seed(0)
+    net = torchvision.models.resnet18(weights=None).eval()
+    x = torch.randn(2, 3, 32, 32)
+    ref = net.conv1(x)
+    stack_conv1(net, 4)
+    assert torch.allclose(net.conv1(torch.cat([x] * 4, dim=1)), ref, atol=1e-5)
+
+
+def test_multi_stack_refuses_late_fusion_and_wrong_flag_count():
+    with pytest.raises(ValueError):
+        ValueModel(CAMS, pretrained=False, history=True, history_frames=3)          # late fusion: one past only
+    m = stack_model(history_frames=3)
+    x = images()
+    with pytest.raises(ValueError):
+        m(x, past=multi_past([x, x], [[1, 1]] * 2))
+
+
+def test_build_model_reads_multi_gap_history(tmp_path):
+    import json
+    from vl.model import build_model, run_data_config
+    base = {"cameras": CAMS, "proprio": {"enabled": False}, "imagenet_mean": [0.485, 0.456, 0.406],
+            "imagenet_std": [0.229, 0.224, 0.225], "image_size": 224}
+    tc = {"n_bins": 201, "v_min": -1.0, "v_max": 0.0}
+    (tmp_path / "config.json").write_text(json.dumps({"history": {"gaps_s": [1.0, 2.0, 4.0], "stack": True}}))
+    m = build_model(run_data_config(base, tmp_path), tc, pretrained=False)
+    assert m.history and m.history_stack and m.history_frames == 3
+    (tmp_path / "config.json").write_text(json.dumps({"history": {"gap_s": 2.0, "stack": True}}))   # C2a
+    assert build_model(run_data_config(base, tmp_path), tc, pretrained=False).history_frames == 1

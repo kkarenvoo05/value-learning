@@ -43,6 +43,9 @@ the frame g seconds before t (round(g * fps) frames) of the same episode, throug
 the *same* augmentation draw as frame t (the torch RNG state is replayed per camera), so a robot
 that has not moved gives two identical inputs. When t - gap < 0 the past does not exist: has_past = 0
 and the past image is a copy of frame t, which the model masks out (no first-frame fallback).
+Several past frames (Stage 5.5 C2b [ours]), data config `history: {gaps_s: [g1, g2, ...]}` (ascending):
+    "past": {"images": {cam: uint8 (k, 3, 224, 224)}, "has_past": float (k,)}
+one frame per gap, each through the same augmentation draw as frame t and masked on its own.
 
 Still time (Stage 5.5 B3 follow-up, upper bound for history [ours]), data config `still_time.enabled`:
 items also carry "still": float32 tensor (1,), seconds since the gripper last moved faster than
@@ -234,10 +237,20 @@ class FrameDataset(Dataset):
         self.value = self.index.value.to_numpy()
         self.proprio = load_proprio(self.index, cfg) if cfg.get("proprio", {}).get("enabled") else None
         self.still = load_still(self.index, cfg) if (cfg.get("still_time") or {}).get("enabled") else None
-        gap = (cfg.get("history") or {}).get("gap_s")
+        hist = cfg.get("history") or {}
+        gap, gaps = hist.get("gap_s"), hist.get("gaps_s")
+        if gap is not None and gaps is not None:
+            raise ValueError("history takes gap_s (one past frame) or gaps_s (several), not both")
         self.gap_frames = None if gap is None else np.round(gap * self.fps).astype(int)
         if self.gap_frames is not None and (self.gap_frames < 1).any():
             raise ValueError(f"history gap {gap} s is shorter than one frame")
+        self.gaps_frames = None
+        if gaps is not None:
+            if list(gaps) != sorted(set(gaps)):
+                raise ValueError(f"history gaps_s {gaps} must be distinct and ascending")
+            self.gaps_frames = [np.round(g * self.fps).astype(int) for g in gaps]
+            if any((g < 1).any() for g in self.gaps_frames):
+                raise ValueError(f"history gaps_s {gaps}: a gap is shorter than one frame")
         self._reader, self._pid = None, None
 
     def __len__(self):
@@ -270,6 +283,8 @@ class FrameDataset(Dataset):
         return x
 
     def __getitem__(self, i):
+        if self.gaps_frames is not None:
+            return self._multi_past_item(i)
         t = int(self.t[i])
         tp = None if self.gap_frames is None else t - int(self.gap_frames[i])
         images, past = {}, {}
@@ -286,6 +301,33 @@ class FrameDataset(Dataset):
         item = {"images": images, "bin": int(self.bin[i]), "value": float(self.value[i]), "row": i}
         if tp is not None:
             item["past"] = {"images": past, "has_past": float(tp >= 0)}
+        if self.proprio is not None:
+            item["proprio"] = torch.from_numpy(self.proprio[i].copy())
+        if self.still is not None:
+            item["still"] = torch.tensor([self.still[i]], dtype=torch.float32)
+        return item
+
+
+    def _multi_past_item(self, i):
+        """C2b: frame t plus one past frame per gap, all through the same augmentation draw."""
+        t = int(self.t[i])
+        tps = [t - int(g[i]) for g in self.gaps_frames]
+        images, past = {}, {}
+        for c in self.cams:
+            rng = torch.get_rng_state()
+            images[c] = self._input(c, i, t)
+            after = torch.get_rng_state()
+            frames = []
+            for tp in tps:
+                if tp >= 0:
+                    torch.set_rng_state(rng)
+                    frames.append(self._input(c, i, tp))
+                else:
+                    frames.append(images[c].clone())    # no past yet: placeholder, masked by has_past = 0
+            torch.set_rng_state(after)
+            past[c] = torch.stack(frames)
+        item = {"images": images, "bin": int(self.bin[i]), "value": float(self.value[i]), "row": i,
+                "past": {"images": past, "has_past": torch.tensor([float(tp >= 0) for tp in tps])}}
         if self.proprio is not None:
             item["proprio"] = torch.from_numpy(self.proprio[i].copy())
         if self.still is not None:
