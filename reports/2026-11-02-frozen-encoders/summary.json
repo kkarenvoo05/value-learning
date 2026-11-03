@@ -1,0 +1,50 @@
+{
+  "title": "Where π₀.₅'s value noise comes from",
+  "status": "P1c step 2 queued (job 18279695)",
+  "question": "Is the jitter in π₀.₅ value models already in its image features, added by its language-model layers, or added by fine-tuning?",
+  "verdict": [
+    "Frozen π₀.₅ SigLIP is as steady as an ImageNet ResNet (head SNR 0.172 vs 0.168, 825 episodes); robot training did not make the vision features noisy.",
+    "Two separate drops, each about halving head SNR: the frozen language-model layers (0.122 → 0.059) and SigLIP fine-tuning (0.172 → 0.084).",
+    "Layout variety, not episode count: at 375 episodes, fresh layouts give SigLIP 0.194 vs 0.122 on the fixed layouts."
+  ],
+  "tiles": [
+    {"label": "Frozen SigLIP head SNR", "value": "0.172", "sub": "≈ ImageNet ResNet 0.168 (825 ep)"},
+    {"label": "Frozen LLM final layer", "value": "0.059", "sub": "vs its SigLIP input 0.122 (375 fixed ep)"},
+    {"label": "Fine-tuned SigLIP", "value": "0.084", "sub": "half of frozen 0.172"}
+  ],
+  "charts": [
+    {
+      "title": "Head SNR at 2 s, frozen vs fine-tuned (fit = 825 episodes, 3 seeds)",
+      "unit": "head SNR 2 s",
+      "bars": [
+        {"label": "ImageNet ResNet, frozen", "value": 0.168, "sd": 0.004},
+        {"label": "π₀.₅ SigLIP, frozen", "value": 0.172, "sd": 0.011},
+        {"label": "web SigLIP, frozen", "value": 0.160, "sd": 0.015},
+        {"label": "ResNet, fine-tuned", "value": 0.169, "sd": 0.005},
+        {"label": "π₀.₅ SigLIP, fine-tuned", "value": 0.084, "sd": 0.003, "highlight": true}
+      ]
+    },
+    {
+      "title": "Through the frozen language model (fit = 375 fixed episodes, matched head)",
+      "unit": "head SNR 2 s",
+      "bars": [
+        {"label": "SigLIP (input)", "value": 0.122, "sd": 0.004},
+        {"label": "layer 1 V", "value": 0.093, "sd": 0.013},
+        {"label": "layer 5 V", "value": 0.098, "sd": 0.013},
+        {"label": "layer 9 V", "value": 0.089, "sd": 0.017},
+        {"label": "layer 13 V", "value": 0.080, "sd": 0.003},
+        {"label": "layer 17 V", "value": 0.060, "sd": 0.006},
+        {"label": "final hidden", "value": 0.059, "sd": 0.009, "highlight": true}
+      ]
+    },
+    {
+      "title": "Fixed vs fresh layouts at equal size (frozen π₀.₅ SigLIP)",
+      "unit": "head SNR 2 s",
+      "bars": [
+        {"label": "375 fixed-layout ep", "value": 0.122, "sd": 0.004},
+        {"label": "375 fresh-layout ep", "value": 0.194, "sd": 0.012, "highlight": true},
+        {"label": "825 fixed + fresh", "value": 0.172, "sd": 0.011}
+      ]
+    }
+  ]
+}
