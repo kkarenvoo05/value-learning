@@ -59,6 +59,29 @@ def expert0(tree):
     return {k: expert0(v) if isinstance(v, dict) else v for k, v in tree.items() if not k.endswith("_1")}
 
 
+def swap_paligemma(m, npz, log):
+    """Replace every PaliGemma parameter of the loaded pi05 model that the big_vision checkpoint also has (SigLIP,
+    its 1152 -> 2048 projector, the Gemma embedder and expert-0 blocks, final norm), as openpi's PaliGemmaWeightLoader
+    does when pi0 is first built. Action-expert (*_1) weights are left as they are; the prefix pass never runs them."""
+    import flax.traverse_util as tu
+    st = nnx.state(m.PaliGemma)
+    ref = tu.flatten_dict(st.to_pure_dict(), sep="/")
+    with np.load(npz, allow_pickle=False) as z:
+        new = {k.removeprefix("params/"): z[k] for k in z.files}
+    hit = {k for k in ref if k in new}
+    miss = sorted(k for k in ref if k not in new and not any(p.endswith("_1") for p in k.split("/")))
+    log(f"PaliGemma swap: {len(hit)} of {len(ref)} tensors replaced; non-expert tensors not in the npz: {miss}")
+    assert not miss, "a pi05 backbone tensor has no PaliGemma counterpart: names differ, the swap would be partial"
+    bad = [(k, ref[k].shape, new[k].shape) for k in hit if ref[k].shape != new[k].shape]
+    assert not bad, f"shape mismatch {bad[:5]}"
+    diff = np.mean([float(np.abs(np.asarray(ref[k], np.float32) - new[k].astype(np.float32)).mean()) for k in hit])
+    log(f"mean |pi05 - PaliGemma| over replaced tensors {diff:.3e} (must be > 0)")
+    assert diff > 0
+    merged = {k: (jnp.asarray(new[k], dtype=ref[k].dtype) if k in hit else ref[k]) for k in ref}
+    st.replace_by_pure_dict(tu.unflatten_dict(merged, sep="/"))
+    nnx.update(m.PaliGemma, st)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -66,6 +89,10 @@ def main():
     ap.add_argument("--record", type=int, nargs="+", default=[0, 1, 2, 3, 4, 5, 7, 9, 11, 13, 15, 17, 18])
     ap.add_argument("--image-only-attn", action="store_true")
     ap.add_argument("--max-frames", type=int, default=None, help="smoke: first n frames of P1's order")
+    ap.add_argument("--paligemma", default=None, metavar="NPZ",
+                    help="Step 0 (VLM gate) [ours]: overwrite pi05's SigLIP + Gemma (expert 0) + embedder with the "
+                         "big_vision PaliGemma checkpoint (paligemma-3b-pt-224.npz), i.e. the model before robot "
+                         "training. Same prefix (pi05's LIBERO transform, state as text). Stage 3a check skipped.")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -86,6 +113,8 @@ def main():
     tc = _config.get_config("pi05_libero")
     policy = policy_config.create_trained_policy(tc, CKPT)
     m = policy._model
+    if a.paligemma:
+        swap_paligemma(m, a.paligemma, log)
     llm_p = nnx.state(m.PaliGemma.llm).to_pure_dict()
     log(f"backbone loaded; llm params {sorted(llm_p)}")
     layers_p = expert0(llm_p["layers"])
@@ -158,10 +187,25 @@ def main():
         pooled = np.asarray(pooled)[:k]
         if start == 0:
             if not a.image_only_attn:
-                ref = np.asarray(ref_fn(obs), np.float32)
-                err = float(np.abs(np.asarray(fin, np.float32) - ref).max() / np.abs(ref).max())
-                log(f"self-check: layer loop vs openpi llm() final, max rel err {err:.2e}")
+                # Compare what is saved: the per-camera pools of the final output (rel L2). The old metric, max
+                # single-element |diff| / max |ref| over all tokens, failed at 0.32-0.45 with pi05 weights on every
+                # device incl. CPU (2026-11-04, scripts/debug/selfcheck_diag.py): layer 0 matches exactly and the
+                # two paths then drift by bf16 rounding (op order of openpi's scanned/remat block vs this unrolled
+                # loop; k rel L2 3e-3 at layer 1 -> ~1e-2 at layer 17), while the pools differ by only 0.3-0.5%.
+                ref = np.asarray(ref_fn(obs), np.float32)[:k]
+                f32 = np.asarray(fin, np.float32)[:k]
+                valid = np.asarray(mask)[:k]
+                tok = float(np.linalg.norm((f32 - ref)[valid]) / np.linalg.norm(ref[valid]))
+                emax = float(np.abs(f32 - ref).max() / np.abs(ref).max())
+                pr = np.stack([ref[:, :IMG].mean(1), ref[:, IMG:2 * IMG].mean(1)], 1)
+                err = float(np.linalg.norm(pooled[:, -1] - pr) / np.linalg.norm(pr))
+                tag = " (PaliGemma weights)" if a.paligemma else ""
+                log(f"self-check: layer loop vs openpi llm() final{tag}: pooled rel L2 {err:.2e} (gate 2e-2); "
+                    f"valid-token rel L2 {tok:.2e}; max-element rel {emax:.2e} (info only)")
                 assert err < 2e-2, err
+            if a.paligemma:  # Stage 3a pools are pi05-weight features: a PaliGemma run differs from them by design
+                log("PaliGemma weights: Stage 3a check skipped (pools are pi05 features)")
+            elif not a.image_only_attn:
                 z = np.load(STAGE3A)
                 s = pd.DataFrame({c: z[c] for c in ("split", "init_state", "episode", "frame_index")})
                 s["src"] = np.arange(len(s))

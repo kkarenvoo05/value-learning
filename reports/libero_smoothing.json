@@ -1,0 +1,308 @@
+[
+  {
+    "V": "B",
+    "smoothing": "raw",
+    "window_s": 0.0,
+    "snr_seed_mean": 0.07274598671506188,
+    "snr_seed_sd": 0.009471678127505613,
+    "signal_seed_mean": 0.0071996497231069405,
+    "noise_seed_mean": 0.09840763982672383,
+    "snr_ensemble": 0.09453060024588658,
+    "label_tm_diff": 0.023570717264243115,
+    "label_tm_ci": [
+      -0.01,
+      0.064
+    ],
+    "label_tm_auc": 0.5702100368767036,
+    "flips_per_s": 0.4359430604982206
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "raw",
+    "window_s": 0.0,
+    "snr_seed_mean": 0.2717513831786839,
+    "snr_seed_sd": 0.022687034780513197,
+    "signal_seed_mean": 0.017007083923840784,
+    "noise_seed_mean": 0.06288364406807584,
+    "snr_ensemble": 0.2984691757618375,
+    "label_tm_diff": 0.05379085743461985,
+    "label_tm_ci": [
+      0.022,
+      0.085
+    ],
+    "label_tm_auc": 0.7379830046496713,
+    "flips_per_s": 0.48364503672294995
+  },
+  {
+    "V": "B",
+    "smoothing": "centred 3",
+    "window_s": 0.8,
+    "snr_seed_mean": 0.08264617594736468,
+    "snr_seed_sd": 0.01102472149239804,
+    "signal_seed_mean": 0.007156775195969499,
+    "noise_seed_mean": 0.08611752566005022,
+    "snr_ensemble": 0.10632835209149297,
+    "label_tm_diff": 0.029200394153204683,
+    "label_tm_ci": [
+      -0.006,
+      0.069
+    ],
+    "label_tm_auc": 0.6340013895569451,
+    "flips_per_s": 0.29738017717876886
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "centred 3",
+    "window_s": 0.8,
+    "snr_seed_mean": 0.3089416939753144,
+    "snr_seed_sd": 0.024684048960608364,
+    "signal_seed_mean": 0.01692209495005198,
+    "noise_seed_mean": 0.055027523626976806,
+    "snr_ensemble": 0.33578557031906164,
+    "label_tm_diff": 0.05841009584789155,
+    "label_tm_ci": [
+      0.027,
+      0.094
+    ],
+    "label_tm_auc": 0.7686601464379242,
+    "flips_per_s": 0.2947300673885061
+  },
+  {
+    "V": "B",
+    "smoothing": "centred 5",
+    "window_s": 1.6,
+    "snr_seed_mean": 0.09404543424058698,
+    "snr_seed_sd": 0.01235402615707802,
+    "signal_seed_mean": 0.0070577360816503265,
+    "noise_seed_mean": 0.07470253244432895,
+    "snr_ensemble": 0.11952395728872033,
+    "label_tm_diff": 0.03779129172995768,
+    "label_tm_ci": [
+      0.006,
+      0.079
+    ],
+    "label_tm_auc": 0.6861952861952862,
+    "flips_per_s": 0.2519497236314076
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "centred 5",
+    "window_s": 1.6,
+    "snr_seed_mean": 0.34622086969840266,
+    "snr_seed_sd": 0.027800367784035582,
+    "signal_seed_mean": 0.016820713992792776,
+    "noise_seed_mean": 0.04882537491532261,
+    "snr_ensemble": 0.3735918307750459,
+    "label_tm_diff": 0.0640577869376928,
+    "label_tm_ci": [
+      0.03,
+      0.099
+    ],
+    "label_tm_auc": 0.8283255838811393,
+    "flips_per_s": 0.24702809116377678
+  },
+  {
+    "V": "B",
+    "smoothing": "centred 7",
+    "window_s": 2.4,
+    "snr_seed_mean": 0.11072450138369162,
+    "snr_seed_sd": 0.016489910008614685,
+    "signal_seed_mean": 0.007039556496775926,
+    "noise_seed_mean": 0.06335235436058355,
+    "snr_ensemble": 0.13836822800153076,
+    "label_tm_diff": 0.04292672467702497,
+    "label_tm_ci": [
+      0.006,
+      0.088
+    ],
+    "label_tm_auc": 0.7045160600716156,
+    "flips_per_s": 0.20254410539865222
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "centred 7",
+    "window_s": 2.4,
+    "snr_seed_mean": 0.39403006380336425,
+    "snr_seed_sd": 0.03260796566160451,
+    "signal_seed_mean": 0.016661537745182104,
+    "noise_seed_mean": 0.042517111990189545,
+    "snr_ensemble": 0.4218582433652689,
+    "label_tm_diff": 0.06918549425744289,
+    "label_tm_ci": [
+      0.038,
+      0.108
+    ],
+    "label_tm_auc": 0.8081128747795413,
+    "flips_per_s": 0.1891042628908912
+  },
+  {
+    "V": "B",
+    "smoothing": "centred 11",
+    "window_s": 4.0,
+    "snr_seed_mean": 0.14677801439114208,
+    "snr_seed_sd": 0.02653144966679415,
+    "signal_seed_mean": 0.006998045847459284,
+    "noise_seed_mean": 0.047718659008624875,
+    "snr_ensemble": 0.17722448161960538,
+    "label_tm_diff": 0.05964164668256057,
+    "label_tm_ci": [
+      0.021,
+      0.111
+    ],
+    "label_tm_auc": 0.7564854898188231,
+    "flips_per_s": 0.16033164231089575
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "centred 11",
+    "window_s": 4.0,
+    "snr_seed_mean": 0.48975679676594247,
+    "snr_seed_sd": 0.041726429399507256,
+    "signal_seed_mean": 0.016303208212665548,
+    "noise_seed_mean": 0.03348879858113115,
+    "snr_ensemble": 0.5186456733449182,
+    "label_tm_diff": 0.08997095119321971,
+    "label_tm_ci": [
+      0.054,
+      0.13
+    ],
+    "label_tm_auc": 0.7998824221046442,
+    "flips_per_s": 0.12606950859392746
+  },
+  {
+    "V": "B",
+    "smoothing": "trailing 3",
+    "window_s": 0.8,
+    "snr_seed_mean": 0.08490534621610318,
+    "snr_seed_sd": 0.007984900846261734,
+    "signal_seed_mean": 0.007343481754083665,
+    "noise_seed_mean": 0.08609195166592087,
+    "snr_ensemble": 0.10895463322913336,
+    "label_tm_diff": 0.026726108718607436,
+    "label_tm_ci": [
+      -0.01,
+      0.069
+    ],
+    "label_tm_auc": 0.6308267863823419,
+    "flips_per_s": 0.2983266449610055
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "trailing 3",
+    "window_s": 0.8,
+    "snr_seed_mean": 0.30161043432200324,
+    "snr_seed_sd": 0.02381842562463945,
+    "signal_seed_mean": 0.016459343079291297,
+    "noise_seed_mean": 0.05481828671586513,
+    "snr_ensemble": 0.3279515886856405,
+    "label_tm_diff": 0.057334075380308804,
+    "label_tm_ci": [
+      0.03,
+      0.091
+    ],
+    "label_tm_auc": 0.7686601464379242,
+    "flips_per_s": 0.2947300673885061
+  },
+  {
+    "V": "B",
+    "smoothing": "trailing 5",
+    "window_s": 1.6,
+    "snr_seed_mean": 0.09608865014167071,
+    "snr_seed_sd": 0.009327998206070647,
+    "signal_seed_mean": 0.0071843283485071045,
+    "noise_seed_mean": 0.07441325391265301,
+    "snr_ensemble": 0.12183412807093616,
+    "label_tm_diff": 0.033724251726359934,
+    "label_tm_ci": [
+      0.0,
+      0.075
+    ],
+    "label_tm_auc": 0.6643257976591309,
+    "flips_per_s": 0.2519497236314076
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "trailing 5",
+    "window_s": 1.6,
+    "snr_seed_mean": 0.3282536883117379,
+    "snr_seed_sd": 0.02536095675137099,
+    "signal_seed_mean": 0.015818593721537693,
+    "noise_seed_mean": 0.04841389346161736,
+    "snr_ensemble": 0.35456057891244436,
+    "label_tm_diff": 0.058731261212079,
+    "label_tm_ci": [
+      0.03,
+      0.094
+    ],
+    "label_tm_auc": 0.7628774517663405,
+    "flips_per_s": 0.24551374271219809
+  },
+  {
+    "V": "B",
+    "smoothing": "trailing 7",
+    "window_s": 2.4,
+    "snr_seed_mean": 0.1063961128801823,
+    "snr_seed_sd": 0.012183839291437256,
+    "signal_seed_mean": 0.006692423552057596,
+    "noise_seed_mean": 0.06256627177472805,
+    "snr_ensemble": 0.13287323073896273,
+    "label_tm_diff": 0.03660170454081174,
+    "label_tm_ci": [
+      0.002,
+      0.082
+    ],
+    "label_tm_auc": 0.6514136069691625,
+    "flips_per_s": 0.19819035360036344
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "trailing 7",
+    "window_s": 2.4,
+    "snr_seed_mean": 0.3637068383109523,
+    "snr_seed_sd": 0.02859973517667172,
+    "signal_seed_mean": 0.015156610331219761,
+    "noise_seed_mean": 0.04188403833606855,
+    "snr_ensemble": 0.38989733718608877,
+    "label_tm_diff": 0.0617313062428646,
+    "label_tm_ci": [
+      0.032,
+      0.097
+    ],
+    "label_tm_auc": 0.7581850248516915,
+    "flips_per_s": 0.1921329597940486
+  },
+  {
+    "V": "B",
+    "smoothing": "trailing 11",
+    "window_s": 4.0,
+    "snr_seed_mean": 0.1222199616756147,
+    "snr_seed_sd": 0.01769680698682395,
+    "signal_seed_mean": 0.005718988496239062,
+    "noise_seed_mean": 0.0465794115829552,
+    "snr_ensemble": 0.1480454503753953,
+    "label_tm_diff": 0.04666823372385601,
+    "label_tm_ci": [
+      0.011,
+      0.097
+    ],
+    "label_tm_auc": 0.6919672919672919,
+    "flips_per_s": 0.16033164231089575
+  },
+  {
+    "V": "ResNet",
+    "smoothing": "trailing 11",
+    "window_s": 4.0,
+    "snr_seed_mean": 0.4277984636028919,
+    "snr_seed_sd": 0.03669479676016431,
+    "signal_seed_mean": 0.013808041865071672,
+    "noise_seed_mean": 0.03247339022186717,
+    "snr_ensemble": 0.45390311827829044,
+    "label_tm_diff": 0.07569313350795467,
+    "label_tm_ci": [
+      0.046,
+      0.111
+    ],
+    "label_tm_auc": 0.7853027630805408,
+    "flips_per_s": 0.13534489285984705
+  }
+]

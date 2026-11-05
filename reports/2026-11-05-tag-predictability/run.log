@@ -1,0 +1,26 @@
+[     1 s] 104049 train frames, 900 episodes; image features
+[     3 s]   image features 512/104049
+[    20 s]   image features 20992/104049
+[    36 s]   image features 41472/104049
+[    52 s]   image features 61952/104049
+[    69 s]   image features 82432/104049
+[    88 s]   image features 102912/104049
+[   158 s] current (arm C: ResNet, 70% pos): {"pos_share": 0.7, "entropy_nats": 0.6109, "auc_S": 0.7682, "auc_S+A": 0.7836, "auc_A": 0.695, "ll_S": 0.5209, "ll_S+A": 0.5012, "ll_A": 0.5542, "gain_action_over_state": 0.0323, "gain_ci95": [0.025985837261587166, 0.038890244917370205], "state_explains": 0.1472, "state_action_explains": 0.1795}
+[   256 s] expert, 70% pos: {"pos_share": 0.7, "entropy_nats": 0.6109, "auc_S": 0.7408, "auc_S+A": 0.7564, "auc_A": 0.6779, "ll_S": 0.5367, "ll_S+A": 0.5203, "ll_A": 0.5652, "gain_action_over_state": 0.0268, "gain_ci95": [0.02169903705390411, 0.032065308859396346], "state_explains": 0.1215, "state_action_explains": 0.1483}
+[   403 s] ResNet, 40% pos: {"pos_share": 0.4, "entropy_nats": 0.673, "auc_S": 0.771, "auc_S+A": 0.8209, "auc_A": 0.7503, "ll_S": 0.5675, "ll_S+A": 0.5133, "ll_A": 0.5691, "gain_action_over_state": 0.0805, "gain_ci95": [0.07329844025668517, 0.08786748699161484], "state_explains": 0.1568, "state_action_explains": 0.2373}
+[   444 s] ResNet, 30% pos (RECAP pre-train): {"pos_share": 0.3, "entropy_nats": 0.6109, "auc_S": 0.7775, "auc_S+A": 0.828, "auc_A": 0.7496, "ll_S": 0.5064, "ll_S+A": 0.4613, "ll_A": 0.5198, "gain_action_over_state": 0.0737, "gain_ci95": [0.065901378736919, 0.08132479525716656], "state_explains": 0.1711, "state_action_explains": 0.2448}
+[   485 s] value-binned, 40% pos: {"pos_share": 0.4, "entropy_nats": 0.673, "auc_S": 0.7833, "auc_S+A": 0.8359, "auc_A": 0.7766, "ll_S": 0.5497, "ll_S+A": 0.4928, "ll_A": 0.5437, "gain_action_over_state": 0.0845, "gain_ci95": [0.07755773925813636, 0.09141987040438437], "state_explains": 0.1833, "state_action_explains": 0.2678}
+[   525 s] smooth 9 + value-binned, 40% pos: {"pos_share": 0.4, "entropy_nats": 0.673, "auc_S": 0.7861, "auc_S+A": 0.8294, "auc_A": 0.7727, "ll_S": 0.549, "ll_S+A": 0.5048, "ll_A": 0.5451, "gain_action_over_state": 0.0656, "gain_ci95": [0.05699285144924944, 0.07417254349727392], "state_explains": 0.1842, "state_action_explains": 0.2499}
+[   563 s] oracle outcome: {"pos_share": 0.5202, "entropy_nats": 0.6923, "auc_S": 0.8431, "auc_S+A": 0.8544, "auc_A": 0.759, "ll_S": 0.4993, "ll_S+A": 0.4831, "ll_A": 0.5689, "gain_action_over_state": 0.0233, "gain_ci95": [0.012146583826914036, 0.03351489974149927], "state_explains": 0.2788, "state_action_explains": 0.3022}
+[   599 s] CONTROL+ stall flag: {"pos_share": 0.1284, "entropy_nats": 0.3833, "auc_S": 0.9768, "auc_S+A": 0.9913, "auc_A": 0.9939, "ll_S": 0.131, "ll_S+A": 0.0818, "ll_A": 0.0652, "gain_action_over_state": 0.1285, "gain_ci95": [0.1141144868010475, 0.1426640068546568], "state_explains": 0.6581, "state_action_explains": 0.7866}
+[   633 s] CONTROL- random, 70% pos: {"pos_share": 0.701, "entropy_nats": 0.61, "auc_S": 0.5017, "auc_S+A": 0.4985, "auc_A": 0.4997, "ll_S": 0.6118, "ll_S+A": 0.612, "ll_A": 0.6113, "gain_action_over_state": -0.0003, "gain_ci95": [-0.0007871958284103725, 0.0001317662668178694], "state_explains": -0.003, "state_action_explains": -0.0033}
+                           labels  pos_share  auc_S  auc_S+A  auc_A  state_explains  state_action_explains  gain_action_over_state                                       gain_ci95
+ current (arm C: ResNet, 70% pos)     0.7000 0.7682   0.7836 0.6950          0.1472                 0.1795                  0.0323    [0.025985837261587166, 0.038890244917370205]
+                  expert, 70% pos     0.7000 0.7408   0.7564 0.6779          0.1215                 0.1483                  0.0268     [0.02169903705390411, 0.032065308859396346]
+                  ResNet, 40% pos     0.4000 0.7710   0.8209 0.7503          0.1568                 0.2373                  0.0805      [0.07329844025668517, 0.08786748699161484]
+ResNet, 30% pos (RECAP pre-train)     0.3000 0.7775   0.8280 0.7496          0.1711                 0.2448                  0.0737        [0.065901378736919, 0.08132479525716656]
+            value-binned, 40% pos     0.4000 0.7833   0.8359 0.7766          0.1833                 0.2678                  0.0845      [0.07755773925813636, 0.09141987040438437]
+ smooth 9 + value-binned, 40% pos     0.4000 0.7861   0.8294 0.7727          0.1842                 0.2499                  0.0656      [0.05699285144924944, 0.07417254349727392]
+                   oracle outcome     0.5202 0.8431   0.8544 0.7590          0.2788                 0.3022                  0.0233     [0.012146583826914036, 0.03351489974149927]
+              CONTROL+ stall flag     0.1284 0.9768   0.9913 0.9939          0.6581                 0.7866                  0.1285        [0.1141144868010475, 0.1426640068546568]
+         CONTROL- random, 70% pos     0.7010 0.5017   0.4985 0.4997         -0.0030                -0.0033                 -0.0003 [-0.0007871958284103725, 0.0001317662668178694]

@@ -1,0 +1,2576 @@
+{
+ "week": "week 7",
+ "period": "2026-10-27 to 2026-11-03",
+ "project": "LIBERO moka-pots value function for π₀.₅ (RECAP-style), then advantage-conditioned fine-tuning",
+ "headline": [
+  "Frozen π₀.₅ features know the scene and even 'a pot is on the stove', and π₀.₅-based value functions are the most accurate (best MAE 0.155 with LoRA vs 0.189 for the ResNet).",
+  "But π₀.₅'s value flickers: its moment-to-moment changes are ~1.5–2× noisier relative to signal than a fine-tuned ImageNet ResNet-18 (SNR 0.13–0.17 vs 0.25), and it reacts less when the first pot lands (+0.03–0.05 vs +0.09).",
+  "The flicker is the model switching between 'will succeed' and 'will fail' (~96% of the noise), and it has two separate sources, each halving steadiness: π₀.₅'s frozen language-model layers and fine-tuning its SigLIP encoder. The vision encoder itself, frozen, is as steady as the ResNet.",
+  "The data lever that worked was layout variety (a new scene per episode doubled frozen π₀.₅'s steadiness); head changes, smoothing, subtask heads, objective changes and demo pre-training did not close the gap.",
+  "Advantage labels are built from changes in V, so the policy fine-tuning test starts with ResNet labels (70% positive, within-scene AUC 0.74). The fine-tuning code passed its checks; the success-only run crashed in the data loader, was fixed and resubmitted."
+ ],
+ "glossary": {
+  "V(o)": "The value function: from a single camera frame, how well is this episode going (scaled so −1 = a failure that ran the whole clock, 0 = success right now). It is trained on the frozen π₀.₅ policy's own rollouts.",
+  "change SNR 2 s": "How cleanly V's moment-to-moment changes track real progress. Take V now minus V two seconds ago; the 'signal' is how much more that change goes up in episodes that end in success than in ones that fail (compared at the same time step); the 'noise' is how much it jumps around anyway. SNR = signal / noise. Higher = a steadier V that moves for real reasons. This is what the advantage labels for policy training are built from.",
+  "milestone": "Does V go up when the first moka pot lands on the stove (the halfway point of the task)? Mean V in the 5 s after minus the 5 s before, minus the same difference on episodes where no pot landed at that time. 0 = V ignores the event; a clock+event oracle gives +0.34.",
+  "MAE": "Mean absolute error of the predicted value vs the true return on the 10 held-out scenes (120 episodes). Lower = more accurate level. 'MAE succ>20 s' = the same on successful episodes after 20 s, where progress matters most.",
+  "AUC 5/10 s": "How well V at 5 or 10 s into an episode separates eventual successes from failures (0.5 = chance). Mostly measures recognising whether a scene is easy or hard.",
+  "fixed / fresh layouts": "LIBERO ships 50 fixed starting layouts per task; 'fixed' training data = 375 episodes on 25 of them (15 repeats each); 'fresh' = 375 episodes each from a newly sampled layout; 'fixed+fresh' = 825 episodes. Every model is tested on the same 10 held-out fixed layouts.",
+  "advantage label": "RECAP-style label per frame: positive if V two seconds later (plus the step cost) beats V now by more than a threshold set so 70% of frames are positive. Used to tag each frame in the advantage-tagged fine-tune.",
+  "out-of-fold labels": "The train rollouts are split into 5 groups; each group is labelled by a value function trained on the other 4, so no rollout is labelled by a V that has already seen it (otherwise V memorises the outcome and every advantage is ~0).",
+  "success-only / advantage-tagged fine-tune": "The two policy fine-tunes being compared: π₀.₅ trained only on its successful rollouts, vs π₀.₅ trained on all rollouts with an advantage tag per frame (RECAP).",
+  "frozen π₀.₅ / LoRA": "'Frozen π₀.₅': π₀.₅'s weights are kept fixed and a small value head is trained on top (35 M parameters, one query token reading every layer of the frozen backbone, 201-bin value head). 'LoRA' additionally trains low-rank adapters in π₀.₅'s language model."
+ },
+ "findings": [
+  {
+   "id": "stage0-reproduction",
+   "date": "2026-10-27",
+   "title": "Evaluation reproduces the published π₀.₅ number",
+   "question": "Does our LIBERO evaluation pipeline give the published π₀.₅ success rate?",
+   "verdict": [
+    "Observed: libero_spatial 489/500 = 97.8% (95% CI 96.1–98.8) vs published 98.8%, so the pipeline is trustworthy.",
+    "Observed: libero_10 sweep 190/200 = 95.0% (published 92.4%); only 'put both moka pots on the stove' was in the 50–80% range (14/20)."
+   ],
+   "numbers": {
+    "libero_spatial": "489/500 = 97.8%",
+    "published": "98.8%",
+    "libero_10_sweep": "190/200 = 95.0%",
+    "moka_sweep": "14/20"
+   },
+   "chart": {
+    "type": "none",
+    "title": "",
+    "unit": "",
+    "higher_is_better": true,
+    "rows": []
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:125-140",
+   "status": "settled",
+   "tier": "setup",
+   "oneline": "Our LIBERO evaluation reproduces π₀.₅'s published success rate."
+  },
+  {
+   "id": "stage1-task-choice",
+   "date": "2026-10-30",
+   "title": "Task: moka pots (libero_10 task 8)",
+   "question": "Which LIBERO task has 50–80% success for the frozen policy, with outcomes not fixed by the starting layout?",
+   "verdict": [
+    "Observed: moka pots 58/100 (95% CI 48–67) on a fresh check; failures are all 520-step timeouts with several modes (near misses, stalls, knocked-over pots).",
+    "Observed: a libero_90 sweep (2,200 episodes) found one-step candidates, but their outcome is mostly decided by the layout (repeats agree on 64–94% of layouts vs 44% for moka).",
+    "Decision: keep moka; libero_90 task 2 is the fallback."
+   ],
+   "numbers": {
+    "moka_check": "58/100",
+    "task60": "51/100",
+    "task12": "37/100",
+    "task2": "60/100",
+    "task29": "65/100",
+    "task33": "91/100",
+    "task70": "78/100"
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Success rate of candidate tasks (100 episodes = 50 layouts × 2)",
+    "unit": "% success",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "moka pots (chosen)",
+      "value": 58,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_10"
+     },
+     {
+      "label": "L90 t2 bowl→drawer",
+      "value": 60,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_90"
+     },
+     {
+      "label": "L90 t29 bowl→drawer",
+      "value": 65,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_90"
+     },
+     {
+      "label": "L90 t60 bowl→tray",
+      "value": 51,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_90"
+     },
+     {
+      "label": "L90 t12 bowl→plate",
+      "value": 37,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_90"
+     },
+     {
+      "label": "L90 t70 pudding",
+      "value": 78,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_90"
+     },
+     {
+      "label": "L90 t33 microwave",
+      "value": 91,
+      "sd": null,
+      "n_seeds": null,
+      "group": "libero_90"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:150-166, 393-416, 528-568",
+   "status": "settled",
+   "tier": "setup",
+   "oneline": "Moka pots chosen: π₀.₅ succeeds only ~58% there, so there is room to improve."
+  },
+  {
+   "id": "stage2-data",
+   "date": "2026-10-28",
+   "title": "570 rollouts, exact replay, layouts differ in difficulty",
+   "question": "Is the rollout dataset for value learning correct and reproducible?",
+   "verdict": [
+    "Observed: 450 train + 120 val rollouts; success 59.8% train, 52.5% val; 100/100 checked episodes replay bit-exactly from saved actions.",
+    "Observed: success per starting layout ranges from 0/15 to 15/15, so part of what V can learn is 'this scene is hard'; held-out layouts test whether it reads that from the image.",
+    "Observed: of 238 failures, 53% were still progressing when time ran out, 36% stuck, 11% knocked a pot over."
+   ],
+   "numbers": {
+    "train_success": "269/450 = 59.8%",
+    "val_success": "63/120 = 52.5%",
+    "replay_exact": "100/100",
+    "frames": 261897
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Failure types (238 failures, from sim state)",
+    "unit": "episodes",
+    "higher_is_better": false,
+    "rows": [
+     {
+      "label": "stalled earlier, ran out of time",
+      "value": 68,
+      "sd": null,
+      "n_seeds": null,
+      "group": "progressing"
+     },
+     {
+      "label": "near miss",
+      "value": 33,
+      "sd": null,
+      "n_seeds": null,
+      "group": "progressing"
+     },
+     {
+      "label": "slow",
+      "value": 26,
+      "sd": null,
+      "n_seeds": null,
+      "group": "progressing"
+     },
+     {
+      "label": "stuck at pot 2",
+      "value": 35,
+      "sd": null,
+      "n_seeds": null,
+      "group": "stuck"
+     },
+     {
+      "label": "stuck placing pot 2",
+      "value": 33,
+      "sd": null,
+      "n_seeds": null,
+      "group": "stuck"
+     },
+     {
+      "label": "stuck at pot 1",
+      "value": 18,
+      "sd": null,
+      "n_seeds": null,
+      "group": "stuck"
+     },
+     {
+      "label": "knocked over",
+      "value": 25,
+      "sd": null,
+      "n_seeds": null,
+      "group": "unrecoverable"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:202-250",
+   "status": "settled",
+   "tier": "setup",
+   "oneline": "570 rollouts with exact replay; success depends strongly on the starting layout (0–100%)."
+  },
+  {
+   "id": "stage3a-probe",
+   "date": "2026-10-28",
+   "title": "First comparison: frozen π₀.₅ features look better than the ResNet",
+   "question": "Do frozen π₀.₅ features carry value information, and do they beat a fine-tuned ResNet-18?",
+   "verdict": [
+    "Observed: a small probe on pooled frozen π₀.₅ features beat the ResNet on overall error (MAE 0.196 vs 0.215) and on early success prediction (AUC at 10 s 0.78 vs 0.58).",
+    "Observed: the 201-bin loss is dominated by timing (every failure is a 520-step timeout), so both lose to a pure clock on that loss.",
+    "This first read was later corrected (next finding)."
+   ],
+   "numbers": {
+    "pi05_probe_MAE": 0.196,
+    "resnet_MAE": 0.215,
+    "pi05_AUC10": 0.78,
+    "resnet_AUC10": 0.58,
+    "clock_MAE": 0.276
+   },
+   "chart": {
+    "type": "bar",
+    "title": "First comparison, overall MAE on 10 unseen scenes",
+    "unit": "MAE",
+    "higher_is_better": false,
+    "rows": [
+     {
+      "label": "clock only",
+      "value": 0.276,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "control"
+     },
+     {
+      "label": "ResNet-18 fine-tuned",
+      "value": 0.215,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅ probe",
+      "value": 0.196,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 frozen"
+     }
+    ]
+   },
+   "figures": [
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_stage3a/overview.png"
+   ],
+   "source": "docs/libero_plan.md:262-291",
+   "status": "refuted",
+   "tier": "minor",
+   "oneline": "Refuted: π₀.₅ looked better at first, but only because it recognises hard layouts."
+  },
+  {
+   "id": "stage3-correction",
+   "date": "2026-10-30",
+   "title": "Correction: π₀.₅ knows the scene, the ResNet tracks progress",
+   "question": "Looking at the value curves, where does π₀.₅'s advantage actually come from?",
+   "verdict": [
+    "Observed: the ResNet is more accurate on successful episodes after 20 s (MAE 0.131 vs 0.216 at 20–30 s); π₀.₅ is better only in the first 20 s.",
+    "Observed: π₀.₅'s early edge is recognising hard layouts; within a layout both models are at chance at 0–5 s (AUC 0.53 vs 0.49).",
+    "Observed: a value head trained on frozen π₀.₅ (3 seeds) still loses on late-success MAE (0.146 vs 0.128); removing robot state or adding a clock input did not fix it.",
+    "Interpretation: π₀.₅ is the better outcome predictor; the ResNet is the better progress tracker, and advantages need the second."
+   ],
+   "numbers": {
+    "resnet_succ_MAE_20_30s": 0.131,
+    "pi05_succ_MAE_20_30s": 0.216,
+    "B_3seed_mae_succ20": 0.146,
+    "resnet_mae_succ20": 0.128,
+    "within_layout_AUC_B": 0.53,
+    "within_layout_AUC_resnet": 0.49
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Late-success MAE (successes after 20 s), fixed layouts, 3 seeds",
+    "unit": "MAE succ>20 s",
+    "higher_is_better": false,
+    "rows": [
+     {
+      "label": "ResNet-18 fine-tuned",
+      "value": 0.128,
+      "sd": 0.011,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅",
+      "value": 0.146,
+      "sd": 0.003,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ + clock input",
+      "value": 0.135,
+      "sd": 0.003,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅, robot state blanked",
+      "value": 0.152,
+      "sd": 0.001,
+      "n_seeds": 2,
+      "group": "pi05 frozen"
+     }
+    ]
+   },
+   "figures": [
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_stage4_b_vs_resnet/6_stuck_pot2_ep542.png",
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_stage4_b_vs_resnet/aligned.png"
+   ],
+   "source": "docs/libero_plan.md:292-300, 433-504, 613-677, 678-696",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "milestone-check",
+   "date": "2026-10-29",
+   "title": "Milestone: does V jump when the first pot lands?",
+   "question": "Does V react to real task progress (first pot on the stove), not just time?",
+   "verdict": [
+    "Observed: the ResNet's V jumps (+0.064, positive on 3/3 seeds); the frozen π₀.₅ probe does not (−0.018), and its success belief even dips for ~8 s after placement.",
+    "Observed: milestone and dip effects flip sign between seeds for the probes, so every later comparison uses ≥ 3 seeds.",
+    "Interpretation: π₀.₅'s good AUC came from scene difficulty and timing, not task progress."
+   ],
+   "numbers": {
+    "resnet": 0.064,
+    "pi05_probe": -0.018,
+    "oracle_clock_plus_event": 0.343
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Milestone jump in V (fixed layouts)",
+    "unit": "Δ V",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "oracle: clock + pot event",
+      "value": 0.343,
+      "sd": null,
+      "n_seeds": null,
+      "group": "reference"
+     },
+     {
+      "label": "ResNet-18",
+      "value": 0.064,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅ probe (201 bins)",
+      "value": -0.018,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ (3 seeds)",
+      "value": 0.027,
+      "sd": 0.019,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     }
+    ]
+   },
+   "figures": [
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_milestone/aligned.png"
+   ],
+   "source": "docs/libero_plan.md:301-333, 365-383; reports/libero_milestone.md, reports/libero_seeds.md",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "head-swap",
+   "date": "2026-10-30",
+   "title": "Head swap: the features, not the value head",
+   "question": "Is π₀.₅'s noisy V caused by its value head design?",
+   "verdict": [
+    "Observed: swapping heads changes SNR by ≤ 0.01 within a feature set; switching feature sets changes it ~2×.",
+    "Observed: even frozen ImageNet ResNet features (0.15–0.17) beat frozen π₀.₅'s features (0.08–0.09).",
+    "Observed: heads trained directly on each frozen π₀.₅ layer all sit at 0.08–0.11, so the noise is already in the frozen backbone's features."
+   ],
+   "numbers": {
+    "B_h": "0.08–0.09",
+    "resnet_ft": "0.19–0.20",
+    "imagenet_frozen": "0.15–0.17",
+    "pi05_layers_1_to_17": "0.076–0.106"
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Change SNR 2 s with the ResNet's MLP head on fixed features (3 seeds)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "frozen π₀.₅ value-head features",
+      "value": 0.082,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ layer 5",
+      "value": 0.102,
+      "sd": 0.014,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen ImageNet ResNet",
+      "value": 0.157,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "fine-tuned ResNet",
+      "value": 0.196,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "ResNet"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:706-730, 774-793; reports/libero_head_swap.json, reports/libero_layer_value.json",
+   "status": "settled",
+   "tier": "minor",
+   "oneline": "Swapping value heads between models changes nothing: the features decide."
+  },
+  {
+   "id": "smoothing",
+   "date": "2026-10-30",
+   "title": "Smoothing helps both, does not close the gap",
+   "question": "Is π₀.₅'s deficit just fast jitter that a moving average removes?",
+   "verdict": [
+    "Observed: smoothing cuts noise for both models but cannot add signal; frozen π₀.₅'s signal is 2.4× smaller at every window.",
+    "Observed: frozen π₀.₅ smoothed ±2 s (0.147) is still below the unsmoothed ResNet (0.272).",
+    "Practical: smoothing V is worth keeping for advantage labels whichever V is used (ResNet label AUC 0.74 → 0.81 at ±1.2 s)."
+   ],
+   "numbers": {
+    "B_raw": 0.073,
+    "B_pm2s": 0.147,
+    "resnet_raw": 0.272,
+    "resnet_pm2s": 0.49
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Change SNR 2 s after centred smoothing (fixed layouts, 3 seeds)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "frozen π₀.₅, raw",
+      "value": 0.073,
+      "sd": 0.009,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ ±1.2 s",
+      "value": 0.111,
+      "sd": 0.016,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ ±2 s",
+      "value": 0.147,
+      "sd": 0.027,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "ResNet raw",
+      "value": 0.272,
+      "sd": 0.023,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "ResNet ±1.2 s",
+      "value": 0.394,
+      "sd": 0.033,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "ResNet ±2 s",
+      "value": 0.49,
+      "sd": 0.042,
+      "n_seeds": 3,
+      "group": "ResNet"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:747-773; reports/libero_smoothing.md",
+   "status": "settled",
+   "tier": "minor",
+   "oneline": "Smoothing V helps both models equally, so π₀.₅'s gap stays."
+  },
+  {
+   "id": "progress-probe",
+   "date": "2026-10-30",
+   "title": "Frozen π₀.₅ knows a pot is on the stove; the value head ignores it",
+   "question": "Does the frozen π₀.₅ backbone encode 'a pot is on the stove' at all?",
+   "verdict": [
+    "Observed: a probe decodes 'pot on stove' from frozen π₀.₅ at time-matched AUC 0.95–0.99 (layer 5 best, 0.987), as well as the ResNets (0.98).",
+    "Observed: handing the value head the true pot bit changes its SNR by ≤ 0.02; the bit plus a clock alone gives SNR 0.22 and milestone +0.33.",
+    "Interpretation: the information is present but value training takes the layout shortcut instead of using it."
+   ],
+   "numbers": {
+    "pi05_layer5": 0.987,
+    "pi05_final_pool": 0.95,
+    "resnet_frozen": 0.977,
+    "resnet_ft": 0.98,
+    "clock": 0.5,
+    "bit_plus_clock_snr": 0.222,
+    "bit_plus_clock_milestone": 0.325
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Time-matched AUC for 'pot on the stove' (val)",
+    "unit": "AUC",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "clock",
+      "value": 0.5,
+      "sd": null,
+      "n_seeds": null,
+      "group": "control"
+     },
+     {
+      "label": "object positions",
+      "value": 0.955,
+      "sd": null,
+      "n_seeds": null,
+      "group": "control"
+     },
+     {
+      "label": "π₀.₅ final-layer pool",
+      "value": 0.95,
+      "sd": null,
+      "n_seeds": null,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "π₀.₅ layer 5 values",
+      "value": 0.987,
+      "sd": null,
+      "n_seeds": null,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ value-head output",
+      "value": 0.951,
+      "sd": null,
+      "n_seeds": null,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "ImageNet ResNet frozen",
+      "value": 0.977,
+      "sd": null,
+      "n_seeds": null,
+      "group": "ResNet"
+     },
+     {
+      "label": "ResNet V fine-tuned",
+      "value": 0.98,
+      "sd": null,
+      "n_seeds": null,
+      "group": "ResNet"
+     }
+    ]
+   },
+   "figures": [
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_milestone_probe/decode_aligned.png"
+   ],
+   "source": "docs/libero_plan.md:569-612, 794-815; reports/libero_progress.md, reports/libero_oracle_bit.json",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "shortcut-fixes",
+   "date": "2026-10-30",
+   "title": "Head-side shortcut fixes: none beats the ResNet on both",
+   "question": "Can training changes on frozen π₀.₅ features force V through progress instead of layout identity?",
+   "verdict": [
+    "Observed: auxiliary pot target, token dropout and bottlenecks leave SNR at 0.105–0.129 and the milestone ≈ 0 (pass rule: SNR > base + 2 sd and milestone > 0 on 3/3).",
+    "Observed: routing V through a predicted pot bit gives the first frozen-π₀.₅ milestone on every seed (+0.077) but loses the early-AUC edge (0.77 → 0.62).",
+    "Interpretation: there is a trade-off between knowing the scene and reacting to progress; no setting beats the ResNet on both."
+   ],
+   "numbers": {
+    "base_snr": 0.109,
+    "aux_snr": 0.128,
+    "routed_snr": 0.168,
+    "routed_milestone": 0.077,
+    "resnet_snr_head_swap": 0.19
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Shortcut fixes on frozen π₀.₅ layer 5 (3 seeds)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "base",
+      "value": 0.109,
+      "sd": 0.015,
+      "n_seeds": 3,
+      "group": "frozen"
+     },
+     {
+      "label": "aux pot target",
+      "value": 0.128,
+      "sd": 0.015,
+      "n_seeds": 3,
+      "group": "frozen"
+     },
+     {
+      "label": "token dropout 0.3",
+      "value": 0.115,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "frozen"
+     },
+     {
+      "label": "bottleneck 4",
+      "value": 0.118,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "frozen"
+     },
+     {
+      "label": "progress-routed, no clock",
+      "value": 0.168,
+      "sd": 0.046,
+      "n_seeds": 3,
+      "group": "frozen"
+     },
+     {
+      "label": "layout code λ 10",
+      "value": 0.166,
+      "sd": 0.035,
+      "n_seeds": 3,
+      "group": "frozen"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:816-879; reports/libero_shortcut_fixes.json, reports/libero_progress_routed.json, reports/libero_layout_code.json",
+   "status": "refuted",
+   "tier": "minor",
+   "oneline": "Head-side regularisers (aux targets, dropout, bottleneck): none beats the ResNet on both metrics."
+  },
+  {
+   "id": "fresh-layouts",
+   "date": "2026-11-01",
+   "title": "Fresh layouts: the first change that clearly helps π₀.₅",
+   "question": "Does removing repeated layouts (and thus the layout→outcome shortcut) help π₀.₅'s value function?",
+   "verdict": [
+    "Observed: halving the repeats per layout cost both models about equally, so more repeats would not close the gap.",
+    "Observed: 375 episodes with a new layout each lifted frozen π₀.₅'s SNR 2.1× (0.073 → 0.157) and its milestone (+0.027 → +0.044); the ResNet's SNR stayed ~0.26.",
+    "Observed: the late-success MAE gap closed (0.148 vs 0.148), but because the ResNet got worse, not because frozen π₀.₅ got better.",
+    "Observed: with fixed+fresh (825), frozen π₀.₅ has lower MAE (0.170 vs 0.189) but the ResNet still leads on SNR (0.247 vs 0.166) and milestone (+0.094 vs +0.026)."
+   ],
+   "numbers": {
+    "ResNet fixed": {
+     "snr": 0.272,
+     "milestone": 0.063,
+     "mae": 0.211,
+     "mae_succ20": 0.128
+    },
+    "Frozen B fixed": {
+     "snr": 0.073,
+     "milestone": 0.027,
+     "mae": 0.18,
+     "mae_succ20": 0.146
+    },
+    "ResNet fresh": {
+     "snr": 0.258,
+     "milestone": 0.085,
+     "mae": 0.215,
+     "mae_succ20": 0.148
+    },
+    "Frozen B fresh": {
+     "snr": 0.157,
+     "milestone": 0.044,
+     "mae": 0.187,
+     "mae_succ20": 0.148
+    },
+    "ResNet ff": {
+     "snr": 0.247,
+     "milestone": 0.094,
+     "mae": 0.189,
+     "mae_succ20": 0.119
+    },
+    "Frozen B ff": {
+     "snr": 0.166,
+     "milestone": 0.026,
+     "mae": 0.17,
+     "mae_succ20": 0.138
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Change SNR 2 s by training data (3 seeds each, recomputed)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ResNet, fixed",
+      "value": 0.272,
+      "sd": 0.028,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "ResNet, fresh",
+      "value": 0.258,
+      "sd": 0.046,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "ResNet, fixed+fresh",
+      "value": 0.247,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅, fixed",
+      "value": 0.073,
+      "sd": 0.012,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅, fresh",
+      "value": 0.157,
+      "sd": 0.027,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅, fixed+fresh",
+      "value": 0.166,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:890-906, 1049-1073, 1128-1169, 1212-1221",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "value-objective",
+   "date": "2026-10-31",
+   "title": "Changing the training objective lowers noise, not the milestone",
+   "question": "Does a different value objective (no outcome loss, consistency penalty, bootstrapped targets) steady π₀.₅'s V?",
+   "verdict": [
+    "Observed: removing the outcome loss leaves SNR unchanged (0.073); the episode-wide outcome label is not the noise source.",
+    "Observed: bootstrapped 10 s targets lift SNR to 0.198 (≈ the raw ResNet after smoothing) but the milestone stays ≈ 0; a consistency penalty is just smoothing.",
+    "Observed: 97–99% of the 2 s change in frozen π₀.₅'s V is probability moving between 'success' and 'failure', i.e. a flickering outcome classifier.",
+    "Note: TD targets are off the RECAP recipe and were dropped."
+   ],
+   "numbers": {
+    "B_no_outcome_snr": 0.073,
+    "base_snr": 0.109,
+    "td10_snr": 0.198,
+    "td10_milestone": -0.009,
+    "hump_share": "0.97–0.99"
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Value-objective arms on frozen π₀.₅ layer 5 (3 seeds, CE selection)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "base",
+      "value": 0.109,
+      "sd": 0.015,
+      "n_seeds": 3,
+      "group": "objective"
+     },
+     {
+      "label": "consistency λ 10",
+      "value": 0.121,
+      "sd": 0.009,
+      "n_seeds": 3,
+      "group": "objective"
+     },
+     {
+      "label": "out-of-fold V target",
+      "value": 0.159,
+      "sd": 0.027,
+      "n_seeds": 3,
+      "group": "objective"
+     },
+     {
+      "label": "TD 2 s",
+      "value": 0.168,
+      "sd": 0.013,
+      "n_seeds": 3,
+      "group": "objective"
+     },
+     {
+      "label": "TD 10 s",
+      "value": 0.198,
+      "sd": 0.004,
+      "n_seeds": 3,
+      "group": "objective"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:921-974; reports/libero_value_objective.json",
+   "status": "settled",
+   "tier": "minor",
+   "oneline": "Bootstrapped targets cut noise but the milestone response stays ~0."
+  },
+  {
+   "id": "lora",
+   "date": "2026-11-02",
+   "title": "LoRA on π₀.₅: most accurate value function, but noisier",
+   "question": "Does adapting π₀.₅'s language model (LoRA) give a better value function than freezing it?",
+   "verdict": [
+    "Observed: the first LoRA run (lr 1e-5) barely moved the weights (~0.1%), so it was not a real test.",
+    "Observed: LoRA at lr 1e-4 on fixed+fresh data gives the lowest overall MAE of any model (0.155) and the best late-success MAE (0.110), with a milestone (+0.052) above every frozen-π₀.₅ seed.",
+    "Observed: it is noisier than frozen π₀.₅ (SNR 0.133 vs 0.166) and far below the ResNet (0.247). One seed.",
+    "Interpretation: adapting the backbone buys accuracy and some progress-tracking, not steadiness."
+   ],
+   "numbers": {
+    "lora_ff": {
+     "snr": 0.133,
+     "milestone": 0.052,
+     "mae": 0.155,
+     "mae_succ20": 0.11,
+     "auc10": 0.788
+    },
+    "lora_lr1e-5_weight_change": "~0.1%",
+    "rms_lora_b_ratio_lr1e-4_vs_1e-5": 11.5
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Overall MAE, fixed+fresh data (recomputed)",
+    "unit": "MAE",
+    "higher_is_better": false,
+    "rows": [
+     {
+      "label": "ResNet (3 seeds)",
+      "value": 0.189,
+      "sd": 0.003,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅ (3 seeds)",
+      "value": 0.17,
+      "sd": 0.013,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "π₀.₅ LoRA (1 seed)",
+      "value": 0.155,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 LoRA"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:975-992, 1049-1073, 1117-1127, 1170-1188, 1311-1324",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "accuracy-vs-steadiness",
+   "date": "2026-11-02",
+   "title": "The core trade-off: π₀.₅ is more accurate, ResNet is steadier and reacts to progress",
+   "question": "On the same 825-episode data, how do the ResNet and π₀.₅ value functions compare on accuracy, noise and progress?",
+   "verdict": [
+    "Observed: π₀.₅ arms win on accuracy (MAE 0.155–0.170 vs 0.189) and early scene recognition (AUC 10 s 0.79–0.80 vs 0.74).",
+    "Observed: the ResNet wins on steadiness (SNR 0.247 vs 0.13–0.17) and on reacting when the first pot lands (milestone +0.094 vs +0.026–0.052).",
+    "Interpretation: for advantage labels (which use changes in V), steadiness and progress matter more than level, so the ResNet V labels the advantage-tagged fine-tune first.",
+    "Shown in the spotlight above: scatter, milestone bars and the episode player."
+   ],
+   "numbers": {
+    "ResNet ff": {
+     "snr": 0.247,
+     "milestone": 0.094,
+     "mae": 0.189,
+     "mae_succ20": 0.119,
+     "auc10": 0.74
+    },
+    "Frozen B ff": {
+     "snr": 0.166,
+     "milestone": 0.026,
+     "mae": 0.17,
+     "mae_succ20": 0.138,
+     "auc10": 0.797
+    },
+    "LoRA lr1e-4 ff": {
+     "snr": 0.133,
+     "milestone": 0.052,
+     "mae": 0.155,
+     "mae_succ20": 0.11,
+     "auc10": 0.788
+    },
+    "SigLIP-pi05 fine-tuned ff": {
+     "snr": 0.129,
+     "milestone": 0.06,
+     "mae": 0.207,
+     "mae_succ20": 0.223,
+     "auc10": 0.719
+    }
+   },
+   "chart": {
+    "type": "none"
+   },
+   "figures": [
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_stage4_b_vs_resnet/6_stuck_pot2_ep542.png"
+   ],
+   "source": "backbone_table (recomputed); docs/libero_plan.md:1311-1324, 1353-1369",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "demo-pretraining",
+   "date": "2026-11-02",
+   "title": "Pre-training V on demonstrations halves the milestone",
+   "question": "Does RECAP's two-stage recipe (pre-train V on LIBERO demos, then fine-tune on moka rollouts) help?",
+   "verdict": [
+    "Observed (ResNet, 3 seeds): the milestone halves (+0.094 → +0.045; every pre-trained seed below every plain seed) and SNR drops (0.247 → 0.203).",
+    "Observed: accuracy is a wash (MAE 0.189 → 0.184).",
+    "Interpretation: success-only demos teach a smooth time-to-go prior that washes out the pot-landing jump. Not adopted; the LoRA pre-training chain was cancelled."
+   ],
+   "numbers": {
+    "no_pretrain": {
+     "snr": 0.247,
+     "milestone": 0.094,
+     "mae": 0.189
+    },
+    "demo_pretrain": {
+     "snr": 0.203,
+     "milestone": 0.045,
+     "mae": 0.184
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Milestone jump, ResNet with vs without demo pre-training (3 seeds)",
+    "unit": "Δ V",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ResNet",
+      "value": 0.094,
+      "sd": 0.014,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "ResNet + demo pre-training",
+      "value": 0.045,
+      "sd": 0.01,
+      "n_seeds": 3,
+      "group": "ResNet"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1189-1243, 1339-1351, 1436",
+   "status": "settled",
+   "tier": "minor",
+   "oneline": "Pre-training V on success demos halves the ResNet's milestone response."
+  },
+  {
+   "id": "frozen-encoders-p1",
+   "date": "2026-11-03",
+   "title": "Frozen-encoder comparison: two noise sources, and layout variety matters",
+   "question": "Is π₀.₅'s jitter in its image features, added by its language-model layers, or added by fine-tuning?",
+   "verdict": [
+    "Observed: frozen π₀.₅ SigLIP is as steady as an ImageNet ResNet (0.172 vs 0.168 at 825 episodes) and better than web SigLIP; robot training did not hurt the vision features.",
+    "Observed: two separate drops, each about halving SNR: passing through the frozen language-model layers (0.122 → 0.059) and fine-tuning SigLIP (0.172 → 0.084). Fine-tuning the ResNet costs nothing.",
+    "Observed: at equal size (375), fresh layouts lift frozen SigLIP 0.122 → 0.194; adding the fixed episodes lowers it (0.172). It is layout variety, not episode count.",
+    "Open: where in the language model the drop starts (per-layer job 18288157; the TITAN attempt failed a numerics self-check)."
+   ],
+   "numbers": {
+    "p1_825": {
+     "resnet_in": 0.168,
+     "siglip_pi05": 0.172,
+     "siglip_web": 0.16,
+     "resnet_ft": 0.169,
+     "siglip_pi05_ft": 0.084
+    },
+    "p1b_375fixed": {
+     "siglip_pi05": 0.122,
+     "llm_v1": 0.093,
+     "llm_v17": 0.06,
+     "llm_final": 0.059,
+     "siglip_pi05_ft": 0.078,
+     "resnet_ft": 0.163
+    },
+    "p1c_fresh375": {
+     "resnet_in": 0.193,
+     "siglip_pi05": 0.194,
+     "siglip_web": 0.16
+    },
+    "pca256_llm_final": 0.079,
+    "pca256_siglip": 0.115
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Same value head on frozen features (head SNR 2 s, 3 seeds)",
+    "unit": "head SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ImageNet ResNet, frozen (825)",
+      "value": 0.168,
+      "sd": 0.004,
+      "n_seeds": 3,
+      "group": "825 ep"
+     },
+     {
+      "label": "π₀.₅ SigLIP, frozen (825)",
+      "value": 0.172,
+      "sd": 0.011,
+      "n_seeds": 3,
+      "group": "825 ep"
+     },
+     {
+      "label": "web SigLIP, frozen (825)",
+      "value": 0.16,
+      "sd": 0.015,
+      "n_seeds": 3,
+      "group": "825 ep"
+     },
+     {
+      "label": "ResNet, fine-tuned (825)",
+      "value": 0.169,
+      "sd": 0.005,
+      "n_seeds": 3,
+      "group": "825 ep"
+     },
+     {
+      "label": "π₀.₅ SigLIP, fine-tuned (825)",
+      "value": 0.084,
+      "sd": 0.003,
+      "n_seeds": 3,
+      "group": "825 ep"
+     },
+     {
+      "label": "π₀.₅ SigLIP, frozen (375 fixed)",
+      "value": 0.122,
+      "sd": 0.004,
+      "n_seeds": 3,
+      "group": "375 fixed"
+     },
+     {
+      "label": "π₀.₅ LLM final layer (375 fixed)",
+      "value": 0.059,
+      "sd": 0.009,
+      "n_seeds": 3,
+      "group": "375 fixed"
+     },
+     {
+      "label": "π₀.₅ SigLIP, frozen (375 fresh)",
+      "value": 0.194,
+      "sd": 0.012,
+      "n_seeds": 3,
+      "group": "375 fresh"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "reports/2026-11-02-frozen-encoders/report.md; docs/libero_plan.md:1538-1568, 1588-1709, 1769-1780",
+   "status": "open",
+   "tier": "main"
+  },
+  {
+   "id": "siglip-end-to-end",
+   "date": "2026-11-03",
+   "title": "Can π₀.₅'s vision encoder alone beat the ResNet?",
+   "question": "If the noise comes from π₀.₅'s language-model layers, a value function built on its vision encoder (SigLIP) alone might keep π₀.₅'s accuracy without the flicker. Same 825-episode data and recipe as the ResNet; no language model in the path.",
+   "verdict": [
+    "**Bar for 'more useful than the ResNet':** steadiness at or near the ResNet's (SNR ≈ 0.247) *and* accuracy closer to π₀.₅'s (MAE ≈ 0.16–0.17, AUC ≈ 0.80). Only as steady as the ResNet with no accuracy gain is no reason to switch.",
+    "Observed, fully fine-tuned SigLIP (lr 1e-5): overfits by step 1,500; SNR 0.129, MAE 0.207. Fails the bar.",
+    "Observed, frozen SigLIP (new today, 1 seed): SNR 0.221, nearly as steady as the ResNet, but MAE 0.215 and AUC 0.70 are *worse* than the ResNet's, and it barely reacts at the pot placement (+0.017). Fails the bar.",
+    "Observed, SigLIP fine-tuned gently (lr 1e-6, 10× lower; new today, 1 seed): MAE 0.187, the same as the ResNet's (0.189), and the biggest reaction at the pot placement of any backbone (+0.093 vs ResNet +0.094). But steadiness drops to SNR 0.107, the lowest of every option tried. Fails the bar.",
+    "**Verdict:** no SigLIP-only variant beats the ResNet. Frozen keeps the steadiness but loses accuracy; any fine-tuning, even 10× gentler, buys back accuracy only by flickering more. The noise is not only in the language model: fine-tuning SigLIP adds its own, at any learning rate tried. Pre-training the value function, or a cleaner read-out from π₀.₅'s language model, are the remaining candidates.",
+    "Caveats: one seed (seeds vary by about ±0.025 SNR); no language input, which is fine for this single task but would need adding back for a multi-task value; the head averages SigLIP's 256 image tokens into one vector, which may drop where the pot is. An attention-pooling head is a cheap follow-up if results are close."
+   ],
+   "numbers": {
+    "siglip_ft": {
+     "snr": 0.129,
+     "milestone": 0.06,
+     "mae": 0.207,
+     "mae_succ20": 0.223
+    },
+    "siglip_frozen_new": {
+     "snr": 0.221,
+     "milestone": 0.017,
+     "mae": 0.215,
+     "mae_succ20": 0.194
+    },
+    "siglip_lr1e6": {
+     "snr": 0.107,
+     "milestone": 0.093,
+     "mae": 0.187,
+     "mae_succ20": 0.15,
+     "auc5": 0.712,
+     "auc10": 0.776
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Steadiness (change SNR 2 s), 825 episodes",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ResNet-18, fine-tuned",
+      "value": 0.247,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "SigLIP alone, frozen (new)",
+      "value": 0.221,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "SigLIP frozen"
+     },
+     {
+      "label": "whole π₀.₅, frozen",
+      "value": 0.166,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "whole π₀.₅, LoRA",
+      "value": 0.133,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 LoRA"
+     },
+     {
+      "label": "SigLIP alone, fully fine-tuned",
+      "value": 0.129,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "SigLIP ft"
+     },
+     {
+      "label": "SigLIP alone, gently fine-tuned (lr 1e-6, new)",
+      "value": 0.107,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "SigLIP ft"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1325-1337, 1353-1369, 1744-1751; /iris/u/ankile/karenvo/libero/runs/siglip_pi05_fixedfresh_frozen_s0_18286678; /iris/u/ankile/karenvo/libero/runs/siglip_pi05_fixedfresh_lr1e6_s0_18286678",
+   "status": "settled",
+   "tier": "main",
+   "chart2": {
+    "type": "bar",
+    "title": "Accuracy (MAE vs target), same models",
+    "unit": "MAE",
+    "higher_is_better": false,
+    "rows": [
+     {
+      "label": "ResNet-18, fine-tuned",
+      "value": 0.189,
+      "sd": 0.003,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "SigLIP alone, frozen (new)",
+      "value": 0.215,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "SigLIP frozen"
+     },
+     {
+      "label": "whole π₀.₅, frozen",
+      "value": 0.17,
+      "sd": 0.013,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "whole π₀.₅, LoRA",
+      "value": 0.155,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 LoRA"
+     },
+     {
+      "label": "SigLIP alone, fully fine-tuned",
+      "value": 0.207,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "SigLIP ft"
+     },
+     {
+      "label": "SigLIP alone, gently fine-tuned (lr 1e-6, new)",
+      "value": 0.187,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "SigLIP ft"
+     }
+    ]
+   },
+   "discussion": [
+    {
+     "h": "Is frozen SigLIP a better choice than the ResNet in theory?",
+     "p": [
+      "The idea behind using a VLA backbone: skip the expensive VLM pre-training that RECAP and SeeQ do, but still inherit what that pre-training teaches. We found the noise comes largely from π₀.₅'s language-model layers, so its frozen vision encoder alone looked like a good compromise. In our tests it does not beat the ResNet on either axis: it is nearly as steady (SNR 0.221 vs 0.247) but the least accurate option (MAE 0.215 vs 0.189). Fine-tuning it gently brings accuracy back to the ResNet's level (MAE 0.187) but makes it the least steady option (SNR 0.107). The accuracy π₀.₅ adds over the ResNet comes from the same language-model layers that add the noise.",
+      "What pre-training gives RECAP and SeeQ has two parts:"
+     ],
+     "ul": [
+      "**Visual knowledge:** recognising objects, the gripper, contact. SigLIP has this, and π₀.₅'s robot training tuned it toward robot images.",
+      "**Task understanding:** linking the image to the instruction, knowing which step of the task you're on, what success looks like. This lives mostly in the language-model layers, where image and instruction are combined."
+     ],
+     "p_after": [
+      "SigLIP alone never sees the instruction, so it keeps the first part and drops the second, which is the \"distilled good behaviour\" we want to reuse. On a single task with 825 training episodes, a fine-tuned ResNet learns enough task-specific visual cues to match or beat SigLIP's general visual knowledge."
+     ]
+    },
+    {
+     "h": "Where SigLIP could still beat the ResNet (not tested yet)",
+     "ul": [
+      "Many tasks or new scenes, where general visual features generalise and a single-task ResNet does not.",
+      "Very little training data.",
+      "Language-conditioned values, though there you would want the language-model layers anyway."
+     ],
+     "p_after": [
+      "Our LIBERO test is one task (the moka pots), the setting least likely to show SigLIP's advantage."
+     ]
+    },
+    {
+     "h": "What this means for the research direction",
+     "p": [
+      "The better version of the idea is probably not to drop down to SigLIP. Instead, keep π₀.₅'s task understanding and pick or clean up the read-out to remove the noise. Two ways to do that:"
+     ],
+     "ul": [
+      "**Read from an earlier or middle language-model layer.** These may keep most of the task understanding with less flicker. This is the hidden-layer test (job 18288157, listed under In progress), queued after the two policy fine-tunes.",
+      "**Smooth V over time, or average several heads.** This is cheap and leaves the backbone alone."
+     ]
+    },
+    {
+     "h": "Open question",
+     "p": [
+      "On one task, the VLA's advantage is all in the language-model layers. Is the goal to beat the ResNet on this task, or to generalise across tasks? The second needs a multi-task test."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "p2-flicker",
+   "date": "2026-11-02",
+   "title": "The flicker is the success belief switching",
+   "question": "Is π₀.₅'s noisy V error within a value estimate, or the model flipping between 'will succeed' and 'will fail'?",
+   "verdict": [
+    "Observed: ~96% of the 2 s noise variance is probability moving between the success and failure parts of V's distribution; only ~2–3% is movement within them.",
+    "Observed: the separate outcome head is just as unsteady (SNR 0.13–0.18), so the flicker sits in the shared features, not the 201-bin readout.",
+    "Interpretation: a head-side fix is not expected to help."
+   ],
+   "numbers": {
+    "between_lumps_share": {
+     "B ff s0": 0.96,
+     "B ff s1": 0.959,
+     "B ff s2": 0.988,
+     "LoRA ff s0": 0.958
+    },
+    "fine_tuned_p2_snr": {
+     "resnet_ft": 0.262,
+     "siglip_pi05_ft": 0.129
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Share of V's 2 s noise variance from success↔failure switching",
+    "unit": "fraction",
+    "higher_is_better": false,
+    "rows": [
+     {
+      "label": "frozen π₀.₅ seed 0",
+      "value": 0.96,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ seed 1",
+      "value": 0.959,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "frozen π₀.₅ seed 2",
+      "value": 0.988,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "LoRA seed 0",
+      "value": 0.958,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "pi05 LoRA"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1481-1496",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "e2-subtask-head",
+   "date": "2026-11-03",
+   "title": "An auxiliary 'pots on stove' head does not steady V",
+   "question": "Does adding an auxiliary head that predicts the subtask (pots on the stove), as in SeeQ, steady V or raise the milestone?",
+   "verdict": [
+    "Observed: the head learns pot state well (val accuracy 0.92–0.97) in every model.",
+    "Observed: SNR is unchanged — ResNet 0.247 → 0.258 (1 seed), frozen π₀.₅ per seed 0.152/0.152/0.194 → 0.155/0.152/0.137 (s2 0.194 → 0.137: the high baseline seed came down), LoRA 0.133 → 0.140.",
+    "Observed: the milestone moves at most +0.015 (frozen π₀.₅, seeds 1 and 2) and down for LoRA (+0.052 → +0.047).",
+    "Verdict: null; LoRA + subtask is below the bar (clearly above 0.133, ideally above frozen π₀.₅'s 0.166)."
+   ],
+   "numbers": {
+    "resnet": [
+     0.247,
+     0.258
+    ],
+    "B_base_per_seed": [
+     0.152,
+     0.1516,
+     0.1942
+    ],
+    "B_sub_per_seed": [
+     0.1555,
+     0.1521,
+     0.1365
+    ],
+    "lora": [
+     0.133,
+     0.14
+    ],
+    "lora_milestone": [
+     0.052,
+     0.047
+    ],
+    "subtask_acc": {
+     "resnet": 0.965,
+     "B": [
+      0.96,
+      0.96,
+      0.919
+     ],
+     "lora": 0.965
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Change SNR 2 s with vs without subtask head (fixed+fresh, recomputed)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ResNet base",
+      "value": 0.247,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "base"
+     },
+     {
+      "label": "ResNet + subtask",
+      "value": 0.258,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "+subtask"
+     },
+     {
+      "label": "frozen π₀.₅ base",
+      "value": 0.166,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "base"
+     },
+     {
+      "label": "frozen π₀.₅ + subtask",
+      "value": 0.148,
+      "sd": 0.01,
+      "n_seeds": 3,
+      "group": "+subtask"
+     },
+     {
+      "label": "LoRA base",
+      "value": 0.133,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "base"
+     },
+     {
+      "label": "LoRA + subtask",
+      "value": 0.14,
+      "sd": null,
+      "n_seeds": 1,
+      "group": "+subtask"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1427-1462, 1523-1537, 1711-1727, 1772-1777",
+   "status": "settled",
+   "tier": "minor",
+   "oneline": "An auxiliary 'pots on stove' head (96% accurate) does not steady V on any backbone."
+  },
+  {
+   "id": "averaging",
+   "date": "2026-11-02",
+   "title": "Averaging ResNet and π₀.₅ predictions: no free lunch",
+   "question": "Does averaging the ResNet's and π₀.₅'s per-frame predictions combine their strengths?",
+   "verdict": [
+    "Observed: the average gains SNR (0.262) but two ResNet seeds averaged do as well (0.268): generic noise averaging.",
+    "Observed: π₀.₅ adds level (AUC 10 s 0.80, MAE 0.179) but dilutes the milestone (+0.094 → +0.060).",
+    "Interpretation: the two models are complementary on what they get right (level vs change), not on noise."
+   ],
+   "numbers": {
+    "avg_resnet_B": {
+     "snr": 0.262,
+     "milestone": 0.06,
+     "mae": 0.179
+    },
+    "avg_2_resnet": {
+     "snr": 0.268,
+     "milestone": 0.094
+    },
+    "avg_2_B": {
+     "snr": 0.195,
+     "milestone": 0.026
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Change SNR 2 s, averaged predictions (3 seed-matched pairs)",
+    "unit": "change SNR 2 s",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ResNet",
+      "value": 0.247,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "single"
+     },
+     {
+      "label": "frozen π₀.₅",
+      "value": 0.166,
+      "sd": 0.025,
+      "n_seeds": 3,
+      "group": "single"
+     },
+     {
+      "label": "average of ResNet + frozen π₀.₅",
+      "value": 0.262,
+      "sd": 0.027,
+      "n_seeds": 3,
+      "group": "average"
+     },
+     {
+      "label": "avg 2 ResNet seeds",
+      "value": 0.268,
+      "sd": 0.011,
+      "n_seeds": 3,
+      "group": "average"
+     },
+     {
+      "label": "average of 2 frozen π₀.₅ seeds",
+      "value": 0.195,
+      "sd": 0.017,
+      "n_seeds": 3,
+      "group": "average"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1464-1479",
+   "status": "settled",
+   "tier": "minor",
+   "oneline": "Averaging ResNet and π₀.₅ predictions dilutes the ResNet's milestone; no free lunch."
+  },
+  {
+   "id": "advantage-labels-val",
+   "date": "2026-11-02",
+   "title": "Advantage labels on held-out scenes: ResNet labels are better",
+   "question": "Do RECAP advantage labels from each V give more positives to successful episodes, at the same scene and time?",
+   "verdict": [
+    "Observed (fixed layouts): ResNet labels +5.4 points more positive for successes (CI +2.3 to +8.6, within-scene AUC 0.74); frozen π₀.₅ only +2.4 (CI crosses 0, AUC 0.57).",
+    "Observed (fixed+fresh): both pass for the first time — ResNet +4.2, frozen π₀.₅ +3.3; the paired gap shrank to −0.9 points (CI crosses 0).",
+    "Observed: frozen π₀.₅ calls 82% of failure-ending frames positive (ResNet 64%) — a risk for its labels.",
+    "A pure clock gives exactly 0 on the time-matched check, so the labels are not a timing artefact."
+   ],
+   "numbers": {
+    "resnet_fixed": "+5.4 [+2.3, +8.6], AUC 0.74",
+    "B_fixed": "+2.4 [−1.0, +6.1], AUC 0.57",
+    "resnet_ff": "+4.2 [+1.7, +7.1], AUC 0.70",
+    "B_ff": "+3.3 [+0.1, +7.0], AUC 0.57",
+    "failure_end_positive": {
+     "resnet_ff": 0.64,
+     "B_ff": 0.82
+    }
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Successes − failures, share labelled positive (time-matched, n = 2 s)",
+    "unit": "percentage points",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "ResNet fixed",
+      "value": 5.4,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅, fixed",
+      "value": 2.4,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "ResNet",
+      "value": 4.2,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "ResNet"
+     },
+     {
+      "label": "frozen π₀.₅",
+      "value": 3.3,
+      "sd": null,
+      "n_seeds": 3,
+      "group": "pi05 frozen"
+     },
+     {
+      "label": "clock",
+      "value": 0.0,
+      "sd": null,
+      "n_seeds": null,
+      "group": "control"
+     }
+    ]
+   },
+   "figures": [
+    "/move/u/karenvo/Projects/value-learning/reports/figures/libero_advantages/01_checks.png"
+   ],
+   "source": "docs/libero_plan.md:354-364, 697-705, 1244-1264; reports/libero_advantages.md",
+   "status": "settled",
+   "tier": "main"
+  },
+  {
+   "id": "oof-advantage-labels",
+   "date": "2026-11-02",
+   "title": "Advantage-tagged fine-tune labels from out-of-fold ResNet V",
+   "question": "Can every training rollout get an advantage label from a V that never trained on it?",
+   "verdict": [
+    "Observed: 5 ResNet folds (whole scenes held out; 645 fit episodes each) label all 900 train rollouts (104,049 frames); 70.0% positive by construction.",
+    "Observed: interior frames are positive 72.8% in successes vs 65.6% in failures; within-scene AUC 0.74 (val ResNet 0.70), so the labels carry progress information.",
+    "Observed: 63.8% of failure-ending frames are positive (kept as computed, per Karen).",
+    "Open: π₀.₅ out-of-fold copies (5 folds, ~5.5 h each) for a second advantage-tagged fine-tune; folds 0–1 done, fold 2 running."
+   ],
+   "numbers": {
+    "frames": 104049,
+    "episodes": 900,
+    "positive": 0.7,
+    "threshold": -0.026,
+    "interior_success_pos": 0.728,
+    "interior_failure_pos": 0.656,
+    "terminal_failure_pos": 0.638,
+    "within_scene_auc": 0.74,
+    "oof_fold_MAE": [
+     0.197,
+     0.203,
+     0.206,
+     0.189,
+     0.182
+    ]
+   },
+   "chart": {
+    "type": "bar",
+    "title": "Share of frames labelled positive (out-of-fold ResNet V)",
+    "unit": "fraction",
+    "higher_is_better": true,
+    "rows": [
+     {
+      "label": "all frames",
+      "value": 0.7,
+      "sd": null,
+      "n_seeds": 5,
+      "group": "all"
+     },
+     {
+      "label": "interior, successes",
+      "value": 0.728,
+      "sd": null,
+      "n_seeds": 5,
+      "group": "interior"
+     },
+     {
+      "label": "interior, failures",
+      "value": 0.656,
+      "sd": null,
+      "n_seeds": 5,
+      "group": "interior"
+     },
+     {
+      "label": "terminal, failures",
+      "value": 0.638,
+      "sd": null,
+      "n_seeds": 5,
+      "group": "terminal"
+     }
+    ]
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1299-1310, 1498-1521, 1583-1586, 1737-1739",
+   "status": "open",
+   "tier": "main"
+  },
+  {
+   "id": "stage6-code-and-arm-a",
+   "date": "2026-11-03",
+   "title": "Policy fine-tuning: code checked; the success-only fine-tune crashed, fixed, resubmitted",
+   "question": "Is the advantage-conditioned policy fine-tuning pipeline correct, and are the first arms running?",
+   "verdict": [
+    "Observed: code checks pass — adapters at zero reproduce π₀.₅ exactly (loss 0.01527 vs 0.01526), prompts with the advantage tag tokenise correctly, actions round-trip exactly, and a one-batch overfit test reaches loss 0.0000.",
+    "Observed: ~6.7 frames/s on an L40S → ~6.6 h per policy at 5,000 steps.",
+    "Observed: the success-only fine-tune (imitation on 516 successes) crashed after 8 min in the data loader (two threads pulling from one generator); fixed (one serial reader) and resubmitted as 18288138; the advantage-tagged fine-tune (ResNet labels, 18275460) picks up the fix.",
+    "Plan: both policies evaluated on the 10 held-out test layouts; ~330 trials per policy needed to separate 65% vs 75%."
+   ],
+   "numbers": {
+    "lora_b0_loss": [
+     0.01527,
+     0.01526
+    ],
+    "frames_per_s_L40S": 6.7,
+    "hours_per_arm": 6.6,
+    "armA_job": 18288138,
+    "armC_resnet_job": 18275460,
+    "trials_needed_per_arm": 330
+   },
+   "chart": {
+    "type": "none",
+    "title": "",
+    "unit": "",
+    "higher_is_better": true,
+    "rows": []
+   },
+   "figures": [],
+   "source": "docs/libero_plan.md:1265-1279, 1289-1298, 1762-1767",
+   "status": "open",
+   "tier": "main"
+  }
+ ],
+ "backbone_table": [
+  {
+   "arm": "ResNet-18 fine-tuned, fixed layouts",
+   "backbone": "ResNet",
+   "data": "fixed",
+   "runs": [
+    "resnet18_18166232",
+    "resnet18_s1_18174529",
+    "resnet18_s2_18174726"
+   ],
+   "snr": 0.272,
+   "snr_sd": 0.028,
+   "milestone": 0.063,
+   "milestone_sd": 0.023,
+   "mae": 0.211,
+   "mae_sd": 0.004,
+   "mae_succ20": 0.128,
+   "mae_succ20_sd": 0.011,
+   "auc5": 0.732,
+   "auc10": 0.621,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.2659,
+     0.2474,
+     0.302
+    ],
+    "milestone": [
+     0.0642,
+     0.0391,
+     0.0845
+    ],
+    "mae": [
+     0.2149,
+     0.2062,
+     0.2109
+    ],
+    "mae_succ>20s": [
+     0.1149,
+     0.1334,
+     0.1349
+    ],
+    "auc10": [
+     0.5781,
+     0.6583,
+     0.6268
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:921-937",
+   "group": "ResNet"
+  },
+  {
+   "arm": "Frozen π₀.₅ + value head, fixed layouts",
+   "backbone": "pi05 frozen",
+   "data": "fixed",
+   "runs": [
+    "value_expert_aug_w256_s0_18186728",
+    "value_expert_aug_w256_s1_18189370",
+    "value_expert_aug_w256_s2_18189371"
+   ],
+   "snr": 0.073,
+   "snr_sd": 0.012,
+   "milestone": 0.027,
+   "milestone_sd": 0.019,
+   "mae": 0.18,
+   "mae_sd": 0.005,
+   "mae_succ20": 0.146,
+   "mae_succ20_sd": 0.003,
+   "auc5": 0.768,
+   "auc10": 0.775,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.0777,
+     0.081,
+     0.0595
+    ],
+    "milestone": [
+     0.0486,
+     0.0169,
+     0.014
+    ],
+    "mae": [
+     0.1775,
+     0.1773,
+     0.1859
+    ],
+    "mae_succ>20s": [
+     0.148,
+     0.1419,
+     0.147
+    ],
+    "auc10": [
+     0.7906,
+     0.7664,
+     0.768
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:921-937",
+   "group": "pi05 frozen"
+  },
+  {
+   "arm": "ResNet-18 fine-tuned, fresh layouts",
+   "backbone": "ResNet",
+   "data": "fresh",
+   "runs": [
+    "resnet18_fresh_s0_18220907",
+    "resnet18_fresh_s1_18219697",
+    "resnet18_fresh_s2_18219698"
+   ],
+   "snr": 0.258,
+   "snr_sd": 0.046,
+   "milestone": 0.085,
+   "milestone_sd": 0.006,
+   "mae": 0.215,
+   "mae_sd": 0.005,
+   "mae_succ20": 0.148,
+   "mae_succ20_sd": 0.018,
+   "auc5": 0.593,
+   "auc10": 0.638,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.2555,
+     0.2129,
+     0.3045
+    ],
+    "milestone": [
+     0.0892,
+     0.0784,
+     0.0866
+    ],
+    "mae": [
+     0.22,
+     0.2136,
+     0.2103
+    ],
+    "mae_succ>20s": [
+     0.1275,
+     0.1535,
+     0.1631
+    ],
+    "auc10": [
+     0.6307,
+     0.6388,
+     0.643
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1049-1062",
+   "group": "ResNet"
+  },
+  {
+   "arm": "Frozen π₀.₅, fresh layouts",
+   "backbone": "pi05 frozen",
+   "data": "fresh",
+   "runs": [
+    "value_expert_fresh_w256_s0_18219699",
+    "value_expert_fresh_w256_s1_18219700",
+    "value_expert_fresh_w256_s2_18219701"
+   ],
+   "snr": 0.157,
+   "snr_sd": 0.027,
+   "milestone": 0.044,
+   "milestone_sd": 0.016,
+   "mae": 0.187,
+   "mae_sd": 0.002,
+   "mae_succ20": 0.148,
+   "mae_succ20_sd": 0.014,
+   "auc5": 0.595,
+   "auc10": 0.799,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.1662,
+     0.1776,
+     0.126
+    ],
+    "milestone": [
+     0.0613,
+     0.04,
+     0.0295
+    ],
+    "mae": [
+     0.1893,
+     0.187,
+     0.1843
+    ],
+    "mae_succ>20s": [
+     0.138,
+     0.1644,
+     0.1414
+    ],
+    "auc10": [
+     0.7931,
+     0.8042,
+     0.8006
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1128-1131",
+   "group": "pi05 frozen"
+  },
+  {
+   "arm": "π₀.₅ LoRA (lr 1e-4), fresh layouts",
+   "backbone": "pi05 LoRA",
+   "data": "fresh",
+   "runs": [
+    "value_lora_fresh_lr1e4_s0_18237894"
+   ],
+   "snr": 0.145,
+   "snr_sd": null,
+   "milestone": 0.044,
+   "milestone_sd": null,
+   "mae": 0.179,
+   "mae_sd": null,
+   "mae_succ20": 0.125,
+   "mae_succ20_sd": null,
+   "auc5": 0.66,
+   "auc10": 0.717,
+   "n_seeds": 1,
+   "per_seed": {
+    "change_snr_2s": [
+     0.1445
+    ],
+    "milestone": [
+     0.0444
+    ],
+    "mae": [
+     0.1795
+    ],
+    "mae_succ>20s": [
+     0.1253
+    ],
+    "auc10": [
+     0.7173
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1170-1183 (CE-selected)",
+   "group": "pi05 LoRA"
+  },
+  {
+   "arm": "ResNet-18 fine-tuned (fixed+fresh)",
+   "backbone": "ResNet",
+   "data": "fixed+fresh",
+   "runs": [
+    "resnet18_fixedfresh_s0_18237895",
+    "resnet18_fixedfresh_s1_18237896",
+    "resnet18_fixedfresh_s2_18237897"
+   ],
+   "snr": 0.247,
+   "snr_sd": 0.025,
+   "milestone": 0.094,
+   "milestone_sd": 0.014,
+   "mae": 0.189,
+   "mae_sd": 0.003,
+   "mae_succ20": 0.119,
+   "mae_succ20_sd": 0.018,
+   "auc5": 0.697,
+   "auc10": 0.74,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.2609,
+     0.218,
+     0.2611
+    ],
+    "milestone": [
+     0.0949,
+     0.0786,
+     0.1071
+    ],
+    "mae": [
+     0.192,
+     0.1896,
+     0.1864
+    ],
+    "mae_succ>20s": [
+     0.1196,
+     0.1367,
+     0.1006
+    ],
+    "auc10": [
+     0.7577,
+     0.7026,
+     0.7608
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1231-1238",
+   "group": "ResNet",
+   "short": "ResNet-18",
+   "dx": 11,
+   "dy": -9,
+   "anchor": "start",
+   "spotlight": true
+  },
+  {
+   "arm": "Frozen π₀.₅ (fixed+fresh)",
+   "backbone": "pi05 frozen",
+   "data": "fixed+fresh",
+   "runs": [
+    "value_expert_fixedfresh_w256_s0_18237898",
+    "value_expert_fixedfresh_w256_s1_18237899",
+    "value_expert_fixedfresh_w256_s2_18237900"
+   ],
+   "snr": 0.166,
+   "snr_sd": 0.025,
+   "milestone": 0.026,
+   "milestone_sd": 0.015,
+   "mae": 0.17,
+   "mae_sd": 0.013,
+   "mae_succ20": 0.138,
+   "mae_succ20_sd": 0.02,
+   "auc5": 0.742,
+   "auc10": 0.797,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.152,
+     0.1516,
+     0.1942
+    ],
+    "milestone": [
+     0.0416,
+     0.0251,
+     0.0119
+    ],
+    "mae": [
+     0.1601,
+     0.1656,
+     0.1851
+    ],
+    "mae_succ>20s": [
+     0.1189,
+     0.1352,
+     0.1593
+    ],
+    "auc10": [
+     0.797,
+     0.7909,
+     0.8017
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1212-1218",
+   "group": "pi05 frozen",
+   "short": "π₀.₅ frozen",
+   "dx": 11,
+   "dy": 16,
+   "anchor": "start",
+   "spotlight": true
+  },
+  {
+   "arm": "π₀.₅ LoRA lr 1e-4 (fixed+fresh)",
+   "backbone": "pi05 LoRA",
+   "data": "fixed+fresh",
+   "runs": [
+    "value_lora_fixedfresh_lr1e4_s0_18258391"
+   ],
+   "snr": 0.133,
+   "snr_sd": null,
+   "milestone": 0.052,
+   "milestone_sd": null,
+   "mae": 0.155,
+   "mae_sd": null,
+   "mae_succ20": 0.11,
+   "mae_succ20_sd": null,
+   "auc5": 0.664,
+   "auc10": 0.788,
+   "n_seeds": 1,
+   "per_seed": {
+    "change_snr_2s": [
+     0.1331
+    ],
+    "milestone": [
+     0.0516
+    ],
+    "mae": [
+     0.1553
+    ],
+    "mae_succ>20s": [
+     0.11
+    ],
+    "auc10": [
+     0.7878
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1311-1319",
+   "group": "pi05 LoRA",
+   "short": "π₀.₅ LoRA",
+   "dx": -11,
+   "dy": -9,
+   "anchor": "end",
+   "spotlight": true
+  },
+  {
+   "arm": "π₀.₅'s SigLIP, fully fine-tuned (fixed+fresh)",
+   "backbone": "SigLIP ft",
+   "data": "fixed+fresh",
+   "runs": [
+    "siglip_pi05_fixedfresh_s0_18269859"
+   ],
+   "snr": 0.129,
+   "snr_sd": null,
+   "milestone": 0.06,
+   "milestone_sd": null,
+   "mae": 0.207,
+   "mae_sd": null,
+   "mae_succ20": 0.223,
+   "mae_succ20_sd": null,
+   "auc5": 0.657,
+   "auc10": 0.719,
+   "n_seeds": 1,
+   "per_seed": {
+    "change_snr_2s": [
+     0.1292
+    ],
+    "milestone": [
+     0.0604
+    ],
+    "mae": [
+     0.2075
+    ],
+    "mae_succ>20s": [
+     0.2231
+    ],
+    "auc10": [
+     0.7193
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1353-1364",
+   "group": "SigLIP ft",
+   "short": "SigLIP fine-tuned",
+   "dx": 11,
+   "dy": 16,
+   "anchor": "start",
+   "spotlight": true
+  },
+  {
+   "arm": "π₀.₅'s SigLIP, frozen, end-to-end head (fixed+fresh) [new, not yet in log]",
+   "backbone": "SigLIP frozen",
+   "data": "fixed+fresh",
+   "runs": [
+    "siglip_pi05_fixedfresh_frozen_s0_18286678"
+   ],
+   "snr": 0.221,
+   "snr_sd": null,
+   "milestone": 0.017,
+   "milestone_sd": null,
+   "mae": 0.215,
+   "mae_sd": null,
+   "mae_succ20": 0.194,
+   "mae_succ20_sd": null,
+   "auc5": 0.769,
+   "auc10": 0.702,
+   "n_seeds": 1,
+   "per_seed": {
+    "change_snr_2s": [
+     0.2214
+    ],
+    "milestone": [
+     0.0166
+    ],
+    "mae": [
+     0.215
+    ],
+    "mae_succ>20s": [
+     0.1935
+    ],
+    "auc10": [
+     0.7018
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "no logged mean to compare; run finished 13:32 on 2026-11-03, part (a) of job 18286678",
+   "group": "SigLIP ft",
+   "short": "SigLIP frozen (new)",
+   "dx": -11,
+   "dy": 18,
+   "anchor": "end",
+   "spotlight": true
+  },
+  {
+   "arm": "ResNet-18, demo pre-trained → fixed+fresh",
+   "backbone": "ResNet",
+   "data": "fixed+fresh",
+   "runs": [
+    "resnet18_fixedfresh_demos_s0_18265882",
+    "resnet18_fixedfresh_demos_s1_18265883",
+    "resnet18_fixedfresh_demos_s2_18265884"
+   ],
+   "snr": 0.203,
+   "snr_sd": 0.019,
+   "milestone": 0.045,
+   "milestone_sd": 0.01,
+   "mae": 0.184,
+   "mae_sd": 0.001,
+   "mae_succ20": 0.118,
+   "mae_succ20_sd": 0.01,
+   "auc5": 0.665,
+   "auc10": 0.772,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.2208,
+     0.1822,
+     0.2046
+    ],
+    "milestone": [
+     0.0539,
+     0.0471,
+     0.0348
+    ],
+    "mae": [
+     0.1848,
+     0.1852,
+     0.1831
+    ],
+    "mae_succ>20s": [
+     0.1107,
+     0.1128,
+     0.1292
+    ],
+    "auc10": [
+     0.809,
+     0.7265,
+     0.7792
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1339-1347",
+   "group": "ResNet"
+  },
+  {
+   "arm": "ResNet-18 + subtask head (fixed+fresh)",
+   "backbone": "ResNet",
+   "data": "fixed+fresh",
+   "runs": [
+    "resnet18_fixedfresh_sub01_s0_18273830"
+   ],
+   "snr": 0.258,
+   "snr_sd": null,
+   "milestone": 0.104,
+   "milestone_sd": null,
+   "mae": 0.195,
+   "mae_sd": null,
+   "mae_succ20": 0.129,
+   "mae_succ20_sd": null,
+   "auc5": 0.727,
+   "auc10": 0.777,
+   "n_seeds": 1,
+   "per_seed": {
+    "change_snr_2s": [
+     0.2579
+    ],
+    "milestone": [
+     0.1045
+    ],
+    "mae": [
+     0.1948
+    ],
+    "mae_succ>20s": [
+     0.1291
+    ],
+    "auc10": [
+     0.7769
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1523-1530",
+   "group": "ResNet"
+  },
+  {
+   "arm": "Frozen π₀.₅ + subtask head (fixed+fresh)",
+   "backbone": "pi05 frozen",
+   "data": "fixed+fresh",
+   "runs": [
+    "value_expert_fixedfresh_w256_sub01_s0_18274104",
+    "value_expert_fixedfresh_w256_sub01_s1_18274105",
+    "value_expert_fixedfresh_w256_sub01_s2_18274106"
+   ],
+   "snr": 0.148,
+   "snr_sd": 0.01,
+   "milestone": 0.038,
+   "milestone_sd": 0.007,
+   "mae": 0.165,
+   "mae_sd": 0.004,
+   "mae_succ20": 0.13,
+   "mae_succ20_sd": 0.006,
+   "auc5": 0.721,
+   "auc10": 0.795,
+   "n_seeds": 3,
+   "per_seed": {
+    "change_snr_2s": [
+     0.1555,
+     0.1521,
+     0.1365
+    ],
+    "milestone": [
+     0.0433,
+     0.0399,
+     0.0293
+    ],
+    "mae": [
+     0.1613,
+     0.1648,
+     0.1686
+    ],
+    "mae_succ>20s": [
+     0.1237,
+     0.1355,
+     0.1317
+    ],
+    "auc10": [
+     0.8092,
+     0.7956,
+     0.7789
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "no logged mean to compare (per-seed values match plan:1717-1777)",
+   "group": "pi05 frozen"
+  },
+  {
+   "arm": "π₀.₅ LoRA + subtask head (fixed+fresh)",
+   "backbone": "pi05 LoRA",
+   "data": "fixed+fresh",
+   "runs": [
+    "value_lora_fixedfresh_lr1e4_sub01_s0_18274115"
+   ],
+   "snr": 0.14,
+   "snr_sd": null,
+   "milestone": 0.047,
+   "milestone_sd": null,
+   "mae": 0.156,
+   "mae_sd": null,
+   "mae_succ20": 0.107,
+   "mae_succ20_sd": null,
+   "auc5": 0.681,
+   "auc10": 0.783,
+   "n_seeds": 1,
+   "per_seed": {
+    "change_snr_2s": [
+     0.1401
+    ],
+    "milestone": [
+     0.0466
+    ],
+    "mae": [
+     0.1564
+    ],
+    "mae_succ>20s": [
+     0.1065
+    ],
+    "auc10": [
+     0.7828
+    ]
+   },
+   "source": "recomputed 2026-11-03: score(val_predictions.parquet, 'ev_expert') of scripts/libero_head_swap.py; runs in /iris/u/ankile/karenvo/libero/runs/",
+   "log_check": "matches log (±0.001) plan:1772-1774",
+   "group": "pi05 LoRA"
+  },
+  {
+   "arm": "π₀.₅'s SigLIP, gently fine-tuned lr 1e-6 (fixed+fresh) [new, not yet in log]",
+   "backbone": "SigLIP ft",
+   "data": "fixed+fresh",
+   "runs": [
+    "siglip_pi05_fixedfresh_lr1e6_s0_18286678"
+   ],
+   "snr": 0.107,
+   "snr_sd": null,
+   "milestone": 0.093,
+   "milestone_sd": null,
+   "mae": 0.187,
+   "mae_sd": null,
+   "mae_succ20": 0.15,
+   "mae_succ20_sd": null,
+   "auc5": 0.712,
+   "auc10": 0.776,
+   "n_seeds": 1,
+   "source": "score(val_predictions.parquet, 'ev_resnet') of scripts/libero_head_swap.py; best step 5000 of 8000",
+   "log_check": "run finished 16:34 on 2026-11-03, part (b) of job 18286678",
+   "group": "SigLIP ft",
+   "short": "SigLIP gentle ft",
+   "spotlight": false
+  }
+ ],
+ "next_steps": [
+  "LoRA vs SigLIP-only value path decision (Karen), pending the per-layer hidden-state job 18288157 and the SigLIP-direct lr 1e-6 run (18286678b).",
+  "Step 0 PaliGemma gate (18286805 smoke / 18286806): same per-layer analysis on π₀.₅'s pre-robot VLM weights.",
+  "Stage 6: arm A 18288138 and arm C (ResNet labels) 18275460; then π₀.₅ out-of-fold labels → second arm C."
+ ],
+ "notes": [
+  "backbone_table values were recomputed on 2026-11-03 from each run's val_predictions.parquet with score() of scripts/libero_head_swap.py; 'log_check' compares them with the numbers written in docs/libero_plan.md.",
+  "Fixed-layout ResNet seed 2 is resnet18_s2_18174726 (as in scripts/libero_noout_score.py), not resnet18_s2_18174532 (no predictions).",
+  "LoRA rows use val_predictions.parquet (inner-CE selection); for the ff runs both selections picked step 5,400.",
+  "SDs in backbone_table are sample SDs (ddof=1). Some log entries quote population SDs (ddof=0), e.g. ResNet fixed SNR ±0.023 in the log = ±0.028 here, and ResNet fresh ±0.037 here ±0.046; the means agree."
+ ],
+ "spotlight": {
+  "intro": "The main question this week: π₀.₅'s value functions are the most **accurate** (lowest MAE), but their value **flickers** from frame to frame and barely reacts when the robot makes real progress (the first pot landing on the stove). The fine-tuned ResNet-18 is less accurate on average but steadier, and it steps up at the milestone. For advantage labels, which are built from *changes* in V, steadiness and progress matter more than average accuracy.",
+  "takeaways": [
+   "**Accuracy:** π₀.₅ LoRA has the lowest MAE (0.155, 1 seed), then frozen π₀.₅ (0.170 ± 0.013, 3 seeds); the ResNet is at 0.189 ± 0.003.",
+   "**Steadiness:** the ResNet's change SNR is 0.247 ± 0.025, against 0.166 for frozen π₀.₅ and 0.13 for LoRA and fine-tuned SigLIP. π₀.₅'s changes are 1.5–2× noisier relative to the signal.",
+   "**Progress:** at the first pot placement the ResNet's V rises +0.094 more than in time-matched episodes without one; π₀.₅ arms rise +0.026 to +0.060.",
+   "**Where the noise comes from (frozen-encoder comparison):** frozen SigLIP features are as steady as a frozen ImageNet ResNet (head SNR 0.172 vs 0.168). Passing them through π₀.₅'s frozen language-model layers, or fine-tuning SigLIP, each roughly halves SNR. The flicker itself is the model switching between “will succeed” and “will fail”."
+  ],
+  "episodes": [
+   {
+    "id": "454",
+    "tab": "Ep. 454: flicker after progress",
+    "caption": "Validation episode 454 (success, scene 25). Up to the pot placement all four agree. Afterwards the ResNet keeps rising with the target while frozen π₀.₅ and LoRA repeatedly drop by 0.3 to 0.4 and recover: the success belief switching on and off while the scene barely changes. This episode was picked because it shows the effect clearly; the table below gives the medians over all episodes."
+   },
+   {
+    "id": "534",
+    "tab": "Ep. 534: typical, π₀.₅ more accurate",
+    "caption": "Validation episode 534 (success, scene 25): a typical case. π₀.₅ LoRA and frozen π₀.₅ sit closer to the target (lower MAE) than the ResNet, which starts too pessimistic, but they are more jagged. This is the accuracy side of the trade-off."
+   },
+   {
+    "id": "469",
+    "tab": "Ep. 469: milestone step",
+    "caption": "Validation episode 469 (success, scene 48). At the first pot placement (dashed line) the ResNet and LoRA step up sharply. Frozen π₀.₅ then dips by about 0.4 at 27 s while nothing goes wrong in the scene."
+   }
+  ],
+  "table_note": "Recomputed on 2026-11-03 from each run's val_predictions.parquet with score() of scripts/libero_head_swap.py (120 validation episodes on 10 held-out scenes). Mean ± sample sd over seeds. Episode-player traces are seed 0 of each fixed+fresh model: ResNet 18237895, frozen π₀.₅ 18237898, LoRA 18258391, SigLIP ft 18269859."
+ },
+ "in_progress": {
+  "intro": "The policy test asks whether V can actually improve π₀.₅. Two fine-tunes are compared: a **success-only fine-tune** trains π₀.₅ only on its own successful rollouts (the baseline), and an **advantage-tagged fine-tune** trains on all rollouts with each frame tagged “Advantage: positive” or “negative” from V, then runs with the positive tag. If the advantage-tagged one wins, V is doing real work. Running it with the negative tag is the control: it should do worse.",
+  "stages": [
+   {
+    "title": "Done: labels for the advantage-tagged fine-tune",
+    "text": "Out-of-fold ResNet V over the 900 train rollouts (5 folds, each labelled by a V that never saw it): 70% of frames positive, interior positive rate 72.8% in successes vs 65.6% in failures, within-scene AUC 0.74."
+   },
+   {
+    "title": "Running: π₀.₅ out-of-fold labels (for a second advantage-tagged fine-tune)",
+    "text": "Same 5 folds with frozen π₀.₅ as V: folds 0–1 done, fold 2 running, folds 3–4 queued. Asks whether π₀.₅'s flicker costs task success."
+   },
+   {
+    "title": "Next: rollouts",
+    "text": "After training, about 330 LIBERO trials per policy on held-out scenes (needed to separate 65% from 75% success), plus the advantage-tagged fine-tune with the negative tag."
+   }
+  ]
+ },
+ "summary": {
+  "goal": "Learn a value function V that tracks task progress for π₀.₅ on LIBERO (moka pots), then test whether V improves the policy through advantage-conditioned fine-tuning (RECAP).",
+  "previously": [
+   {
+    "t": "Mulligan Insert Marker (real robot): V beat every trivial predictor and recognised progress late in an episode; stacking a 2 s-old frame with the current one was the one clear win, on stalls.",
+    "ev": [
+     "../week-06/index.html",
+     "Week 6"
+    ]
+   },
+   {
+    "t": "Its advantage labels pointed the right way but were weak (72% of failure-ending frames came out positive).",
+    "ev": [
+     "../week-06/index.html",
+     "Week 6"
+    ]
+   },
+   {
+    "t": "Offline data cannot show whether V improves a policy, so we moved to LIBERO, where π₀.₅ can be fine-tuned and re-run.",
+    "ev": [
+     "#stage0-reproduction",
+     "Setup"
+    ]
+   }
+  ],
+  "results": [
+   {
+    "t": "**The main trade-off:** π₀.₅-based value functions are the most accurate (LoRA MAE 0.155 vs ResNet 0.189), but the ResNet is ~1.5–2× steadier (change SNR 0.247 vs 0.13–0.17) and reacts far more when the first pot lands (+0.094 vs +0.03–0.06).",
+    "ev": [
+     "#tradeoff",
+     "Spotlight + episode player"
+    ]
+   },
+   {
+    "t": "π₀.₅'s accuracy comes from recognising which layouts are hard. The ResNet is the better progress tracker, and advantages are built from progress.",
+    "ev": [
+     "#stage3-correction",
+     "Evidence"
+    ]
+   },
+   {
+    "t": "π₀.₅'s flicker is its success belief switching on and off (~96% of the noise). Frozen π₀.₅ even knows a pot is on the stove (probe AUC 0.96–0.99), but the value head does not use it.",
+    "ev": [
+     "#p2-flicker",
+     "Evidence"
+    ]
+   },
+   {
+    "t": "There are two separate noise sources, each about halving steadiness: π₀.₅'s frozen language-model layers, and fine-tuning SigLIP. Frozen SigLIP is as steady as an ImageNet ResNet.",
+    "ev": [
+     "#frozen-encoders-p1",
+     "Evidence"
+    ]
+   },
+   {
+    "t": "The one data change that clearly helped was **layout variety**: a fresh scene per episode doubled frozen π₀.₅'s steadiness. Head, loss and pre-training fixes did not close the gap.",
+    "ev": [
+     "#fresh-layouts",
+     "Evidence"
+    ],
+    "ev2": [
+     "#minor",
+     "Smaller experiments"
+    ]
+   },
+   {
+    "t": "ResNet advantage labels are better on held-out scenes, so the policy fine-tune starts with them: out-of-fold labels on all 900 rollouts, 70% positive, within-scene AUC 0.74.",
+    "ev": [
+     "#oof-advantage-labels",
+     "Evidence"
+    ]
+   }
+  ],
+  "working": [
+   {
+    "t": "**The policy test:** a success-only fine-tune of π₀.₅ (the baseline) and an advantage-tagged fine-tune (every frame tagged good or bad by the ResNet value function) train side by side. The success-only run was resubmitted after a data-loader bug was fixed.",
+    "ev": [
+     "#progress",
+     "Jobs"
+    ]
+   },
+   {
+    "t": "π₀.₅ out-of-fold labels (fold 2 of 5) for a second advantage-tagged fine-tune: does π₀.₅'s flicker cost task success?",
+    "ev": [
+     "#progress",
+     "Jobs"
+    ]
+   },
+   {
+    "t": "Pinpointing the noise, and testing a fix: **π₀.₅'s vision encoder alone** as the value backbone (done, does not beat the ResNet: frozen is steady but less accurate, and even a 10× gentler fine-tune buys accuracy only by flickering more), plus layer-by-layer probes of π₀.₅'s language model and the same probes on pre-robot PaliGemma weights.",
+    "ev": [
+     "#siglip-end-to-end",
+     "Vision-encoder test"
+    ]
+   }
+  ],
+  "next": [
+   {
+    "t": "Roll out both policy fine-tunes (~330 trials each on held-out scenes, plus the advantage-tagged one with the negative tag as a control). The question: does the advantage-tagged fine-tune beat the success-only one?"
+   },
+   {
+    "t": "Decide the value backbone for real-robot use. SigLIP-only is ruled out (frozen or fine-tuned, it never beats the ResNet), so the choice is the ResNet, a cleaner read-out from π₀.₅'s language model (waits on the layer-by-layer probe), or pre-training the value function."
+   },
+   {
+    "t": "Then port the value function to `pi05_droid` on Mulligan (real robot)."
+   }
+  ],
+  "questions": [
+   {
+    "t": "**For discussion:** both RECAP and SeeQ pre-train the value function itself on large multi-task robot data. Should we pre-train V (e.g. on libero_90) rather than tune the backbone?"
+   },
+   {
+    "t": "A VLM backbone (PaliGemma) with and without value pre-training: SeeQ's Table 3 shows the same pattern as ours (big VL model < ResNet without pre-training)."
+   },
+   {
+    "t": "Subtask-scoped values (SeeQ): only the cheap half has been tested. The subtask-head experiment added subtask prediction as an auxiliary head and found no gain on any backbone. SeeQ's full version, where each value is scoped to and conditioned on the current subtask, is untested: it changes the value target and the advantage definition. Is it still worth trying after that null result?",
+    "ev": [
+     "#e2-subtask-head",
+     "Subtask-head result"
+    ]
+   },
+   {
+    "t": "Rohan's-data option: in simulation it is the same as the success-only fine-tune. Use his real DROID rollouts, or a second round of filtered imitation?"
+   }
+  ]
+ }
+}

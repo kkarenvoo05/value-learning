@@ -1,0 +1,159 @@
+{
+  "rules": {
+    "R0": "current: A > p30 (70% pos)",
+    "R1": "A > 0",
+    "R2": "A > p70 (30% pos)",
+    "R3": "no time cost, > p30"
+  },
+  "stall_def": {
+    "move_m": 0.015,
+    "grip_m": 0.005,
+    "lookahead_steps": 20
+  },
+  "resnet": {
+    "thresholds": {
+      "R0": -0.026030494082499783,
+      "R1": 0.0,
+      "R2": 0.02565154395530969,
+      "R3": -0.0068323100168927705
+    },
+    "checks": {
+      "R0": {
+        "positive": 0.699997116743073,
+        "positive_success": 0.7414879269892294,
+        "positive_failure": 0.6550080128205128,
+        "within_scene_auc": 0.8031858683644398,
+        "neg_before_drop": 0.779874213836478,
+        "neg_before_first_place_success": 0.18555512869765656,
+        "neg_before_first_place_failure": 0.40476190476190477,
+        "neg_stall_success": 0.38448176027793857,
+        "neg_stall_failure": 0.25608392811075764,
+        "neg_moving": 0.3048629367551855,
+        "flips_per_s": 0.9560115579433633
+      },
+      "R1": {
+        "positive": 0.46505973147267154,
+        "positive_success": 0.564503316152155,
+        "positive_failure": 0.3572315705128205,
+        "within_scene_auc": 0.9831922112279255,
+        "neg_before_drop": 0.8679245283018868,
+        "neg_before_first_place_success": 0.2831348444102958,
+        "neg_before_first_place_failure": 0.5056390977443609,
+        "neg_stall_success": 0.7793862188766647,
+        "neg_stall_failure": 0.878407429701608,
+        "neg_moving": 0.4913314880655958,
+        "flips_per_s": 1.0560654098108406
+      },
+      "R2": {
+        "positive": 0.30000288325692703,
+        "positive_success": 0.3650169040625173,
+        "positive_failure": 0.22950721153846154,
+        "within_scene_auc": 0.9508824442753016,
+        "neg_before_drop": 0.9182389937106918,
+        "neg_before_first_place_success": 0.4026123703419132,
+        "neg_before_first_place_failure": 0.6052631578947368,
+        "neg_stall_success": 0.9189345686160972,
+        "neg_stall_failure": 0.9738584573050133,
+        "neg_moving": 0.669067830961122,
+        "flips_per_s": 0.8948781973054317
+      },
+      "R3": {
+        "positive": 0.699997116743073,
+        "positive_success": 0.7417096196124074,
+        "positive_failure": 0.6547676282051282,
+        "within_scene_auc": 0.8045379091807663,
+        "neg_before_drop": 0.779874213836478,
+        "neg_before_first_place_success": 0.18555512869765656,
+        "neg_before_first_place_failure": 0.40476190476190477,
+        "neg_stall_success": 0.38332368268674,
+        "neg_stall_failure": 0.25565396852695843,
+        "neg_moving": 0.30494400500306906,
+        "flips_per_s": 0.9554918261366587
+      }
+    },
+    "counts": {
+      "stall_frames": 13356,
+      "stall_share": 0.12836259839114264,
+      "drop_frames": 159,
+      "place_first_frames": 4199
+    },
+    "frames_changed_vs_R0": {
+      "R1_vs_R0_changed": 0.23493738527040145,
+      "R2_vs_R0_changed": 0.39999423348614593,
+      "R3_vs_R0_changed": 0.0005189862468644581
+    }
+  },
+  "expert": {
+    "thresholds": {
+      "R0": -0.024040981504556563,
+      "R1": 0.0,
+      "R2": 0.029335099383738638,
+      "R3": -0.004825036829934089
+    },
+    "checks": {
+      "R0": {
+        "positive": 0.699997116743073,
+        "positive_success": 0.731308540708308,
+        "positive_failure": 0.6660456730769231,
+        "within_scene_auc": 0.7361227727299157,
+        "neg_before_drop": 0.5345911949685535,
+        "neg_before_first_place_success": 0.3227045716480983,
+        "neg_before_first_place_failure": 0.47681704260651625,
+        "neg_stall_success": 0.29241459177764906,
+        "neg_stall_failure": 0.18883824920457482,
+        "neg_moving": 0.31076933767241477,
+        "flips_per_s": 0.8575779768300039
+      },
+      "R1": {
+        "positive": 0.4885198320022297,
+        "positive_success": 0.5717268007907037,
+        "positive_failure": 0.3982972756410256,
+        "within_scene_auc": 0.966222520865378,
+        "neg_before_drop": 0.6981132075471699,
+        "neg_before_first_place_success": 0.5201690357280062,
+        "neg_before_first_place_failure": 0.5614035087719298,
+        "neg_stall_success": 0.6253618992472496,
+        "neg_stall_failure": 0.7949952704445782,
+        "neg_moving": 0.46953571056319265,
+        "flips_per_s": 0.9923276036792419
+      },
+      "R2": {
+        "positive": 0.30000288325692703,
+        "positive_success": 0.33998411202867224,
+        "positive_failure": 0.256650641025641,
+        "within_scene_auc": 0.8597640983355268,
+        "neg_before_drop": 0.8238993710691824,
+        "neg_before_first_place_success": 0.7038033038801383,
+        "neg_before_first_place_failure": 0.6735588972431077,
+        "neg_stall_success": 0.7869137232194557,
+        "neg_stall_failure": 0.9275088141714679,
+        "neg_moving": 0.6677939013515235,
+        "flips_per_s": 0.8227868099547925
+      },
+      "R3": {
+        "positive": 0.699997116743073,
+        "positive_success": 0.7313639638641024,
+        "positive_failure": 0.6659855769230769,
+        "within_scene_auc": 0.7346942013013442,
+        "neg_before_drop": 0.5345911949685535,
+        "neg_before_first_place_success": 0.3227045716480983,
+        "neg_before_first_place_failure": 0.47681704260651625,
+        "neg_stall_success": 0.29241459177764906,
+        "neg_stall_failure": 0.1885802734542953,
+        "neg_moving": 0.310804081207222,
+        "flips_per_s": 0.8574326776847049
+      }
+    },
+    "counts": {
+      "stall_frames": 13356,
+      "stall_share": 0.12836259839114264,
+      "drop_frames": 159,
+      "place_first_frames": 4199
+    },
+    "frames_changed_vs_R0": {
+      "R1_vs_R0_changed": 0.21147728474084326,
+      "R2_vs_R0_changed": 0.39999423348614593,
+      "R3_vs_R0_changed": 0.00017299541562148602
+    }
+  }
+}

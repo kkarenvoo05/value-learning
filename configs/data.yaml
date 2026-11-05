@@ -49,6 +49,18 @@ still_time:
   table: data/proprio/frame_proprio.parquet
   still_mps: 0.01
 
+# Stage 5.5 V1: hand velocity history instead of past frames [mentor's idea; sizes ours]. n samples of
+# xyz + gripper velocity from position differences, one every step_s (4 frames = 0.27 s at 15 fps), so
+# 8 samples cover the last ~2.1 s; signed log in the model, scaled at scale_mps (the still threshold)
+# and scale_grip. `vl.train_baseline --vel-history` turns it on.
+vel_history:
+  enabled: false
+  table: data/proprio/frame_proprio.parquet
+  n: 8
+  step_s: 0.25
+  scale_mps: 0.01
+  scale_grip: 0.1
+
 paths:
   video_root: data/videos
   frame_targets: data/targets/frame_targets.parquet

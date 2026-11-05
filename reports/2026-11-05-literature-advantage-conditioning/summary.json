@@ -1,0 +1,9 @@
+{"title": "How others handle value noise and advantage conditioning (literature review)",
+ "date": "2026-11-05",
+ "key_findings": [
+  "RECAP labels ~30% positive in pre-training and ~40% in fine-tuning (App. A-F); ours is 70% positive",
+  "RECAP drops the indicator 30% of the time (RLinf, CFGRL 10%); ours 0%, so no guidance is possible",
+  "RECAP learns the tag during large multi-task pre-training and uses demos with the tag fixed positive; we learn a new tag in a 5k-step single-task fine-tune without demos",
+  "RCSL theory: a tag that is not predictable from the action given the state is ignored (policy defaults to behavior)",
+  "Dissecting (2609.28161): n-step TD > Q-V; MC critic near chance on ordering checks; value-binned calibration and continuous weights beat binary filtering on 4 real tasks"],
+ "next": "offline tag-informativeness test and value-binned calibration; then a RECAP-faithful tag run and an advantage-weighting run"}

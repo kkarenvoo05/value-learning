@@ -25,6 +25,11 @@ interpretations are labelled. Live status is in `docs/CURRENT.md`, chronology in
 - Two separate noise sources, each about halving head SNR [same report]:
   - the frozen LLM layers: SigLIP 0.122 → LLM final hidden 0.059 (matched head, 375 fixed episodes);
   - fine-tuning SigLIP: 0.172 → 0.084 (825), 0.122 → 0.078 (375). Fine-tuning the ResNet costs nothing.
+    A 10× lower SigLIP lr (1e-6) does not remove it: full trainer, noise 0.097 vs frozen 0.057 (1 seed).
+    [`reports/2026-11-03-siglip-direct/`]
+- Skipping the LLM (V straight on SigLIP) is not a fix, 1 seed: frozen SigLIP is steady (SNR 0.221) but misses the
+  pot landing (milestone +0.017) and is least accurate (MAE 0.215); B's accuracy edge (MAE 0.160) comes via the LLM.
+  [`reports/2026-11-03-siglip-direct/`]
   - *Open:* where in the LLM the drop starts (P1c step 2, job 18279695).
 - The value head architecture never matters (± 0.01 SNR in head swaps). [plan 2026-10-30, head swap]
 

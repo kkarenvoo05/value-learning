@@ -58,7 +58,8 @@ def run_masks(args, cfg):
     dcfg, tcfg = load_config(cfg["data_config"]), load_config(cfg["target_config"])
     run = Path(cfg["paths"]["runs"]) / args.run
     dcfg = run_data_config(dcfg, run)
-    if dcfg.get("history") or dcfg.get("proprio", {}).get("enabled") or dcfg["still_time"]["enabled"]:
+    if dcfg.get("history") or dcfg.get("proprio", {}).get("enabled") or dcfg["still_time"]["enabled"] \
+            or dcfg["vel_history"].get("enabled"):
         raise SystemExit(f"{args.run}: only image-only runs (no history / proprio / still time) are supported")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = amp_dtype(cfg["amp"])

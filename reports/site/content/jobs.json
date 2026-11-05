@@ -1,0 +1,79 @@
+[
+ {
+  "job": "18288138",
+  "what": "Success-only fine-tune of π₀.₅ (the baseline)",
+  "why": "516 successful train rollouts, 5,000 steps. Resubmitted after a data-loader crash in 18269064 (fixed)."
+ },
+ {
+  "job": "18275460",
+  "what": "Advantage-tagged fine-tune of π₀.₅ (labels from the ResNet value function)",
+  "why": "All 900 rollouts with positive/negative tags; trains side by side with the success-only fine-tune.",
+  "after": "a free GPU",
+  "done": true
+ },
+ {
+  "job": "18291520",
+  "what": "Evaluate the advantage-tagged policy (positive tag)",
+  "why": "33 rollouts on each of the 10 held-out scenes.",
+  "after": "its fine-tune"
+ },
+ {
+  "job": "18291521",
+  "what": "Same policy with the negative tag (control)",
+  "why": "If the tag matters, this should do worse than the positive tag.",
+  "after": "the positive-tag eval"
+ },
+ {
+  "job": "18291522",
+  "what": "Evaluate the success-only policy (baseline)",
+  "why": "Same 330 rollouts, same seed.",
+  "after": "its fine-tune"
+ },
+ {
+  "job": "18275464",
+  "what": "π₀.₅ out-of-fold V, fold 2 of 5",
+  "why": "Labels for the second the advantage-tagged fine-tune (π₀.₅ V)."
+ },
+ {
+  "job": "18275465",
+  "what": "π₀.₅ out-of-fold V, fold 3",
+  "why": "",
+  "after": "fold 2"
+ },
+ {
+  "job": "18275466",
+  "what": "π₀.₅ out-of-fold V, fold 4",
+  "why": "",
+  "after": "fold 3"
+ },
+ {
+  "job": "18292150",
+  "what": "Per-layer hidden states with pre-robot PaliGemma weights",
+  "why": "Did robot training make the language-model layers noisy? Compare with the π₀.₅ layer probe.",
+  "after": "the steering pre-checks"
+ },
+ {
+  "job": "18292149",
+  "what": "Layer-by-layer probe of frozen π₀.₅'s language model",
+  "why": "Where inside π₀.₅'s language model the steadiness is lost. Earlier attempts failed on smaller GPUs (numerics check); now restricted to large GPUs.",
+  "after": "the negative-tag eval"
+ },
+ {
+  "job": "18296012",
+  "what": "Steering pre-checks: do π₀.₅'s candidate actions differ, and does choosing between them matter?",
+  "why": "10 held-out scenes; 8 candidates at every decision point; at 4 points each candidate is run to the end twice from the same saved simulator state.",
+  "after": "the layer-by-layer probe"
+ },
+ {
+  "job": "18291639",
+  "what": "Truncated π₀.₅ value function: first 9 of 18 layers",
+  "why": "SmolVLA idea: does dropping the top language-model layers make V steadier without losing accuracy? Same recipe as the frozen π₀.₅ baseline (SNR 0.166, MAE 0.170).",
+  "after": "the success-only evaluation"
+ },
+ {
+  "job": "18291640",
+  "what": "Truncated π₀.₅ value function: first 4 of 18 layers",
+  "why": "",
+  "after": "the 9-layer run"
+ }
+]

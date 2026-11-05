@@ -53,6 +53,14 @@ items also carry "still": float32 tensor (1,), seconds since the gripper last mo
 from the proprio table). A perfect "how long has nothing changed" signal that image history could at
 best recover; raw seconds here, log1p inside the model.
 
+Velocity history (Stage 5.5 V1, Karen's mentor: "velocity ~ 0 during a stall" [ours: sizes]), data config
+`vel_history.enabled`: items also carry "vel": float32 tensor (5 n,) = n samples of the hand's xyz velocity
+(m/s) and gripper velocity (1/s), sample j = (p[t - j k] - p[t - (j + 1) k]) / (k / fps), k = round(step_s
+* fps), j = 0..n-1 (newest first), laid out [vx_0, vy_0, vz_0, vg_0, vx_1, ...], then n validity flags
+(1 iff t - (j + 1) k >= 0; invalid samples are 0). From positions in the proprio table, so in sync with
+frame t and causal (the reported cartesian velocity runs 1-2 rows ahead of the video). Raw here, the
+signed-log scaling is inside the model. Images of frame t only: no past frames.
+
 Benchmark / sampling log:
     .venv/bin/python -m vl.dataset --workers 3 --batches 100
 """
@@ -237,6 +245,7 @@ class FrameDataset(Dataset):
         self.value = self.index.value.to_numpy()
         self.proprio = load_proprio(self.index, cfg) if cfg.get("proprio", {}).get("enabled") else None
         self.still = load_still(self.index, cfg) if (cfg.get("still_time") or {}).get("enabled") else None
+        self.vel = load_vel(self.index, cfg) if (cfg.get("vel_history") or {}).get("enabled") else None
         hist = cfg.get("history") or {}
         gap, gaps = hist.get("gap_s"), hist.get("gaps_s")
         if gap is not None and gaps is not None:
@@ -305,6 +314,8 @@ class FrameDataset(Dataset):
             item["proprio"] = torch.from_numpy(self.proprio[i].copy())
         if self.still is not None:
             item["still"] = torch.tensor([self.still[i]], dtype=torch.float32)
+        if self.vel is not None:
+            item["vel"] = torch.from_numpy(self.vel[i].copy())
         return item
 
 
@@ -332,6 +343,8 @@ class FrameDataset(Dataset):
             item["proprio"] = torch.from_numpy(self.proprio[i].copy())
         if self.still is not None:
             item["still"] = torch.tensor([self.still[i]], dtype=torch.float32)
+        if self.vel is not None:
+            item["vel"] = torch.from_numpy(self.vel[i].copy())
         return item
 
 
@@ -360,6 +373,38 @@ def load_still(index: pd.DataFrame, cfg: dict) -> np.ndarray:
     if np.isnan(s).any():
         raise ValueError(f"{np.isnan(s).sum()} frames have no proprio row in {st['table']}")
     return s
+
+
+def velocity_history(tab: pd.DataFrame, n: int, k: int, fps: float = 15.0) -> np.ndarray:
+    """Per proprio row: (5 n,) [xyz + gripper velocity per sample, newest first; n validity flags], see
+    the module docstring. Row order of `tab` does not matter; the output is aligned with it."""
+    p = tab.sort_values(["repo", "episode_index", "frame_index"])
+    g = p.groupby(["repo", "episode_index"])
+    cols = ["x", "y", "z", "gripper"]
+    pos = {j: g[cols].shift(j * k) for j in range(n + 1)}
+    out = np.zeros((len(p), 5 * n), np.float32)
+    for j in range(n):
+        v = ((pos[j] - pos[j + 1]) / (k / fps)).to_numpy()
+        ok = ~np.isnan(v).any(1)
+        out[:, 4 * j:4 * j + 4] = np.where(ok[:, None], v, 0.0)
+        out[:, 4 * n + j] = ok
+    return pd.DataFrame(out, index=p.index).reindex(tab.index).to_numpy(np.float32)
+
+
+def load_vel(index: pd.DataFrame, cfg: dict) -> np.ndarray:
+    """(len(index), 5 n) float32 velocity history, row-aligned with the index; every frame must be found."""
+    keys = ["repo", "episode_index", "frame_index"]
+    vh = cfg["vel_history"]
+    if (index.fps != 15).any():
+        raise ValueError("velocity history assumes 15 Hz")
+    tab = pd.read_parquet(vh["table"], columns=keys + ["x", "y", "z", "gripper"])
+    v = velocity_history(tab, vh["n"], int(round(vh["step_s"] * 15)))
+    cols = [f"v{i}" for i in range(v.shape[1])]
+    tab = pd.concat([tab[keys], pd.DataFrame(v, columns=cols, index=tab.index)], axis=1)
+    m = index[keys].merge(tab, on=keys, how="left", validate="one_to_one")[cols].to_numpy(np.float32)
+    if np.isnan(m).any():
+        raise ValueError(f"{np.isnan(m).any(1).sum()} frames have no proprio row in {vh['table']}")
+    return m
 
 
 def load_proprio(index: pd.DataFrame, cfg: dict) -> np.ndarray:

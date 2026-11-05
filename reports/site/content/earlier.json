@@ -1,0 +1,952 @@
+{
+ "overview": "From Oct 17 to Oct 26 we built and tested a small RECAP-style value function on Mulligan's real-robot Insert Marker data: two camera images in, a predicted 'how well is this going' score out. It learns real progress (it beats every trivial predictor, recognises a seated marker, and within a single round ranks eventual successes above failures increasingly well) but is limited by an ambiguity that one frame cannot resolve: a robot stuck at the holder looks like one about to insert. Most changes (cameras, robot state, augmentation, backbones, crops, architectures) gave small or no gains. The one clear win, stacking a 2 s-old frame with the current one, works as a stillness detector. The project then moved to LIBERO simulation with a frozen π₀.₅ backbone: testing whether a value function actually improves a policy requires new rollouts, which offline Mulligan data cannot provide, and the lab's goal is a self-improving π₀.₅.",
+ "glossary": {
+  "V (value)": "The model's estimate, from -1 to 0, of how well the episode is going: near 0 means about to succeed, below -0.5 means headed for failure.",
+  "Target": "The training label per frame: a straight countdown to the episode end, with an extra penalty if it fails.",
+  "Two humps": "The model outputs a probability over 201 value bins. These usually form a 'success' bump and a 'failure' bump, and V is their weighted average.",
+  "p_succ": "Probability mass the model puts on the success side (values above -0.5).",
+  "CE (cross-entropy)": "The training loss, in nats. Lower is better; a difference of about 0.02-0.03 is the smallest this validation set can detect.",
+  "MAE": "Average absolute gap between V and the target. Lower is better.",
+  "Shape MAE": "Error after removing each episode's average level. It measures whether V's ups and downs within an episode are right. A flat line scores 0.037.",
+  "AUC": "How well a score ranks one group above another: 0.5 is chance, 1.0 is perfect.",
+  "Within-round AUC at 1/5/10 s": "Inside one robot round, how well V at that time ranks episodes that will succeed above those that won't.",
+  "stall_auc": "How well p_succ separates success frames from frames where a failing robot has held still at the holder for at least 4 s.",
+  "Round / repo": "A batch of data collected with one policy version (r00-r04 autonomous evals; c00-c05 teleop or assisted). Rounds differ a lot in success rate.",
+  "Round-only constant": "A trivial predictor that outputs each round's typical training value. It is the strongest simple baseline.",
+  "Stall": "A failed episode where the robot holds the marker at the holder without progress until it times out.",
+  "Seeds": "Repeated training runs with different random starts. Differences smaller than the seed-to-seed spread are noise.",
+  "Advantage label": "RECAP's 'was this action better than usual' tag, computed from how V changes over the next n seconds.",
+  "Early vs late fusion": "Combining two frames' pixels before the encoder (early) vs encoding each frame and joining the features (late).",
+  "Proprioception": "The robot's own state: gripper position, orientation and opening width.",
+  "baseline recipe": "The baseline recipe: shared ResNet-18, both cameras, LeRobot-style augmentation, 3 seeds."
+ },
+ "weeks": [
+  {
+   "week": 5,
+   "dates": "Oct 13 – Oct 19",
+   "summary": "Project start (Oct 17): audited and split the data, built targets and the pipeline, trained a baseline that beats trivial predictors, settled a stable recipe, and found the side camera carries most of the signal.",
+   "findings": [
+    {
+     "title": "Dataset audit: outcomes, endpoints and splits (Oct 17)",
+     "question": "Can we trust each episode's success/failure label and its end frame, and split the data so no starting scene leaks between train and validation?",
+     "verdict": [
+      "Every one of the 2,095 episodes with a known outcome has a label and end frame that agree with the per-frame data.",
+      "4 episodes with no reviewed outcome were dropped instead of being counted as failures.",
+      "Starting scenes never cross splits: train 1,377 / val 247 episodes; the two r05 test sets (150 + 200) stay untouched.",
+      "Timeouts count as failures, as in RECAP (Lars, Oct 17)."
+     ],
+     "numbers": {
+      "episodes_verified": 2095,
+      "unknown_excluded": 4,
+      "train_episodes": 1377,
+      "val_episodes": 247,
+      "test_r05_eval": 150,
+      "test_r05_screen": 200,
+      "train_hours": 6.92,
+      "val_hours": 1.2,
+      "fps": 15,
+      "repos": 13
+     },
+     "chart": {
+      "type": "none"
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage1_review/real-marker-d2-r03-eval_ep0035.jpg"
+     ],
+     "figure_sizes_mb": {
+      "real-marker-d2-r03-eval_ep0035.jpg": 0.57
+     },
+     "source": "reports/dataset_audit.md; PROGRESS.md Stage 1"
+    },
+    {
+     "title": "Value targets: a straight countdown per episode (Oct 18; timestep form Oct 19)",
+     "question": "What number should the model learn for every frame?",
+     "verdict": [
+      "Reward is -1 per frame plus a 900-step penalty for failure, scaled so successes fall in (-0.5, 0] and failures in [-1, -0.5].",
+      "Within an episode the target is a straight line rising to the end. Any drop at a mistake can only show up in the model's predictions.",
+      "Checked on 575,406 frames: no target falls outside the 201 value bins.",
+      "Switching from seconds to timesteps gave identical bins, so no retraining was needed."
+     ],
+     "numbers": {
+      "frames": 575406,
+      "failure_penalty_steps": 900,
+      "normalizer_steps": 1800,
+      "bins": 201,
+      "out_of_support": 0,
+      "lowest_target": -0.966
+     },
+     "chart": {
+      "type": "none"
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/target_examples.png"
+     ],
+     "figure_sizes_mb": {
+      "target_examples.png": 0.05
+     },
+     "source": "reports/targets_summary.md; PROGRESS.md Stage 2"
+    },
+    {
+     "title": "Pipeline sanity checks B and C (Oct 18)",
+     "question": "Does each image line up with its label, and can the model memorize a tiny subset (the check that loader, targets, model and loss are wired correctly)?",
+     "verdict": [
+      "8 of 8 sampled frames matched independently recomputed timestamps and labels (timestamp/label check).",
+      "On 4 episodes / 720 frames the model drove the loss from 5.30 to 0.018 and fit every curve (tiny-subset overfit check).",
+      "This shows the pipeline can learn. It says nothing yet about held-out episodes."
+     ],
+     "numbers": {
+      "check_b_agree": "8/8",
+      "decode_exact": "434/434 frames",
+      "check_c_ce_start": 5.3,
+      "check_c_ce_end": 0.018,
+      "check_c_mae": 0.0014
+     },
+     "chart": {
+      "type": "none"
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage3/check_c.png",
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage3/crops_side_1.jpg"
+     ],
+     "figure_sizes_mb": {
+      "check_c.png": 0.11,
+      "crops_side_1.jpg": 0.31
+     },
+     "source": "PROGRESS.md Stage 3.5, 3.8; reports/data_checks.md"
+    },
+    {
+     "title": "First baseline vs trivial baselines (Oct 18)",
+     "question": "Does a ResNet-18 value model beat simple guesses, such as 'predict each robot round's typical value'?",
+     "verdict": [
+      "The model beats every trivial baseline, but 'which round is this' alone gets most of the way (MAE 0.140 vs the model's 0.119).",
+      "Rounds have very different success rates (r00 4% up to r04 53%; teleop and assisted 98-100%), so recognising the round already predicts the outcome.",
+      "Within a single round, the model's success ranking improves from near chance at 1 s to 0.80 at 12 s, which is the progress signal we want.",
+      "The first recipe overfit after about 2k steps."
+     ],
+     "numbers": {
+      "model_mae": 0.119,
+      "repo_only_mae": 0.14,
+      "repo_plus_time_mae": 0.146,
+      "elapsed_time_mae": 0.235,
+      "global_constant_mae": 0.257,
+      "within_round_auc_1s": 0.57,
+      "within_round_auc_12s": 0.8,
+      "best_step": 2000
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation error of V vs trivial predictors (step-2k baseline)",
+      "unit": "MAE (value units)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "Global constant",
+        "value": 0.257,
+        "sd": null
+       },
+       {
+        "label": "Elapsed time only",
+        "value": 0.235,
+        "sd": null
+       },
+       {
+        "label": "Round + elapsed time",
+        "value": 0.146,
+        "sd": null
+       },
+       {
+        "label": "Round only",
+        "value": 0.14,
+        "sd": null
+       },
+       {
+        "label": "Model",
+        "value": 0.119,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "reports/baseline_results.md"
+    },
+    {
+     "title": "Settled training recipe: lower learning rate, 3 seeds (Oct 18-19)",
+     "question": "Can we stop the early overfitting so later comparisons start from a stable baseline?",
+     "verdict": [
+      "A shorter, decaying schedule did not help. A 10x lower learning rate did: validation loss stays flat and never nears the constant predictor.",
+      "Over 3 seeds: val MAE 0.121 ± 0.004. Seed noise sets the bar: later differences under about 2 sd are not evidence.",
+      "Error check: V hedges toward the middle. It does much better than the round constant on successes, worse on failures and timeouts."
+     ],
+     "numbers": {
+      "lowlr_val_ce_3seed": "3.730 ± 0.002",
+      "lowlr_val_mae_3seed": "0.121 ± 0.004",
+      "eval_round_mae": "0.196 ± 0.008",
+      "auc_1_5_10s": "0.67 / 0.64 / 0.84",
+      "constant_ce": 4.53
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation loss (best checkpoint)",
+      "unit": "cross-entropy (nats)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "Constant predictor",
+        "value": 4.53,
+        "sd": null
+       },
+       {
+        "label": "First recipe (step 2k)",
+        "value": 3.873,
+        "sd": null
+       },
+       {
+        "label": "Cosine 8k",
+        "value": 3.839,
+        "sd": null
+       },
+       {
+        "label": "Low LR, 3 seeds",
+        "value": 3.73,
+        "sd": 0.002
+       }
+      ]
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "reports/baseline_results.md; PROGRESS.md Stage 4"
+    },
+    {
+     "title": "What V does on real episodes: value plots (Oct 18-19)",
+     "question": "Does V rise as the task progresses and react when things go well or badly?",
+     "verdict": [
+      "Yes at the end: V jumps toward 0 when the marker seats, and it separates seated from hovering frames perfectly (AUC 1.0).",
+      "Holding the marker at the holder gives V about -0.55 whatever happens next. One frame cannot show how long the robot has been stuck.",
+      "V jitters a lot from frame to frame (about 30x the target slope).",
+      "Karen watched the videos (Oct 19) and found no data or label problems."
+     ],
+     "numbers": {
+      "seated_vs_hovering_auc": 1.0,
+      "rise_at_seat": "-0.29 at T-5 s to -0.02 at T",
+      "jitter_vs_target_slope": "~30x"
+     },
+     "chart": {
+      "type": "none"
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage4/lowlr_8k/01_autonomous_success_r04-eval_ep0039_dist.png",
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage4/lowlr_8k/09_worst_error_r04-eval_ep0101_dist.png"
+     ],
+     "figure_sizes_mb": {
+      "01_autonomous_success_r04-eval_ep0039_dist.png": 0.4,
+      "09_worst_error_r04-eval_ep0101_dist.png": 0.49
+     },
+     "source": "reports/baseline_results.md; reports/stage4_analysis_lowlr_8k.md"
+    },
+    {
+     "title": "Operator and arm-occlusion checks (Oct 18-19)",
+     "question": "Does V react to a person visible in the wrist camera, or to the arm blocking the side camera?",
+     "verdict": [
+      "The operator is visible in about 20% of wrist frames but does not move V: matched difference +0.00 to +0.06, error no worse. No masking needed.",
+      "The arm covering the side camera causes no level shift (matched ΔV about -0.01), though rare sharp drops cluster when the arm leaves the view."
+     ],
+     "numbers": {
+      "operator_visible_frames": "~20% (21-24% after hand-label correction)",
+      "operator_dV": "+0.00 to +0.06",
+      "side_occlusion_dV": "~ -0.01"
+     },
+     "chart": {
+      "type": "none"
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "reports/operator_visibility.md; reports/side_occlusion_lowlr_8k.md; PROGRESS.md Stage 4"
+    },
+    {
+     "title": "Camera ablation: wrist vs side vs both (Oct 19)",
+     "question": "Which camera carries the value signal?",
+     "verdict": [
+      "Keep both cameras. The side view carries most of the signal: side only is close to both cameras.",
+      "Wrist only is much worse and does not even beat the round-only constant (0.140).",
+      "The 'which round' cue is in the side view: side-only V at frame 0 orders the rounds like the baseline; wrist-only orders them the other way round."
+     ],
+     "numbers": {
+      "both_mae": "0.121 ± 0.004",
+      "side_mae": "0.130 ± 0.009",
+      "wrist_mae": "0.191 ± 0.010",
+      "both_ce": 3.73,
+      "side_ce": 3.799,
+      "wrist_ce": 3.963,
+      "repo_only_mae": 0.14
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation error by camera input (3 seeds)",
+      "unit": "MAE (value units)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "Wrist + side",
+        "value": 0.121,
+        "sd": 0.004
+       },
+       {
+        "label": "Side only",
+        "value": 0.13,
+        "sd": 0.009
+       },
+       {
+        "label": "Wrist only",
+        "value": 0.191,
+        "sd": 0.01
+       },
+       {
+        "label": "Round-only constant",
+        "value": 0.14,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "reports/stage5_ablations.md §1"
+    }
+   ]
+  },
+  {
+   "week": 6,
+   "dates": "Oct 20 – Oct 26",
+   "summary": "Ablations and Lars's Oct 23 follow-ups: robot state, backbones, crops and architectures gave no gain, augmentation helped a little, and stacking a 2 s-old frame gave the first clear win on stalls. The week ended with an advantage-label check and a draft handover package for Lars.",
+   "findings": [
+    {
+     "title": "Adding robot state (proprioception) (Oct 20)",
+     "question": "Does the gripper's position and orientation help tell 'about to insert' from 'stuck'?",
+     "verdict": [
+      "No gain on any metric across 3 seeds.",
+      "During the hold, stuck and about-to-seat episodes sit at the same gripper height (~230-250 mm), so position cannot separate them.",
+      "Image-only baseline kept. Video and state timing rechecked first: aligned with lag 0."
+     ],
+     "numbers": {
+      "baseline_ce": "3.730 ± 0.002",
+      "proprio_ce": "3.733 ± 0.021",
+      "baseline_mae": "0.121 ± 0.004",
+      "proprio_mae": "0.125 ± 0.003",
+      "hold_auc_baseline": 0.778,
+      "hold_auc_proprio": 0.765
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation error, images vs images + state (3 seeds)",
+      "unit": "MAE (value units)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "Images",
+        "value": 0.121,
+        "sd": 0.004
+       },
+       {
+        "label": "Images + state",
+        "value": 0.125,
+        "sd": 0.003
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5/proprio/holder_z_compare.png"
+     ],
+     "figure_sizes_mb": {
+      "holder_z_compare.png": 0.11
+     },
+     "source": "reports/stage5_ablations.md §2; reports/proprio_sync.md"
+    },
+    {
+     "title": "Why V looks random before the last ~10 s: it picks between two outcomes (Oct 20)",
+     "question": "Lars noticed V looks reasonable near the end but random earlier. Why?",
+     "verdict": [
+      "The model predicts two humps, one for 'will succeed' and one for 'will fail', and V is their average.",
+      "About 62% of the error is putting weight on the wrong hump, not a bad value inside the right one (MAE 0.117 as predicted vs 0.045 with the right hump).",
+      "The worst cases are look-alike pairs at the holder: long stalls called successes, and late seats called failures.",
+      "Overconfident on the success side: at p_succ about 0.80, only 56% actually succeed."
+     ],
+     "numbers": {
+      "mae_as_predicted": 0.117,
+      "mae_right_hump": 0.045,
+      "share_from_hump_choice": "~62%",
+      "calibration_psucc_0.80": "56% succeed",
+      "calibration_psucc_0.96": "75% succeed"
+     },
+     "chart": {
+      "type": "none"
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage4/lowlr_8k/dist_hist_by_outcome.png"
+     ],
+     "figure_sizes_mb": {
+      "dist_hist_by_outcome.png": 0.05
+     },
+     "source": "PROGRESS.md Stage 5 'Worst-case analysis'"
+    },
+    {
+     "title": "Frame-to-frame flicker and the inference recipe (Oct 20; recipe Oct 26)",
+     "question": "Can the jitter be removed, and what is the best way to read V at use time?",
+     "verdict": [
+      "Almost all jumps (R² 0.97) are flips in the balance between the two humps on near-identical frames.",
+      "A 0.5 s moving average cuts frame-to-frame change about 4x without hurting accuracy.",
+      "Best offline recipe: average 3 seeds plus centred 0.5 s smoothing (val CE 3.630 vs 3.672, flicker -77%). For live use, the trailing-average version scores 3.656.",
+      "Temperature scaling adds about nothing and was dropped."
+     ],
+     "numbers": {
+      "flicker_raw": 0.0176,
+      "flicker_smoothed_0.5s": 0.0042,
+      "hump_flip_R2": 0.97,
+      "ce_single": 3.672,
+      "ce_ens3_centred": 3.63,
+      "ce_ens3_causal": 3.656,
+      "flicker_cut": "-77%"
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Inference post-processing of the same 3 models",
+      "unit": "val cross-entropy (nats)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "Single model",
+        "value": 3.672,
+        "sd": null
+       },
+       {
+        "label": "Single + temperature",
+        "value": 3.66,
+        "sd": null
+       },
+       {
+        "label": "Single, 0.5 s smoothing",
+        "value": 3.655,
+        "sd": null
+       },
+       {
+        "label": "3-seed ensemble",
+        "value": 3.641,
+        "sd": null
+       },
+       {
+        "label": "Ensemble + 0.5 s smoothing (offline)",
+        "value": 3.63,
+        "sd": null
+       },
+       {
+        "label": "Ensemble + trailing 0.5 s (live)",
+        "value": 3.656,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "reports/flicker_stage5.md; reports/inference_choices.md"
+    },
+    {
+     "title": "Frozen encoder and a stronger backbone (DINOv2) (Oct 20-21)",
+     "question": "Is the image encoder the bottleneck? Would a frozen one or a bigger pretrained one help?",
+     "verdict": [
+      "Freezing the ImageNet encoder is much worse (MAE 0.234 vs 0.121), so fine-tuning the encoder matters.",
+      "DINOv2 ViT-S/14 never beat ResNet-18 across three learning-rate recipes. It overfits earlier, and lowering its learning rate only slows that. Ruled out."
+     ],
+     "numbers": {
+      "frozen_mae": "0.234 / 0.235 / 0.234",
+      "finetuned_mae": "0.121 ± 0.004",
+      "dinov2_ce": "3.795 ± 0.030",
+      "dinov2_llrd_ce": "3.783 ± 0.025",
+      "resnet_ce": "3.730 ± 0.002"
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation error by encoder (3 seeds)",
+      "unit": "MAE (value units)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "ResNet-18 fine-tuned",
+        "value": 0.121,
+        "sd": 0.004
+       },
+       {
+        "label": "ResNet-18 frozen",
+        "value": 0.234,
+        "sd": null
+       },
+       {
+        "label": "DINOv2 fine-tuned",
+        "value": 0.122,
+        "sd": 0.003
+       },
+       {
+        "label": "DINOv2 + layer decay",
+        "value": 0.13,
+        "sd": 0.002
+       }
+      ]
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "PROGRESS.md Stage 5 items 3 and 'Next experiments' 2"
+    },
+    {
+     "title": "Image augmentation (Oct 19-22)",
+     "question": "Does augmenting training images reduce the flicker or improve accuracy?",
+     "verdict": [
+      "Flicker: no. The best arm cut it by only 3%, so the jitter is not overfitting to pixel details.",
+      "Accuracy: yes, modestly. Crop jitter and Lars's LeRobot augmentation each lower val loss by about 0.06-0.07.",
+      "Best single recipe: crop jitter on the wrist camera, LeRobot augmentation on the side (CE 3.647, MAE 0.112).",
+      "Cost: every augmented arm separates outcomes worse at 1 s (AUC 0.60-0.63 vs 0.67)."
+     ],
+     "numbers": {
+      "baseline_ce": "3.730 ± 0.002",
+      "crop_ce": "3.656 ± 0.006",
+      "full_ce": "3.670 ± 0.009",
+      "split_cropwrist_ce": "3.647 ± 0.008",
+      "split_cropwrist_mae": "0.112",
+      "flicker_cut_best": "3%",
+      "auc_1s_baseline": 0.67
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation loss by augmentation (3 seeds)",
+      "unit": "cross-entropy (nats)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "None (baseline)",
+        "value": 3.73,
+        "sd": 0.002
+       },
+       {
+        "label": "Photometric",
+        "value": 3.725,
+        "sd": 0.003
+       },
+       {
+        "label": "Crop jitter",
+        "value": 3.656,
+        "sd": 0.006
+       },
+       {
+        "label": "LeRobot full",
+        "value": 3.67,
+        "sd": 0.009
+       },
+       {
+        "label": "Crop + full stacked",
+        "value": 3.658,
+        "sd": 0.005
+       },
+       {
+        "label": "Crop wrist, full side",
+        "value": 3.647,
+        "sd": 0.008
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5/aug_compare/01_metrics.png",
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5/full_aug_examples.jpg"
+     ],
+     "figure_sizes_mb": {
+      "01_metrics.png": 0.11,
+      "full_aug_examples.jpg": 0.31
+     },
+     "source": "PROGRESS.md Stage 5 'Image augmentation'; reports/stage5_augmentation_plan.md"
+    },
+    {
+     "title": "Crop and resize choices (Oct 23-24)",
+     "question": "Were the hand-picked camera crops wrong, and does showing more of the frame or more pixels help?",
+     "verdict": [
+      "No arm met the pre-set win rule, so the original crops stay. Karen confirmed on Oct 24.",
+      "Showing the whole frame (squash or letterbox) trades a little shape accuracy for clearly worse 1 s outcome ranking.",
+      "Larger 320 px input gave the lowest loss (3.648) but also lost 1 s ranking. Training it twice as long overfit."
+     ],
+     "numbers": {
+      "R0_ce": "3.672 ± 0.010",
+      "R6_320px_ce": "3.648 ± 0.005",
+      "R3_letterbox_ce": "3.658 ± 0.004",
+      "R0_auc_1s": 0.621,
+      "R6_auc_1s": 0.584,
+      "no_camera_moved_between_rounds": true
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation loss by input crop/resize (3 seeds)",
+      "unit": "cross-entropy (nats)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "current crops (baseline)",
+        "value": 3.672,
+        "sd": 0.01
+       },
+       {
+        "label": "wrist crop shifted right",
+        "value": 3.664,
+        "sd": 0.006
+       },
+       {
+        "label": "wrist crop half shift",
+        "value": 3.669,
+        "sd": 0.009
+       },
+       {
+        "label": "squash whole frame",
+        "value": 3.677,
+        "sd": 0.008
+       },
+       {
+        "label": "letterbox whole frame",
+        "value": 3.658,
+        "sd": 0.004
+       },
+       {
+        "label": "side full height",
+        "value": 3.669,
+        "sd": 0.009
+       },
+       {
+        "label": "tighter side box",
+        "value": 3.671,
+        "sd": 0.005
+       },
+       {
+        "label": "320 px input",
+        "value": 3.648,
+        "sd": 0.005
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5_5/gate0/arms.jpg"
+     ],
+     "figure_sizes_mb": {
+      "arms.jpg": 0.65
+     },
+     "source": "PROGRESS.md Stage 5.5.1"
+    },
+    {
+     "title": "Memory for stalls, first tries: late-fused history and 'seconds still' (Oct 22-25)",
+     "question": "Would showing V a past frame, or telling it how long the gripper has been still, fix the stall-vs-success confusion?",
+     "verdict": [
+      "A past frame 2 s or 4 s back, encoded separately and joined late, gave no measurable gain.",
+      "Even a direct 'seconds the gripper has been still' input gave only about -0.016 val loss, which is not significant.",
+      "Main reason: many successes also freeze. 26% of successful episodes pause 8 s or more before seating, so stillness is a weak clue.",
+      "Later note (Oct 27, 10 seeds): the still-time gain shrank to -0.007."
+     ],
+     "numbers": {
+      "successes_pause_ge_8s": "26%",
+      "stalls_pause_ge_8s": "60%",
+      "dCE_gap2": -0.004,
+      "dCE_gap4": 0.001,
+      "dCE_still_time": -0.016,
+      "dCE_still_time_ci": "[-0.041, +0.006]",
+      "dCE_still_10seed_oct27": -0.0073
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Change in val loss vs the baseline (memory variants)",
+      "unit": "Δ cross-entropy vs the baseline (nats)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "Past frame 2 s, late fusion",
+        "value": -0.004,
+        "sd": null
+       },
+       {
+        "label": "Past frame 4 s, late fusion",
+        "value": 0.001,
+        "sd": null
+       },
+       {
+        "label": "Gripper still-time input",
+        "value": -0.016,
+        "sd": null
+       },
+       {
+        "label": "current + 2 s-old frame stacked",
+        "value": -0.045,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5_5/history/pixel_change_vs_gap.png",
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5_5/history/long_pause_successes.jpg"
+     ],
+     "figure_sizes_mb": {
+      "pixel_change_vs_gap.png": 0.15,
+      "long_pause_successes.jpg": 0.33
+     },
+     "source": "reports/success_pauses.md; reports/history_gain.md; reports/still_time_gain.md; PROGRESS.md 5.5.3"
+    },
+    {
+     "title": "Stacking the current and a 2 s-old frame into one image (Oct 26) - first win",
+     "question": "Does feeding both frames' pixels together into the encoder (early fusion) catch stalls that late fusion missed?",
+     "verdict": [
+      "Yes. This is the first memory change to pass the win rule: val CE 3.627 vs 3.672, every seed better than every baseline seed.",
+      "Ranking successes above still stalls jumps from 0.800 to 0.912.",
+      "It works as a pixel stillness detector: 'nothing changed in 2 s' lowers V and visible change raises it. It therefore also lowers V on successes that are paused.",
+      "Later checks (Oct 27): the same result on another GPU type. A 1 s gap is as good. A 4 s gap, 3 past frames, or hand-velocity input do not beat it."
+     ],
+     "numbers": {
+      "c2a_ce": 3.627,
+      "r0_ce": 3.672,
+      "dCE_vs_R0": "-0.045 [-0.080, -0.012]",
+      "stall_auc_r0": 0.8,
+      "stall_auc_b2": 0.823,
+      "stall_auc_c2a": 0.912,
+      "still_stall_dpsucc": -0.128,
+      "still_time_dpsucc": -0.04,
+      "frozen_success_dpsucc": -0.084
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Telling successes from still stalls at the holder",
+      "unit": "AUC (p_succ)",
+      "higher_is_better": true,
+      "rows": [
+       {
+        "label": "baseline (no memory)",
+        "value": 0.8,
+        "sd": null
+       },
+       {
+        "label": "Late-fused 2 s history",
+        "value": 0.823,
+        "sd": null
+       },
+       {
+        "label": "current + 2 s-old frame stacked",
+        "value": 0.912,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5_5/c2a_visual/stall_still_most_lowered.jpg"
+     ],
+     "figure_sizes_mb": {
+      "stall_still_most_lowered.jpg": 0.66
+     },
+     "source": "reports/c2a_gain.md; reports/c2a_visual.md; PROGRESS.md 5.5.4 C2"
+    },
+    {
+     "title": "Architecture: separate encoder per camera, attention fusion (Oct 24-25)",
+     "question": "Lars suggested different features per camera and a transformer that combines them. Does either help?",
+     "verdict": [
+      "Two separate ResNets (one per camera) tie the shared one (CE 3.670 vs 3.672). Twice the parameters buys faster fitting, not better results.",
+      "Attention fusion is worse and noisier in all three variants. It overfits early even with a smaller head and dropout."
+     ],
+     "numbers": {
+      "r0_ce": "3.672 ± 0.010",
+      "c1_ce": "3.670 ± 0.003",
+      "c3_ce": "3.689 ± 0.030",
+      "c3_small_ce": "3.704 ± 0.008",
+      "c3_small_dropout_ce": "3.725 ± 0.020"
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Validation loss by architecture (3 seeds)",
+      "unit": "cross-entropy (nats)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "baseline: one shared ResNet",
+        "value": 3.672,
+        "sd": 0.01
+       },
+       {
+        "label": "one ResNet per camera",
+        "value": 3.67,
+        "sd": 0.003
+       },
+       {
+        "label": "C3 attention",
+        "value": 3.689,
+        "sd": 0.03
+       },
+       {
+        "label": "C3 small head",
+        "value": 3.704,
+        "sd": 0.008
+       },
+       {
+        "label": "C3 small + dropout",
+        "value": 3.725,
+        "sd": 0.02
+       }
+      ]
+     },
+     "figures": [],
+     "figure_sizes_mb": {},
+     "source": "PROGRESS.md 5.5.4 C1, C3"
+    },
+    {
+     "title": "What each camera contributes, and wrist-camera dropout (Oct 26)",
+     "question": "Which camera does V rely on in each phase? Is the wrist view the source of V's optimism on failures?",
+     "verdict": [
+      "In the last 5 s of successes the wrist camera dominates: removing it costs +2.2 to +3.0 nats per frame (it sees the seat).",
+      "On failures the side camera carries V, and the wrist view makes failures look slightly more hopeful. The pattern is the same in all three architectures.",
+      "Training with the wrist randomly dropped halved the model's reliance on it, but optimism on failures stayed at +0.155. The optimism comes from what both cameras show."
+     ],
+     "numbers": {
+      "success_last5s_dCE_wrist_R0": 2.56,
+      "success_last5s_dCE_side_R0": 0.15,
+      "fail_middle_dCE_wrist_R0": -0.17,
+      "fail_middle_dCE_side_R0": 1.23,
+      "not_success_bias_R0": 0.154,
+      "not_success_bias_camdrop": 0.156
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Loss increase when one camera is removed",
+      "unit": "Δ cross-entropy (nats/frame)",
+      "higher_is_better": null,
+      "rows": [
+       {
+        "label": "Success, last 5 s: remove wrist",
+        "value": 2.56,
+        "sd": null
+       },
+       {
+        "label": "Success, last 5 s: remove side",
+        "value": 0.15,
+        "sd": null
+       },
+       {
+        "label": "Not success, middle: remove wrist",
+        "value": -0.17,
+        "sd": null
+       },
+       {
+        "label": "Not success, middle: remove side",
+        "value": 1.23,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage5_5/wrist_optimism/worst_not_success.jpg"
+     ],
+     "figure_sizes_mb": {
+      "worst_not_success.jpg": 0.38
+     },
+     "source": "reports/camera_contrib.md; reports/wrist_optimism.md; PROGRESS.md C4, C5"
+    },
+    {
+     "title": "Advantage-label sanity check on Mulligan (Oct 26)",
+     "question": "If we turn V into RECAP 'good action / bad action' labels, do the labels make sense?",
+     "verdict": [
+      "The labels point the right way and are not just a clock effect, but the signal is weak.",
+      "At the same round and time, frames from successes get 6.1 points more 'good' labels at a 2 s lookahead (13.7 at 5 s). Pauses before a seat beat stalls by 12.7 points.",
+      "Caution: 72% of frames at the end of failures are labelled 'good' (V was already low), so a decision on those is needed before policy training.",
+      "Ensembling plus smoothing cuts label flips from 2.1/s to 0.62/s."
+     ],
+     "numbers": {
+      "time_matched_succ_minus_fail_pp_n1": 3.2,
+      "n2": 6.1,
+      "n2_ci": "[+2.7, +9.3]",
+      "n5": 13.7,
+      "pause_vs_stall_pp": 12.7,
+      "failure_end_positive": "72%",
+      "flips_per_s_ensemble": 0.62,
+      "flips_per_s_single": 2.1
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Successes minus failures in share labelled 'good' (time-matched)",
+      "unit": "percentage points",
+      "higher_is_better": true,
+      "rows": [
+       {
+        "label": "Lookahead 1 s",
+        "value": 3.2,
+        "sd": null
+       },
+       {
+        "label": "Lookahead 2 s",
+        "value": 6.1,
+        "sd": null
+       },
+       {
+        "label": "Lookahead 5 s",
+        "value": 13.7,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage6/advantages/02_checks.png"
+     ],
+     "figure_sizes_mb": {
+      "02_checks.png": 0.12
+     },
+     "source": "reports/advantages.md"
+    },
+    {
+     "title": "What was prepared for Lars (draft Oct 26)",
+     "question": "What does the Mulligan work hand over?",
+     "verdict": [
+      "The baseline recipe: shared ResNet-18 over the wrist and side cameras, 201-bin value head, LeRobot augmentation, 3 seeds, checkpoints and configs recorded.",
+      "It beats the round-only constant overall (MAE 0.114 vs 0.140) and on the eval rounds (0.183 vs 0.222).",
+      "Includes a table of what did not help, failure examples (stall ambiguity, round prior, jitter) and the inference recipe.",
+      "Draft only: the r05 test set was never run, and the final recipe gates were left open."
+     ],
+     "numbers": {
+      "r0_val_ce": "3.672 ± 0.010",
+      "r0_mae": 0.114,
+      "repo_const_mae": 0.14,
+      "r0_eval_round_mae": 0.183,
+      "repo_const_eval_round_mae": 0.222,
+      "shape_mae_r0": 0.049,
+      "shape_mae_flat": 0.037
+     },
+     "chart": {
+      "type": "bar",
+      "title": "Baseline vs round-only constant",
+      "unit": "MAE (value units)",
+      "higher_is_better": false,
+      "rows": [
+       {
+        "label": "baseline, all validation",
+        "value": 0.114,
+        "sd": null
+       },
+       {
+        "label": "Round constant, all val",
+        "value": 0.14,
+        "sd": null
+       },
+       {
+        "label": "baseline, eval rounds",
+        "value": 0.183,
+        "sd": null
+       },
+       {
+        "label": "Round constant, eval rounds",
+        "value": 0.222,
+        "sd": null
+       }
+      ]
+     },
+     "figures": [
+      "/move/u/karenvo/Projects/value-learning/reports/figures/stage4/aug_full_s0/03_timeout_stall_r02-eval_ep0079_dist.png"
+     ],
+     "figure_sizes_mb": {
+      "03_timeout_stall_r02-eval_ep0079_dist.png": 0.45
+     },
+     "source": "reports/lars_package_draft.md; reports/stage6_setup_prep.md"
+    }
+   ]
+  }
+ ]
+}

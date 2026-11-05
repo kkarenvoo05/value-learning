@@ -2,6 +2,7 @@
 # P1c per-layer hidden states of frozen pi05 (scripts/pi05_layer_hidden.py) on one GPU, openpi env.
 # Usage: sbatch scripts/pi05_layer_hidden.sbatch                 # step 2, normal attention
 #        ABLATE=1 sbatch scripts/pi05_layer_hidden.sbatch        # step 3, image tokens cannot see text/state
+#        PALIGEMMA=<paligemma-3b-pt-224.npz> sbatch ...   # Step 0 VLM gate: same probe, pre-robot PaliGemma weights
 #        [OUT=<dir>] [EXTRA="--max-frames 256"]
 #SBATCH --job-name=job
 #SBATCH --account=move
@@ -15,6 +16,7 @@ set -euo pipefail
 VL=/move/u/karenvo/Projects/value-learning
 BASE=/move/u/karenvo/libero_features   # /iris/u/ankile is 99% full; ~14 GB per run
 if [ "${ABLATE:-0}" = 1 ]; then FLAG=--image-only-attn; TAG=p1c_imgonly; else FLAG=; TAG=p1c_hidden; fi
+if [ -n "${PALIGEMMA:-}" ]; then FLAG="$FLAG --paligemma $PALIGEMMA"; TAG=${TAG/p1c/step0_paligemma}; fi
 OUT=${OUT:-$BASE/${TAG}_${SLURM_JOB_ID}}
 export UV_CACHE_DIR=/iris/u/ankile/karenvo/pi05/uv-cache XDG_CACHE_HOME=/iris/u/ankile/karenvo/pi05/cache
 export OPENPI_DATA_HOME=/iris/u/ankile/karenvo/pi05/cache/openpi

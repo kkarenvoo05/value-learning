@@ -363,3 +363,38 @@ def test_still_item_is_seconds_still_at_frame_t(tmp_path):
     assert ds[0]["still"].shape == (1,) and float(ds[0]["still"]) == 0.0          # frame 15: moving
     assert np.isclose(float(ds[9]["still"]), (24 - 17) / 15)                      # frame 24
     assert "still" not in FrameDataset(idx, cfg())[0]
+
+
+# Stage 5.5 V1: hand velocity history from positions, newest sample first, masked before the start.
+def vel_table(n=30):
+    f = np.arange(n)
+    return pd.DataFrame({"repo": "r", "episode_index": 0, "frame_index": f, "x": 0.01 * f, "y": 0.0,
+                         "z": np.where(f >= 20, 0.02 * (f - 20), 0.0), "gripper": 0.5})
+
+
+def test_velocity_history_is_causal_newest_first_and_masked():
+    from vl.dataset import velocity_history
+    t = vel_table()
+    v = velocity_history(t.sample(frac=1, random_state=0), n=3, k=4).astype(float)
+    v = pd.DataFrame(v, index=t.sample(frac=1, random_state=0).index).sort_index().to_numpy()
+    assert v.shape == (30, 15)
+    assert np.allclose(v[29, [0, 4, 8]], 0.01 * 15)            # vx = 0.01 m / frame = 0.15 m/s, every sample
+    assert np.allclose(v[29, [2, 6, 10]], [0.3, 0.3, 0.075])   # z moves from frame 20: sample 2 (17 -> 21) sees 1 frame of it
+    assert np.allclose(v[29, 12:], 1) and np.allclose(v[:, [3, 7, 11]], 0)   # all valid; gripper constant
+    assert np.array_equal(v[7, 12:], [1, 0, 0]) and np.allclose(v[7, 4:12], 0)   # t = 7: only t-4 >= 0 for j = 0
+    assert np.allclose(v[3], 0)                                 # t < k: nothing valid
+    t2 = t.copy()
+    t2.loc[25:, "x"] += 1.0
+    v2 = velocity_history(t2, n=3, k=4)
+    assert np.allclose(v2[:25], velocity_history(t, n=3, k=4)[:25])   # causal
+
+
+def test_vel_item_is_row_t(tmp_path):
+    vel_table().to_parquet(tmp_path / "p.parquet")
+    idx = index(tmp_path).assign(repo="r", episode_index=0, frame_index=np.arange(10) + 15)
+    c = cfg() | {"vel_history": {"enabled": True, "table": str(tmp_path / "p.parquet"), "n": 3, "step_s": 0.25}}
+    ds = FrameDataset(idx, c)
+    assert set(ds[0]) == {"images", "bin", "value", "row", "vel"}
+    from vl.dataset import velocity_history
+    assert torch.allclose(ds[9]["vel"], torch.from_numpy(velocity_history(vel_table(), 3, 4)[24].copy()))
+    assert "vel" not in FrameDataset(idx, cfg())[0]

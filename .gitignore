@@ -22,3 +22,8 @@ reports/figures/
 *.token
 .DS_Store
 *.egg-info/
+
+# Local scratch
+logs/
+.superpowers/
+*.swp

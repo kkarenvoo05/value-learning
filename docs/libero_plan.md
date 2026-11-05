@@ -1729,3 +1729,211 @@ full). Self-checks abort on the first batch: layer loop vs openpi `llm()` final 
   (5 GPUs). Now: 18269064 takes the freed slot; 18285014 takes the interactive session's slot; 18279695 (P1c
   hidden states) is `afterany:18285014`.
 - Order confirmed by Karen (2026-11-03 08:55): arm A 18269064 → freed slot; LoRA eval 18285014 after 18277015; P1c 18279695 after 18285014. A new interactive session should be CPU-only until 18285014 ends (≤ 4 GPUs).
+
+### 2026-11-03 11:20 — Arm C ResNet runs beside arm A; P1c held (Karen: go)
+- 18279695 (P1c) held (`scontrol hold`; `scontrol release 18279695` to resume).
+- 18275460 (arm C ResNet) dependency `afterany:18269064` → `afterany:18274106` (takes E2 s2's GPU, ends ≤ 16:14), so
+  arm C trains in parallel with arm A 18269064 instead of after it.
+- π₀.₅ oof fold 1 (18275463) COMPLETED 11:06 (5 h 34 min). Interactive 18277015 timed out 10:38.
+- 18275464 (π₀.₅ oof fold 2) dependency set to `afterany:18285014` (Karen: go), so it starts when the LoRA eval ends and
+  the batch jobs + interactive 18286104 stay ≤ 4 GPUs. Folds 3–4 (18275465–66) still chain after it.
+- 11:35: TITAN RTXs don't count against the GPU cap (Karen). P1c 18279695 released and pinned to `gpu:titanrtx:1`
+  with no dependency (forward-only π₀.₅, fits 24 GB; Turing has no native bf16, so expect it slower). Policy
+  fine-tunes (OOM on 24 GB) and the LoRA eval stay off TITANs; π₀.₅ oof folds stay off too (never timed on Turing).
+
+### 2026-11-03 11:45 — Step 0 (PaliGemma gate) prepared, SigLIP-direct arm queued (Karen: go)
+- **SigLIP-direct** [ours]: V read from SigLIP's pooled image tokens, no LLM (same model / recipe as 18269859:
+  fixed+fresh 825 episodes, every 4th frame, 8,000 steps, head lr 1e-4, inner-CE selection). New
+  `vl.libero_resnet` flags `--freeze-backbone` and `--backbone-lr` (default 1e-5 = unchanged). Job **18286678**
+  (seed 0, sequential): (a) `siglip_pi05_fixedfresh_frozen_s0_18286678` frozen SigLIP; (b)
+  `siglip_pi05_fixedfresh_lr1e6_s0_18286678` SigLIP lr 1e-6 (10× gentler than 18269859). Runs as a 5th GPU
+  (Karen's choice); excludes move1/move2 (TITAN RTX: no bf16, ~10× slower). Compare with ResNet ff (SNR 0.247,
+  milestone +0.094), frozen B (0.166), SigLIP-π₀.₅ ft 18269859 (0.129).
+- **Step 0** [ours]: `scripts/pi05_layer_hidden.py --paligemma <npz>` (`PALIGEMMA=<npz> sbatch
+  scripts/pi05_layer_hidden.sbatch`) swaps pi05's SigLIP + projector + Gemma expert 0 + embedder for the
+  big_vision PaliGemma 3B pt_224 weights (π₀.₅'s pre-robot initialisation), same prefix, same per-layer pooled
+  hidden states as P1c. Asserts every non-expert tensor is replaced and differs from pi05; layer loop vs `llm()`
+  check kept. openpi's GCS path returns 403; weights from HF `google/paligemma-3b-pt-224-jax` (gated, Karen accepted)
+  → `/iris/u/ankile/karenvo/pi05/cache/paligemma/paligemma-3b-pt-224.npz` (11.7 GB f32, 32 tensors). Smoke
+  **18286805** (256 frames → `/move/u/karenvo/libero_features/step0_paligemma_smoke`), full **18286806**
+  (`afterok:18286805,afterany:18286678`, Karen: stay at 5 GPUs) → `/move/u/karenvo/libero_features/step0_paligemma_hidden_18286806`.
+  Then analyze as P1c (same `--encoders llm_h0 … llm_hfinal`) and compare per layer with 18279695.
+
+### 2026-11-03 13:40 — Arm A crashed in the data loader (fixed, resubmitted); P1c fails on TITAN; E2 s2 + LoRA eval scored
+- **Arm A 18269064 FAILED after 8 min** (move5, step 0 val 0.0104): `ValueError: generator already executing`. The
+  prefetch pool had 2 threads calling `next()` on the same `EpisodeStream` iterator. Check C never hit it (fixed batch).
+  Fix in `scripts/pi05_policy_finetune.py` [ours]: `next(raw_it)` on its own 1-worker executor (serial, so batch
+  order is deterministic), `batch_arrays` still on 2 workers. Toy check: old pattern raises the same error, new gives
+  all batches in order. 196 tests pass. Resubmitted **18288138** (`NAME=armA_s0 ARGS="--train --arm imitation --seed 0"`,
+  14 h, any non-TITAN/A5000 GPU). Arm C 18275460 reads the script at start, so it gets the fix.
+- **P1c 18279695 FAILED on the TITAN** (move2): layer-loop vs `llm()` self-check max rel err 0.353 (> 2e-2) on the
+  first batch. Same code passes at 0.00 on move5 (PaliGemma smoke 18286805), so treat this as Turing numerics (no
+  native bf16), not a code bug. Not resubmitted: π₀.₅ forward jobs must stay off TITANs.
+- **LoRA + subtask (18285014 eval of 18274115)**, `score(..., "ev_expert")` vs LoRA 18258391: SNR 0.133 → 0.140,
+  milestone +0.052 → +0.047, MAE 0.1553 → 0.1564, MAE succ>20 s 0.110 → 0.107, AUC 5 s 0.664 → 0.681, AUC 10 s 0.788 →
+  0.783, subtask acc 0.965. Below the bar (clearly above 0.133, ideally above frozen B's 0.166): no real change.
+- **E2 frozen B + subtask s2 (18274106)** vs 18237900: SNR 0.194 → 0.137, milestone +0.012 → +0.029, MAE 0.185 →
+  0.169, MAE succ>20 s 0.159 → 0.132, AUC 5 s 0.772 → 0.741, AUC 10 s 0.802 → 0.779, inner subtask acc 0.919. E2 over
+  3 seeds: SNR 0.152/0.152/0.194 → 0.155/0.152/0.137 (s2's baseline was the high seed). Subtask head does not steady V.
+- 13:55: **P1c resubmitted as 18288157** (Karen: after arm A and arm C), `--exclude=move1,move2` (no TITANs),
+  `afterany:18288138:18275460`, 64 GB as before → `/move/u/karenvo/libero_features/p1c_hidden_18288157/`. Analyze per the
+  P1c resume step with that dir.
+
+### 2026-11-03 14:00 — Progress site (hub + weeks 5, 6, 7) built for the mentor
+- `scripts/build_site.py` builds `reports/site/value-learning/` (hub `index.html`, `week-05/`, `week-06/`, `week-07/`) from
+  `reports/site/content/{week07,earlier,jobs,episodes}.json`; the week-7 in-progress table reads job states live from
+  sacct at build time. `scripts/site_episode_assets.py` makes the episode-player data (val eps 454 / 534 / 469, seed 0
+  of ResNet ff 18237895, B ff 18237898, LoRA ff 18258391, SigLIP ft 18269859; per-episode MAE, flicker = sd of the
+  0.4 s change, jump at the first pot placement) and camera sprites.
+- All backbone numbers recomputed with `score()` from each run's val_predictions.parquet; means match the log within
+  0.001 (some log sds were population sds; the site uses sample sds).
+- New result seen while compiling: **SigLIP-direct frozen** (18286678 part a,
+  `siglip_pi05_fixedfresh_frozen_s0_18286678`): SNR 0.221, milestone +0.017, MAE 0.215, MAE succ>20 s 0.194 (1 seed).
+  Steady but barely reacts at the milestone. Part b (SigLIP lr 1e-6) still running.
+- Publish (public): `gcloud storage cp -r --cache-control=no-cache reports/site/value-learning/* gs://zima-robot/reports/karenvo/value-learning/`
+
+**2026-11-03 16:45 — SigLIP-direct part (b), gentle fine-tune (lr 1e-6, job 18286678, seed 0, fixed+fresh 825).**
+Run `/iris/u/ankile/karenvo/libero/runs/siglip_pi05_fixedfresh_lr1e6_s0_18286678`, best step 5000/8000 (inner CE 3.389).
+`score(val_predictions.parquet, "ev_resnet")`: MAE 0.187, MAE succ>20 s 0.150, change SNR 2 s 0.107, milestone +0.093,
+AUC 5/10 s 0.712/0.776, val CE 3.517. Accuracy matches the ResNet (0.189) but steadiness is the lowest of every backbone
+(ResNet 0.247, frozen SigLIP 0.221, frozen π₀.₅ 0.166, LoRA 0.133, SigLIP lr 1e-5 0.129). Fails the bar. SigLIP-only
+branch closed: fine-tuning SigLIP adds noise at every lr tried, independent of the LLM. Site card updated + uploaded.
+
+**2026-11-03 19:30 — Mentor meeting; Week 8 opened.** Agreed next steps (episode length in env steps, train-all /
+label-all advantage labels as a comparison to the 5-fold labels, revisit the LLM layer ablation, scene-calibration
+scatter) and new directions (SmolVLA-style truncated π₀.₅ value expert, small-VLM backbone, SeeQ subtask-scoped V)
+written into docs/CURRENT.md with how-to steps. Site: Week 7 frozen as the pre-meeting snapshot; new work goes on
+week-08 (`reports/site/content/week08.json`).
+
+### 2026-11-03 17:45 — SigLIP-direct scored (18286678): steady-but-blind frozen, reactive-but-noisy gentle
+- Frozen SigLIP: SNR 0.221 (noise 0.057, lowest of all), milestone +0.017, MAE 0.215. lr 1e-6: SNR 0.107 (noise
+  0.097), milestone +0.093, MAE 0.187. Refs s0: ResNet 0.261 / +0.095 / 0.192; frozen B 0.152 / +0.042 / 0.160.
+  Not more useful than the ResNet; B's accuracy comes via the LLM. Report `reports/2026-11-03-siglip-direct/`.
+
+**2026-11-03 20:30 — Episode length, scene calibration, train-all labels queued.**
+- Episode length: LIBERO env `control_freq=20` (openpi third_party/libero env_wrapper.py:27; our rollout script keeps
+  the default), but videos are written at fps=10 and every "seconds" label in our scripts assumed 10 Hz (FPS = 10 in
+  vl.libero_compare). Median success 404 steps = 20 s real (video 40 s). All "2 s" lags / lookaheads (20 steps) are
+  1 s real; metrics unchanged (computed in steps). Week 8 site states times in steps + real seconds.
+- Scene calibration (10 val scenes × 12, mean V over frame_index < 40): r with scene success ResNet 0.66 / frozen
+  π₀.₅ 0.68 / LoRA 0.65 (same); slope vs target early V 0.23 (per seed 0.19–0.27) vs 0.49 (0.45–0.53) / 0.57;
+  per-scene error 0.150 vs 0.116 / 0.120. π₀.₅'s accuracy edge = committing to scene difficulty, not ranking it
+  better. Data: reports/site/content/scene_calibration.json; Week 8 site.
+- Train-all / label-all: `vl.libero_resnet --predict-train` (new flag, writes train_predictions.parquet for all
+  900 train episodes) on 18237895's best.pt (fit 825 + 75 inner early-stop episodes = the full train set), then
+  `libero_oof_labels.py --source resnet_all` (new source; same n=20, 30th pct rule) → labels/trainall_resnet_n20_p30.
+  Job 18291440 (A5000). pytest: 196 passed.
+
+**2026-11-03 21:00 — Reprioritised (Karen): train-all paused; evals, layer probe and A2 queued.** 18291440 cancelled
+(pending, never ran). Policy evals queued: 18291520 (advantage-tagged, positive; afterok 18275460), 18291521
+(negative-tag control; afterany 18291520), 18291522 (success-only; afterok 18288138); each 33 × 10 val states
+(9 12 13 17 25 32 40 42 44 48), env seed 7. P1c 18288157 dependency released (runs next); PaliGemma 18286806 now
+afterany 18288157. A2: `pi05_value_expert.py --n-layers N` (slices the K/V cache to the first N layers; exact by
+causality in depth, selftest diff 0.0) — 18291639 (N=9) → 18291640 (N=4), frozen-π₀.₅ recipe (w256, lr 1e-4, 5400
+steps, augment, fixed+fresh), afterany 18286806. Peak GPU use 4.
+
+**2026-11-03 21:20 — GPU over-use fixed; layer probes resubmitted.** P1c 18288157 (self-check rel err 0.319 on an
+A5000) and PaliGemma 18286806 (OOM on an A5000) both failed in 6 min, so 18291639 (A2, N=9) started early as a 4th
+batch GPU next to Karen's interactive session; Karen: too many. 18291639 requeued (held, then chained). Now three
+lanes, ≤ 3 batch GPUs: 18275460 → 18291520 → 18291521 → P1c 18292149 → PaliGemma 18292150 (both --exclude
+move1,move2,move3, OUT dirs reused); 18288138 → 18291522 → 18291639 (N=9) → 18291640 (N=4); folds 18275464 → 65 → 66.
+
+**2026-11-03 22:00 — B2 (SeeQ-style Q + best-of-N steering) approved; pre-checks queued.** Plan in docs/CURRENT.md
+§B2. New `scripts/libero_steer_probe.py` (+ `.sbatch`, analysis `scripts/libero_steer_analyze.py`): base π₀.₅,
+10 val states, 8 candidate chunks at every replan point (spread), and at policy steps 40/130/220/310 each candidate
+run to the end 2× from the saved state (headroom: between-candidate success variance, cross-validated oracle gain;
+estimators checked on synthetic data: ≈ 0 under the null, recover the true variance). Sim restore had to include
+the Panda gripper's integrated command (else 0.011 state drift after 5 steps; now 3e-17). Job 18296012, chained
+afterany 18291521; P1c 18292149 re-chained behind it (still ≤ 3 batch GPUs). Report folder when done:
+reports/2026-11-0X-steer-probe/.
+
+Reordered (Karen): P1c 18292149 → steering probe 18296012 → PaliGemma 18292150, all afterany, behind 18291521.
+
+**2026-11-04 00:20 — Job check; P1c self-check was a bad metric, not the GPU.** Finished cleanly: success-only
+fine-tune 18288138 (5000/5000 steps, val loss 0.0091), evals 18291520 (advantage-tagged, + tag) **135/330 = 0.409**
+and 18291521 (− tag, control) **142/330 = 0.430**, fold 3 18275465 (val MAE 0.180). P1c 18292149 failed its
+self-check on an L40S (0.449), so the "A5000/TITAN numerics" story is wrong: with π₀.₅ weights it failed on TITAN /
+A5000 / L40S and on **CPU** (0.335; `scripts/debug/selfcheck_diag.py`, job 18298452). The only earlier pass was the
+PaliGemma-weights smoke. Diagnosis: layer 0's k matches exactly, then the unrolled loop and openpi's scanned/remat
+`llm()` drift by bf16 rounding (k rel L2 3e-3 at layer 1 → ~1e-2 by layer 17, smooth, no jump), while the gate used
+max single-element |diff| / max |ref| over all 968 tokens (one element of 30 at |ref| 90). The saved quantity, per-camera
+pools, differs by 0.31% / 0.46%. Fix [our choice]: gate on pooled rel L2 < 2e-2; valid-token rel L2 and the old
+metric are logged for info only. CPU smoke 18298721 (64 frames): pooled 4.9e-3, Stage 3a pool check 9.8e-3, done.
+Resubmitted P1c as **18298946** (afterany 18296012, OUT reused); PaliGemma 18292150 re-chained afterany 18298946.
+
+**2026-11-04 11:15 — Overnight jobs; B2 stopped; π₀.₅ OOF labels weaker than ResNet's.**
+- Success-only eval 18291522: **134/330 = 0.406** (vs advantage-tagged + tag 0.409, − tag 0.430): no effect of
+  the ResNet advantage labels.
+- π₀.₅ OOF fold 4 18275466 done (OOF MAE 0.176). Labels `--source expert` → labels/oof_expert_n20_p30 (CPU job
+  18306000): OOF MAE 0.182 (ResNet 0.195) but within-scene AUC **0.68** (ResNet 0.74), interior positive success
+  vs failure 72/66% (ResNet 73/66%), terminal-failure positive 70% (ResNet 64%). Frame agreement with ResNet labels
+  65% interior (chance 57%), advantage corr 0.27. More accurate V, worse labels (V flicker enters A directly).
+  No π₀.₅-label policy fine-tune queued.
+- B2 steering probe 18296012 (reports/2026-11-04-steer-probe/): candidate EEF spread 1.9 mm vs 22.7 mm motion;
+  cross-validated oracle gain **+0.006 [−0.028, 0.042]** → stop rule met, **B2 stopped at step 2**.
+- P1c 18298946 done (all 19 layers). CPU analysis 18305897 (fit_fixed_fresh) / 18305898 (fit_fixed),
+  `scripts/layer_analyze_cpu.sbatch`.
+- PaliGemma 18292150 failed only the Stage 3a pool check, which compares with π₀.₅-weight pools (2.67 by design;
+  the PaliGemma layer-loop check passed, 3.4e-3). Check now skipped with --paligemma; resubmitted **18305873**.
+- A2 N=9 18291639 / N=4 18291640 trained 5400 steps, best.msgpack saved, host-OOM (64G) in scoring;
+  `--eval-only` at 96G: **18305874** / **18305875**. GPUs: 3 batch + interactive.
+
+**2026-11-04 12:45 — A2 seed 0 scored; per-layer probe on fixed+fresh.** A2 `--eval-only` at 96G (18305874 /
+18305875): N=18 (18237898 s0) SNR 0.152 / MAE 0.160, N=9 0.158 / 0.162, N=4 0.180 / 0.169 (noise 0.101 → 0.092 →
+0.085); bar not cleared on one seed (reports/2026-11-04-truncated-value-expert/). Per-layer analysis 18305897
+(fit_fixed_fresh, 3 seeds): SNR 0.14–0.16 for h0–h15, h17 0.122, h18 0.107, final 0.116; milestone ~0 at h17+;
+MAE ~0.175 throughout; AUC10 max h13 0.837. h1–h3 within 2 sd of h0 → no ABLATE run. CPU analysis now
+`scripts/layer_analyze_cpu.sbatch`. GPU rule restated by Karen: ≤ 3 batch jobs visible besides the interactive
+session (CPU jobs chained). Week 8 site updated and uploaded.
+- 13:00: per-layer analysis on fit_fixed (18306065, 375 fixed, 3 seeds): h0 0.107 ± 0.023, h1–h17 0.079–0.094,
+  h18 0.094, final 0.055 (MAE 0.175–0.198). Reproduces P1b (L1 0.093 / L13 0.080 / final 0.059); the drop after
+  layer 0 is ~1 sd. Both sets: final layer worst, h0–h15 about equal.
+
+**2026-11-04 14:45 — Diagnosis + research lanes queued (Karen: go).** Base π₀.₅ eval on the arms' exact 330 trials
+(18309278): earlier base val rollouts were 63/120 = 0.525 vs fine-tunes ~0.41, so the fine-tune itself may hurt.
+Tag-usage check (18309419, new `scripts/libero_tag_usage.py`): action change + vs − tag at fixed noise vs change
+across noise draws; flow-matching loss with correct vs flipped tag on labelled train frames; arm A as control.
+Steering v2 [ours]: per-request `noise_scale` in `serve_pi05_finetuned.py --base`; `libero_steer_probe.py
+--args.cand-noise-scale` scales candidates 1..N-1 only; analysis adds `cv_gain_vs_cand0` (picked candidate vs a
+normal sample, both on held-out repeats; v1 run: +0.003). Jobs 18309643 (1.5) → 18309644 (2.0). A2 N=4 seeds 1–2
+(18309645 → 18309646). A3: `pi05_value_lora.py --n-layers` (K/V sliced as in A2; LoRA of unused layers gets no
+gradient), N=4 seed 0, 18309647. Lanes keep ≤ 3 batch GPUs.
+- 15:00: tag-usage 18309419 → arm C ignores its tag (reports/2026-11-04-tag-usage/). PaliGemma per-layer analysis
+  18308029: top-layer noise already present pre-robot; robot training improves accuracy everywhere and mid-layer
+  steadiness, removes top-layer milestone response. A3 18309647 released (its dependency ended).
+- 15:35 (Karen: go, prioritise): oracle-tag fine-tune 18310224 (arm C recipe, seed 0; labels/oracle_outcome =
+  positive iff the rollout succeeded, 52% of frames; diagnostic, not a deployable label) → tag check 18310225
+  (`libero_tag_usage.py --run --labels`, new flags). Steering v2 18309643 re-chained after 18310225.
+  Reading: oracle tag learned (tag effect ≫ noise / loss correct < flipped) → ResNet labels too weak; not learned →
+  prompt-tag conditioning too weak for this recipe.
+- 16:00: base π₀.₅ on the arms' 330 trials 0.564 (18309278): all fine-tunes −13 to −16 pts (reports/2026-11-04-base-vs-finetuned/). Oracle fine-tune 18310224 started (tag-learning check still valid; its eval would inherit the recipe loss).
+- 16:20 (Karen: go, ahead of steering): recipe variants on arm A — R1 frozen SigLIP 18310771 → eval 18310772 (lane 3); R2 10× lower lr 18310773 → eval 18310774 (lane 2, A2 s2 re-chained after); R3 original recipe + checkpoints 18310775 → evals @1000 18310776 / @3000 18310777 (lane 1, steering re-chained after). New: --freeze-siglip, FT_STEP.
+- 17:45: A2 N=4 seed 1 18309645: SNR 0.182, MAE 0.170 (seed 0: 0.180 / 0.169). R2 18310773 started.
+
+### 2026-11-04 18:30 — B1 subtask-scoped ResNet V queued (Karen: go)
+`vl.libero_resnet --subtask-scoped` (target `vl.libero_subtask.scoped_targets`, test `tests/test_libero_scoped.py`): value of finishing the current subtask (first pot, then second; boundary = milestone frame), head 2 × 201 read by the true scope [ours: MC, SeeQ uses TD]. Jobs 18313821 / 18313822 (seeds 0, 1, fixed+fresh) chained after R1 eval 18310772. Subtask-scoped Q on noisy-candidate rollouts listed as "try later" in docs/CURRENT.md, only if steering v2 shows headroom.
+
+### 2026-11-04 20:25 — A3 scored; jobs moved off RTX PRO
+A3 (truncated N=4 + LoRA, 18309647): change SNR 0.169, MAE 0.166 (frozen N=4 0.180/0.169, LoRA-full 0.133/0.155). Pending jobs re-pinned to L40S (π₀.₅) or L40S/A5000/TITAN (ResNet B1) at Karen's request.
+
+### 2026-11-04 22:40 — R2 moved off move5; oracle tag check; CI fix; advantage examples
+R2 (low lr) 18310773 cancelled at step 4000 on move5 (Karen) and resumed on L40S as 18315373 (val 0.0075 = original; step 4050 loss/grad identical; Adam moments restart, b2 0.95) → eval 18315374 → 18309646. Oracle-outcome tag check 18310225: tag/noise 0.021, loss correct = flipped — the outcome tag is ignored too, but it is a per-episode tag (constant within an episode), so it does not test per-frame advantage conditioning. Bug: `libero_tag_usage.py` bootstrapped mean-of-ratios against a pooled-ratio point estimate (CI excluded it); fixed (`boot_ratio_ci`), old runs' intervals need a rerun. Advantage examples (`reports/2026-11-04-advantage-examples/`): ResNet V bimodal, A ≈ ΔP(success) over 20 steps (1 s; r 0.89–1.00 on 5 episodes); 76–92% negative before pot drops, 19% before successful first placements (base 30%); flat stretches default positive (A −0.019 > threshold −0.026).
+
+### 2026-11-05 00:10 — Label threshold rules compared (no training)
+`scripts/libero_label_rules.py` → `reports/2026-11-04-label-rules/`. R0 (p30, as trained) / R1 A>0 / R2 p70 / R3 no time cost. R3 ≡ R0 (constant cost under a percentile). R1/R2 make stalls negative (78–97% vs 26–38%) but ordinary success progress is A noise around 0 (IQR ±0.04 vs stall −0.019): R1 labels it 54% positive, R2 35%. Event lift vs base shrinks (drops 2.6× → 1.6× / 1.3×). Viewer gained a rule selector + stall strip; 21 episodes, 20 fps video (LIBERO 20 Hz — earlier figure times were 2× too long, fixed). Karen to choose.
+
+### 2026-11-05 — Label denoising compared (no training)
+`scripts/libero_label_denoise.py` → `reports/2026-11-05-label-denoise/`. Noise proxy = ResNet vs expert agreement (κ 0.20, r(A) 0.27 for the current labels). Smoothing V (k = 9 value frames) cuts flips 0.96 → 0.34/s, r → 0.38, stall/ordinary separation ×1.8, timing kept. Longer n (80/160) raises κ to 0.39/0.54 but spreads each event's penalty over 4/8 s. Margin (untag middle) leaves A noise unchanged, filters ambiguous frames. Karen to choose.
+
+### 2026-11-05 — Literature review: advantage conditioning and value noise
+`reports/2026-11-05-literature-advantage-conditioning/`. RECAP App. A-F: ~30% positive (pre-training), ~40% (fine-tuning), 30% tag dropout, demos tagged positive, tag learned in multi-task pre-training. **Our arm C labels were 70% positive with no dropout and no demos** (the "RECAP 30% threshold" was implemented as the 30th percentile of A). RCSL theory explains an ignored tag when P(tag | s, a) ≈ P(tag | s). Dissecting (2609.28161): n-step TD critic, value-binned calibration, continuous weights (74% vs filter 50% success). Proposed: offline tag-informativeness test + value-binned calibration, then a RECAP-faithful tag run and a weighting run (Karen to decide).
+
+### 2026-11-05 — R2 passes; value-binned calibration; tag predictability
+- **R2 (arm A, 10× lower lr; 18310773 → resumed 18315373 → eval 18315374): 172/330 = 0.521 vs base 0.564, −0.042
+  [−0.115, +0.027]** (scene-stratified, as the base-vs-finetuned report): within the "does not hurt" bar. Original
+  recipe −0.158.
+- Value-binned calibration (`reports/2026-11-05-value-calibration/`): no subtask offset in our A (η² 0.00002); binning
+  removes a V-dependent mean (regression to the mean) and spread; κ 0.20 → 0.25 (70%) / 0.29 (40%). R_prog 0.58–0.60.
+- Tag predictability (`reports/2026-11-05-tag-predictability/`, interactive A5000): the action explains 3.2% of the
+  current tag's entropy beyond the state (oracle 2.3%, stall control 12.9%, random 0); 30–40% positive → 7.4–8.1%;
+  value-binned 40% → 8.5%; holds on ordinary frames.

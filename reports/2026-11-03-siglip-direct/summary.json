@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-03",
+  "slug": "siglip-direct",
+  "question": "Does V read straight from SigLIP (no LLM) beat frozen pi05 / the ResNet?",
+  "verdict": "No. Frozen SigLIP is steady (SNR 0.221) but blind to the pot landing (milestone +0.017) and least accurate (MAE 0.215); lr 1e-6 reacts (milestone +0.093) but is the noisiest (SNR 0.107).",
+  "jobs": [
+    18286678
+  ],
+  "scores": {
+    "change_snr_2s": {
+      "ResNet ff s0 (18237895)": 0.2608965092,
+      "frozen B s0 (18237898)": 0.1519648922,
+      "SigLIP ft lr1e-5 (18269859)": 0.1292415184,
+      "SigLIP frozen": 0.2214101213,
+      "SigLIP lr1e-6": 0.107452039
+    },
+    "milestone": {
+      "ResNet ff s0 (18237895)": 0.0949143066,
+      "frozen B s0 (18237898)": 0.0415658818,
+      "SigLIP ft lr1e-5 (18269859)": 0.060402719,
+      "SigLIP frozen": 0.0166385336,
+      "SigLIP lr1e-6": 0.0926142148
+    },
+    "mae": {
+      "ResNet ff s0 (18237895)": 0.1919677836,
+      "frozen B s0 (18237898)": 0.1600660381,
+      "SigLIP ft lr1e-5 (18269859)": 0.2074965091,
+      "SigLIP frozen": 0.2149996102,
+      "SigLIP lr1e-6": 0.1868553685
+    },
+    "mae_succ>20s": {
+      "ResNet ff s0 (18237895)": 0.119600188,
+      "frozen B s0 (18237898)": 0.1189019722,
+      "SigLIP ft lr1e-5 (18269859)": 0.2231206151,
+      "SigLIP frozen": 0.1935403033,
+      "SigLIP lr1e-6": 0.1500645572
+    },
+    "auc5": {
+      "ResNet ff s0 (18237895)": 0.7248677249,
+      "frozen B s0 (18237898)": 0.7037037037,
+      "SigLIP ft lr1e-5 (18269859)": 0.6571985519,
+      "SigLIP frozen": 0.768588137,
+      "SigLIP lr1e-6": 0.7120579226
+    },
+    "auc10": {
+      "ResNet ff s0 (18237895)": 0.7577276525,
+      "frozen B s0 (18237898)": 0.7969924812,
+      "SigLIP ft lr1e-5 (18269859)": 0.7192982456,
+      "SigLIP frozen": 0.701754386,
+      "SigLIP lr1e-6": 0.776106934
+    },
+    "n_ep": {
+      "ResNet ff s0 (18237895)": 120.0,
+      "frozen B s0 (18237898)": 120.0,
+      "SigLIP ft lr1e-5 (18269859)": 120.0,
+      "SigLIP frozen": 120.0,
+      "SigLIP lr1e-6": 120.0
+    }
+  }
+}

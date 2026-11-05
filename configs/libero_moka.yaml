@@ -1,0 +1,42 @@
+# LIBERO moka-pot task (docs/libero_plan.md Stages 1-2).
+#
+# Provenance of each choice:
+#   [plan]  = docs/libero_plan.md, agreed with Karen 2026-10-27
+#   [karen] = confirmed by Karen
+#   [ours]  = our experimental choice (documented, can be changed)
+
+# [karen 2026-10-28] libero_10 task 8, 58/100 on the Stage 1 check (job 18143532).
+suite: libero_10
+task_id: 8
+task: put both moka pots on the stove
+
+# [plan] split by init state, 30 / 10 / 10. [ours] drawn as np.random.default_rng(0).permutation(50):
+# first 30 train, next 10 value-val, last 10 policy-test. Fixed before any Stage 2 rollout.
+# Never train on val or test states; test states are used only for Stage 6 policy evaluation.
+split:
+  train: [0, 1, 2, 3, 4, 6, 8, 10, 11, 16, 18, 19, 20, 21, 22, 23, 24, 26, 27, 28, 30, 34, 35, 36, 37, 38, 43, 45, 46, 47]
+  val: [9, 12, 13, 17, 25, 32, 40, 42, 44, 48]
+  test: [5, 7, 14, 15, 29, 31, 33, 39, 41, 49]
+
+# Stage 2 rollouts [ours]: 15 per train state (450, plan: ~300-500) and 12 per val state (120, so V is
+# checked on scenes it never saw). One job, one policy server, so the server's noise stream
+# (jax.random.key(0), split per infer call) never restarts between episodes.
+rollouts:
+  repeats: {train: 15, val: 12}
+  env_seed: 9          # [ours] new seed; Stage 0 used 7, the Stage 1 check 8
+
+# Value targets with vl.targets unchanged [plan]. One timestep = one policy step (one frame, 10 Hz
+# in the LeRobot data, as openpi's LIBERO dataset).
+targets:
+  units: steps
+  horizon_steps: 520   # [plan] the suite's max_steps (libero_10)
+  c_fail_steps: 520    # [ours] = horizon, as configs/targets.yaml: successes in (-0.5, 0], failures [-1, -0.5]
+  failure_outcomes: [failure, timeout]   # [lars] timeouts are failures
+  success_outcomes: [success]
+  n_bins: 201
+  v_min: -1.0
+  v_max: 0.0
+
+paths:
+  runs: /iris/u/ankile/karenvo/libero/runs
+  lerobot_root: /iris/u/ankile/karenvo/libero/lerobot

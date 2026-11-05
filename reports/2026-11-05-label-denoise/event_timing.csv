@@ -1,0 +1,13 @@
+event,variant,0-20,20-40,40-80,80-160
+place,current (n=20),0.19,0.38,0.24,0.36
+place,smooth 9 (36 steps),0.17,0.27,0.14,0.29
+place,n=80 (4 s),0.17,0.18,0.13,0.18
+place,n=160 (8 s),0.13,0.16,0.14,0.12
+place,combo: smooth 5 + n=80 + p30/p70,0.23,0.24,0.21,0.29
+place,margin p30/p70 (40% untagged),0.25,0.53,0.33,0.53
+drop,current (n=20),0.78,0.57,0.36,0.33
+drop,smooth 9 (36 steps),0.84,0.7,0.35,0.27
+drop,n=80 (4 s),0.75,0.81,0.75,0.25
+drop,n=160 (8 s),0.62,0.7,0.7,0.71
+drop,combo: smooth 5 + n=80 + p30/p70,0.89,0.91,0.89,0.49
+drop,margin p30/p70 (40% untagged),0.9,0.65,0.53,0.55

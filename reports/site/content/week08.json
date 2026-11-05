@@ -1,0 +1,252 @@
+{
+ "title": "Week 8 · Nov 3 – Nov 10, 2026",
+ "sub": "LIBERO moka pots: policy results, label strategy, and which π₀.₅ layers a value function needs",
+ "headline": "Started from the Nov 3 mentor meeting: get the first policy results, test a second way of making advantage labels, and find which language-model layers carry progress without the flicker.",
+ "meeting": [
+  {
+   "t": "**Where we are (week 7):** the ResNet value function is the steadier progress tracker; π₀.₅ is more accurate, mainly by recognising hard vs easy scenes from the first frames, but flickers more.",
+   "ev": [
+    "../week-07/index.html#tradeoff",
+    "Week 7 trade-off"
+   ]
+  },
+  {
+   "t": "The flicker has two separate sources: π₀.₅'s frozen language-model layers, and fine-tuning its vision encoder. A vision-encoder-only value function never beat the ResNet (frozen: steady but less accurate; fine-tuned: accurate but noisy).",
+   "ev": [
+    "../week-07/index.html#siglip-end-to-end",
+    "Week 7 vision-encoder test"
+   ]
+  },
+  {
+   "t": "SeeQ finds a VLM without pre-training performs on par with a ResNet for value learning. Given compute, hold off on pre-training for now and keep pushing with smaller models and limited data."
+  },
+  {
+   "t": "Advantage labels: training V on all 900 rollouts and labelling the same rollouts could be circular. Three valid options: (1) train on all, label all (simplest; risk of degenerate advantages if V memorises outcomes), (2) a new held-out rollout set (cleanest; 2× the data), (3) 5-fold out-of-fold labels (most principled; already running). Run (1) too, for comparison."
+  },
+  {
+   "t": "Subtask: a quick test reads which pot the robot is on with ~97% accuracy, so the signal is there. SeeQ's full method (a subtask-scoped Q-function, different policy extraction) is still worth trying."
+  },
+  {
+   "t": "New direction from SmolVLA / SmolVLM: SmolVLA throws away the top half of its language model and loses little on LIBERO. Apply the same idea to the value function: find which π₀.₅ layers it needs."
+  }
+ ],
+ "plan": [
+  {
+   "t": "**Policy results:** no gain, and worse than no fine-tune. Base π₀.₅ 56.4%; success-only 40.6%; advantage-tagged 40.9% (+ tag) / 43.0% (− tag), same 330 held-out trials. The tagged policy also ignores its tag. Next: a fine-tune recipe that does not hurt, then labels.",
+   "status": "settled",
+   "ev": [
+    "#base-vs-finetuned",
+    "Base-vs-fine-tuned card"
+   ]
+  },
+  {
+   "t": "**Train-all / label-all labels:** paused; the out-of-fold labels are already running. Code is ready if we want the comparison later.",
+   "status": "queued"
+  },
+  {
+   "t": "**π₀.₅ out-of-fold labels:** built from the 5 π₀.₅ folds. More accurate V, but worse labels than the ResNet's (within-scene AUC 0.68 vs 0.74), so no policy fine-tune on them.",
+   "status": "settled",
+   "ev": [
+    "#pi05-labels",
+    "Label-comparison card"
+   ]
+  },
+  {
+   "t": "**Verify episode length in environment steps:** done. Rollouts are ~20 s of simulated time (median success 404 steps at LIBERO's 20 Hz); the videos play at half speed, and our earlier \"seconds\" labels were 2× too long.",
+   "status": "settled",
+   "ev": [
+    "#episode-length",
+    "Episode-length card"
+   ]
+  },
+  {
+   "t": "**Revisit the language-model layer ablation:** done on the 825-episode data. Steadiness is flat through layer 15 and drops at layers 17–18; accuracy is the same at every depth.",
+   "status": "settled",
+   "ev": [
+    "#layer-probe",
+    "Layer-probe card"
+   ]
+  },
+  {
+   "t": "**Scene-calibration scatter:** done. All three backbones rank scenes equally well (r ≈ 0.66); π₀.₅ commits about 2× more to its call, which is where its accuracy edge comes from.",
+   "status": "settled",
+   "ev": [
+    "#scene-calibration",
+    "Scene-calibration plot"
+   ]
+  },
+  {
+   "t": "**Can a value function pick between π₀.₅'s own action candidates?** No: π₀.₅'s 8 samples end ~2 mm apart, and choosing the best one with the simulator itself gains nothing that survives a repeat (+0.006, 95% CI −0.028 to +0.042). Steering stopped at the pre-check.",
+   "status": "settled",
+   "ev": [
+    "#steering-headroom",
+    "Steering card"
+   ]
+  }
+ ],
+ "directions": [
+  {
+   "t": "**Truncated π₀.₅ value function (SmolVLA idea):** first result (seed 0): reading only the first 4 of 18 layers is the steadiest π₀.₅ value function so far (0.180 vs 0.152) at a small accuracy cost (MAE 0.169 vs 0.160); 9 layers ≈ all 18. Needs 2 more seeds.",
+   "ev": [
+    "#truncated-expert",
+    "Truncated-expert card"
+   ]
+  },
+  {
+   "t": "**Pre-robot vs robot weights:** done. The top layers were already noisy in PaliGemma before robot training; robot training made the lower and middle layers more accurate and steadier, and took away the top layers' response to pot placement.",
+   "ev": [
+    "#paligemma-layers",
+    "PaliGemma card"
+   ]
+  },
+  {
+   "t": "**A small VLM as the value backbone:** SmolVLM-256M/500M, 64 image tokens per frame, the first half of its language model, fully fine-tuned on one GPU."
+  },
+  {
+   "t": "**SeeQ-style subtask value + steering:** the value of finishing the current pot, conditioned on the subtask and on a candidate action; used to choose the best of several π₀.₅ action candidates at each step instead of fine-tuning the policy. The two pre-checks are queued (see the plan)."
+  }
+ ],
+ "results_note": "Results from this week, newest first.",
+ "scene_calibration": {
+  "title": "Scene calibration: do the value functions know which scenes are hard?",
+  "question": "Week 7 found π₀.₅ is more accurate mainly because it recognises hard vs easy scenes from the first frames. Here each dot is one of the 10 validation scenes (12 rollouts each): its actual success rate against the value predicted in the first 2 s of its rollouts.",
+  "verdict": [
+   "**All three rank the scenes about equally well:** correlation with the scene's success rate is 0.66 (ResNet), 0.68 (frozen π₀.₅), 0.65 (LoRA). Seed-to-seed spread is about ±0.06, so these are the same.",
+   "**The difference is how far they commit.** π₀.₅'s early values spread about twice as wide across scenes (slope against the true target 0.50–0.57 vs 0.23 for the ResNet). The ResNet hedges every scene toward the middle (−0.83 to −0.59, where the target runs −0.93 to −0.39).",
+   "That is where π₀.₅'s accuracy edge comes from: per-scene error 0.116–0.120 vs 0.150 for the ResNet. So the week 7 claim needs a correction: π₀.₅ is not better at *telling* hard scenes from easy ones; it is more willing to *say* so.",
+   "Why it matters for advantages: an advantage is a change in V within an episode, so a scene-wide offset cancels out. The ResNet's under-commitment at the start costs accuracy but not advantage quality, consistent with its advantage labels doing better within scenes.",
+   "Caveats: 10 scenes only, so each correlation is uncertain (95% range for r = 0.66 is roughly 0.05 to 0.91); the spread and per-scene error differences are the firmer result. LoRA is one seed. \"First 2 s\" = the first 40 environment steps at LIBERO's 20 Hz (see the episode-length card)."
+  ],
+  "source": "val_predictions.parquet of runs 18237895–97 (ResNet), 18237898–900 (frozen π₀.₅), 18258391 (LoRA); frames with frame_index < 40; reports/site/content/scene_calibration.json"
+ },
+ "findings": [
+  {
+   "id": "base-vs-finetuned",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "Fine-tuning makes the policy worse: 56% before, ~41% after",
+   "question": "The fine-tuned policies scored ~41%. How does the original π₀.₅, without any fine-tuning, do on exactly the same 330 trials?",
+   "verdict": [
+    "**Base π₀.₅: 186/330 = 56.4%.** Success-only fine-tune 40.6% (−15.8 points, 95% CI −22 to −9); tagged with the positive tag 40.8% (−15.5); negative tag 43.0% (−13.3).",
+    "The losses are largest on the easiest scenes (91% → 52%, 85% → 61%); two scenes improve (15% → 55%, 61% → 73%), so the fine-tune changes behaviour a lot, mostly for the worse.",
+    "Together with the tag check: the fine-tune costs ~15 points and the tag was never learned, so the advantage labels have not really been tested yet.",
+    "Next: find a fine-tune recipe that does not hurt (frozen vision encoder, lower learning rate, earlier checkpoints), then compare labels."
+   ],
+   "source": "runs/eval_base_libero_10_18309278 vs eval_arm*_libero_10_*; reports/2026-11-04-base-vs-finetuned/"
+  },
+  {
+   "id": "tag-usage",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "The tagged policy ignores its tag",
+   "question": "The advantage-tagged policy scored the same with the positive and the negative tag. Does it react to the tag at all?",
+   "verdict": [
+    "**Actions:** on 320 held-out frames, flipping the tag (same random noise) moves the action by **2%** of what the policy's own sampling noise does, and on no frame by more than the noise. That is even less than for the success-only policy, which never saw a tag (4%).",
+    "**Training data:** the policy predicts its own training actions exactly as well with the flipped tag as with the correct one (loss 0.00689 vs 0.00689).",
+    "So the policy never learned what \"positive\" and \"negative\" mean; the evaluation result says nothing yet about whether better labels would help.",
+    "Possible causes: the labels say too little about the actions (73% vs 66% positive in successes vs failures), or a word in the prompt read through a frozen language model is too weak a signal. Next: a fine-tune with an oracle tag (tag = rollout outcome) separates the two."
+   ],
+   "source": "runs/tag_usage_18309419; reports/2026-11-04-tag-usage/"
+  },
+  {
+   "id": "truncated-expert",
+   "date": "2026-11-04",
+   "status": "running",
+   "title": "Truncated π₀.₅ value function: fewer layers, less flicker (1 seed)",
+   "question": "SmolVLA drops the top half of its language model and loses little. Does a π₀.₅ value function that reads only the first 4 or 9 of the 18 language-model layers flicker less, and is it still as accurate?",
+   "verdict": [
+    "**All 18 layers:** steadiness 0.152, MAE 0.160. **First 9:** 0.158, 0.162. **First 4:** **0.180**, 0.169 (seed 0, 120 held-out rollouts, same recipe).",
+    "Flicker falls with every cut (step-to-step noise 0.101 → 0.092 → 0.085), and accuracy drops only a little. Pot-on-stove response is similar (+0.03–0.04).",
+    "The 4-layer model is the steadiest π₀.₅ value function so far, but still below the ResNet (0.247), and one seed is not enough: the bar we set was clearly above the full model's 0.166 ± 0.025 (3 seeds).",
+    "Next: 2 more seeds of the 4- and 9-layer models."
+   ],
+   "source": "runs/value_expert_trunc{4,9}_fixedfresh_w256_s0_*; reports/2026-11-04-truncated-value-expert/"
+  },
+  {
+   "id": "layer-probe",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "Per-layer probe: the flicker enters in the last 2–3 layers",
+   "question": "Same small value head on frozen features from each of π₀.₅'s 19 language-model layers (825 episodes, 3 seeds): where does steadiness drop, and does accuracy change with depth?",
+   "verdict": [
+    "**Layers 0–15 are about equally steady** (0.14–0.16; layer 0 0.156 ± 0.019, layer 13 0.152 ± 0.006). It drops only at the top: layer 17 0.122, layer 18 **0.107**, final 0.116.",
+    "The response to the first pot landing on the stove disappears at the same depth (+0.05 at layers 0–15, ~0 at 17+).",
+    "**Accuracy barely changes with depth** (MAE 0.173–0.178, 0.184 at layer 18). Separating successes from failures is best in the middle (AUC 0.837 at layer 13 vs 0.797 at layer 0).",
+    "**The earlier probe's \"steady fall from layer 1\" was small-data noise.** Rerun on the same 375 fixed-layout episodes: layer 0 0.107 ± 0.023, layers 1–17 0.079–0.094 (the layer 0 → 1 drop is ~1 sd), final 0.055. On both sets the final layer is worst and the earlier layers are about equal; with more layout variety every layer is steadier and the drop sits clearly at the top."
+   ],
+   "source": "/move/u/karenvo/libero_features/p1c_hidden_18288157/analysis_fixedfresh.json (job 18305897; hidden states 18298946); analysis_fixed.json (job 18306065)"
+  },
+  {
+   "id": "paligemma-layers",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "Before robot training: the top layers were already noisy",
+   "question": "Same per-layer probe on PaliGemma, the vision-language model π₀.₅ started from, before any robot training. Did robot training make the top layers noisy, or were they noisy already?",
+   "verdict": [
+    "**PaliGemma:** steadiness drifts down with depth, 0.146 at layer 0 to 0.113 at layers 17–18. **π₀.₅:** flat around 0.15 through layer 15, then 0.12 / 0.11 at layers 17–18. Both end at about the same level.",
+    "**Robot training made every layer more useful:** accuracy MAE 0.195–0.207 → 0.173–0.184 and success-vs-failure AUC 0.66–0.73 → 0.79–0.84; middle layers got steadier (layer 11: 0.119 → 0.159).",
+    "**It also removed something at the top:** PaliGemma's top layers still respond when a pot lands on the stove (+0.05); π₀.₅'s do not (≈ 0 from layer 17).",
+    "So the top-layer noise is inherited, not caused by robot training, and cutting π₀.₅ before layer 17 keeps the layers robot training improved."
+   ],
+   "source": "/move/u/karenvo/libero_features/step0_paligemma_hidden_18286806/analysis_fixedfresh.json (hidden states 18305873, analysis 18308029)"
+  },
+  {
+   "id": "policy-results",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "First policy results: the advantage tag does nothing",
+   "question": "Does fine-tuning π₀.₅ with ResNet advantage tags (positive = this step made progress) beat fine-tuning on successes only?",
+   "verdict": [
+    "**Success-only:** 134/330 = **0.406**. **Advantage-tagged, positive tag:** 135/330 = **0.409**. **Same policy, negative tag (control):** 142/330 = **0.430**. The untouched base π₀.₅ scores **0.564** on the same trials (next-but-one card).",
+    "All three are within noise of each other (±~0.05 at 330 trials). The negative tag should hurt if the policy used the tag; it does not, so either the policy ignores the tag or the labels carry little usable signal.",
+    "Setup: 33 rollouts on each of the 10 held-out scenes, environment seed 7, 5000 fine-tuning steps each, ResNet 5-fold out-of-fold labels (20-step lookahead, 70% positive).",
+    "Diagnosis (next cards): the tagged policy does not use its tag at all."
+   ],
+   "source": "runs/eval_armA_libero_10_18291522, eval_armC_pos_libero_10_18291520, eval_armC_neg_libero_10_18291521"
+  },
+  {
+   "id": "pi05-labels",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "π₀.₅ out-of-fold labels: a more accurate value, worse labels",
+   "question": "The ResNet labels gave no policy gain. Would labels from the more accurate π₀.₅ value function (same 5 folds, same rule) be better?",
+   "verdict": [
+    "**Value accuracy:** π₀.₅ out-of-fold MAE 0.182 vs ResNet 0.195 (better).",
+    "**Labels:** within-scene AUC (does the share of positive steps separate successes from failures in the same scene?) **0.68** vs ResNet **0.74** (worse). Positive share inside successes vs failures: 72% vs 66% (ResNet 73% vs 66%). Near the end of failed rollouts 70% of steps are still positive (ResNet 64%).",
+    "The two label sets agree on 65% of steps (57% expected by chance); their advantages correlate at only 0.27.",
+    "Why: an advantage is a change in V over 20 steps, so V's flicker goes straight into the label. π₀.₅'s accuracy comes from judging scene difficulty early, which cancels out in a change; its extra flicker does not.",
+    "**Decision:** no policy fine-tune with π₀.₅ labels; both label sets are weak (only ~7 points between successes and failures), which fits the no-gain policy result."
+   ],
+   "source": "tables/moka_fixed_fresh/labels/oof_expert_n20_p30 vs oof_resnet_n20_p30 (scripts/libero_oof_labels.py)"
+  },
+  {
+   "id": "steering-headroom",
+   "date": "2026-11-04",
+   "status": "settled",
+   "title": "Steering pre-check: π₀.₅'s candidates are too alike to choose between",
+   "question": "SeeQ-style steering samples several action chunks and executes the one a value function likes best. Before training any Q-function: do π₀.₅'s candidates differ, and does choosing between them change success?",
+   "verdict": [
+    "**Spread:** at 920 decision points in 10 rollouts, the 8 sampled chunks end a median **1.9 mm** apart, while the arm moves 22.7 mm per chunk. The gripper command differs between candidates at only 7% of decision points.",
+    "**Headroom:** at 4 points in each of 10 rollouts, each candidate was run to the end twice from the same exactly-restored simulator state. Picking the best candidate on the first run and scoring it on the second gives **+0.006** success (95% CI −0.028 to +0.042), i.e. nothing. The apparent +0.10 for the in-sample best is luck.",
+    "**Decision:** stop steering here. If the simulator itself cannot pick a better candidate, a learned Q cannot either. Widening the spread would mean changing the base policy's sampling.",
+    "Caveat: 10 states and 2 repeats per candidate."
+   ],
+   "source": "runs/steer_probe_libero_10_18296012; reports/2026-11-04-steer-probe/"
+  },
+  {
+   "id": "episode-length",
+   "date": "2026-11-03",
+   "status": "settled",
+   "title": "Episode length: rollouts are ~20 s of simulated time, not ~40 s",
+   "question": "The mentor noted that ~40 s seemed long for a LIBERO task. How long are the rollouts in environment steps and in seconds?",
+   "verdict": [
+    "**Steps:** successful rollouts take 348–516 environment steps (median 404); failures hit LIBERO's 520-step limit for this suite. One recorded frame = one environment step.",
+    "**Seconds:** LIBERO's environment runs at **20 Hz** (`control_freq=20` in LIBERO's env wrapper; our rollout script keeps the default). So a median success is **~20 s** of simulated time (348–516 steps = 17–26 s), and the cap is 26 s.",
+    "**Why it looked like ~40 s:** the rollout videos are saved at 10 fps (`imageio.mimwrite(..., fps=10)` in `scripts/libero_rollouts.py`, copied from openpi's LIBERO example), so they play at half speed. Example: a 382-step success is a 38.2 s video but 19.1 s of robot time.",
+    "**What changes:** only time labels. Our scripts assumed 10 Hz, so every \"seconds\" number on the earlier pages is doubled: the \"2 s\" steadiness lag and advantage lookahead (20 steps) are really **1 s**, \"AUC at 5 / 10 s\" is at 2.5 / 5 s. The metrics themselves, the labels and the fine-tunes are unchanged, because everything is computed in steps.",
+    "Week 7 is kept as the pre-meeting snapshot with the old labels. From week 8 on, times are given in steps and real (20 Hz) seconds."
+   ],
+   "source": "/iris/u/ankile/karenvo/pi05/openpi/third_party/libero/libero/libero/envs/env_wrapper.py:27; scripts/libero_rollouts.py:44, 173, 199; runs/fresh450_libero_10_18212530/videos/ep0001 (382 frames, 10 fps, 38.2 s)"
+  }
+ ]
+}

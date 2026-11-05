@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advantage Scrubber</title>
+<style>
+:root{--bg:#fcfcfb;--card:#ffffff;--fg:#0b0b0b;--muted:#52514e;--faint:#8a8984;--line:#e4e3df;--grid:#efeeea;
+  --resnet:#1c5cab;--expert:#eb6834;--neg:#c4332f;--pos:#e4e3df;--cursor:#0b0b0b;--term:#efeeea;--untag:#a9a8a2}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1a19;--card:#232321;--fg:#f0efec;--muted:#c3c2b7;
+  --faint:#8a8984;--line:#383835;--grid:#2c2c2a;--resnet:#6da7ec;--expert:#d95926;--neg:#e0524d;--pos:#3a3a37;--cursor:#f0efec;--term:#2c2c2a;--untag:#76756f}}
+:root[data-theme="dark"]{--bg:#1a1a19;--card:#232321;--fg:#f0efec;--muted:#c3c2b7;--faint:#8a8984;--line:#383835;--grid:#2c2c2a;
+  --resnet:#6da7ec;--expert:#d95926;--neg:#e0524d;--pos:#3a3a37;--cursor:#f0efec;--term:#2c2c2a;--untag:#76756f}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,-apple-system,sans-serif}
+main{max-width:1500px;margin:0 auto;padding:10px 16px}
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:16px;margin:0 8px 0 0;white-space:nowrap}
+button,select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer}
+select#ep{max-width:min(460px,100%)}
+input[type=range]{flex:1;min-width:140px}
+.meta{color:var(--muted)}
+.tl{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted)}
+.stage{display:grid;grid-template-columns:min(52%,72vh) minmax(0,1fr);gap:12px;align-items:start}
+.stage>*{min-width:0}
+@media (max-width:760px){.stage{grid-template-columns:minmax(0,1fr)}}
+video{display:block;width:100%;aspect-ratio:2/1;height:auto;border-radius:6px;border:3px solid var(--line);background:#000}
+video.neg{border-color:var(--neg)}
+.caps{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}
+.lab{font-size:11.5px;color:var(--muted);margin:4px 0 1px}
+canvas{display:block;width:100%;max-width:100%}
+table.read{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;margin-top:4px}
+table.read td,table.read th{padding:1px 5px;border-bottom:1px solid var(--line);text-align:right;font-weight:400}
+table.read th{color:var(--muted)}
+table.read td:first-child,table.read th:first-child{text-align:left}
+.sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:0}
+.tag{display:inline-block;padding:0 6px;border-radius:4px;font-size:11.5px;font-weight:600}
+.tag.neg{background:var(--neg);color:#fff}.tag.pos{background:var(--pos);color:var(--fg)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.line{width:16px;height:0;border-top:2px solid}.dash{width:16px;height:0;border-top:2px dashed var(--fg)}
+.note{color:var(--muted);font-size:11.5px;margin:6px 0 0}
+kbd{border:1px solid var(--line);border-radius:4px;padding:0 3px;font-size:11px}
+</style>
+</head>
+<body><main>
+<div class="bar">
+  <h1>Advantage scrubber</h1>
+  <button id="prev" aria-label="previous episode">‹</button>
+  <select id="ep" aria-label="episode"></select>
+  <button id="next" aria-label="next episode">›</button>
+  <span id="meta" class="meta"></span>
+</div>
+<div class="bar">
+  <button id="play" style="min-width:78px">▶ Play</button>
+  <select id="speed" aria-label="playback speed"><option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option><option value="1">1× real time</option></select>
+  <input type="range" id="slider" min="0" max="0" value="0" aria-label="step">
+  <span id="tlabel" class="tl"></span>
+  <label class="meta">label set <select id="rule" aria-label="label set for the border, readout and A chart"></select></label>
+  <label class="meta">compare to <select id="cmp" aria-label="second label set shown under the first"></select></label>
+  <span class="meta"><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> 4 steps · <kbd>shift</kbd> 1 step · click any chart to jump</span>
+</div>
+
+<div class="stage">
+  <div>
+    <video id="vid" muted playsinline preload="auto"></video>
+    <div class="caps"><span>agentview</span><span id="bnote">red border = ResNet label negative</span><span>wrist</span></div>
+  </div>
+  <div>
+    <canvas id="dist"></canvas>
+    <table class="read" id="read"></table>
+  </div>
+</div>
+
+<div class="legend">
+  <span><i class="line" style="border-color:var(--resnet)"></i>ResNet (arm C's labels)</span>
+  <span><i class="line" style="border-color:var(--expert)"></i>π₀.₅ value expert</span>
+  <span><i class="dash"></i>true target / outcome</span>
+  <span><i class="sw" style="background:var(--neg)"></i>negative label</span>
+  <span><i class="sw" style="background:var(--untag)"></i>untagged (margin sets)</span>
+</div>
+<div class="lab">value · heatmap = ResNet 201-bin probabilities · above −0.5 = success track, below = failure track</div>
+<canvas id="heat"></canvas>
+<div class="lab">P(success) · ResNet = mass above −0.5, expert = its P(success) head</div>
+<canvas id="ps"></canvas>
+<div class="lab" id="advlab">advantage A</div>
+<canvas id="adv"></canvas>
+<div class="lab" id="labslab">labels</div>
+<canvas id="labs"></canvas>
+<p class="note">Video = every recorded step at 20 steps/s (LIBERO's control rate). V and the labels exist every 4th step; each value frame holds until the next.
+ResNet values from each episode's out-of-fold model (reproduces the stored V to ≤ 6e-4); expert = its out-of-fold E[V] and P(success).</p>
+</main>
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id), vid = $("vid");
+let IDX, EP, step = 0, gi = 0, heatCache = null, distMax = 1;
+const H = { dist: 200, heat: 200, ps: 70, adv: 110, labs: 119 };
+let RULE = "R0", CMP = "D3";
+const SETS = () => IDX.labelsets || { R0: { name: "R0 current", thr: [IDX.thresholds.resnet, IDX.thresholds.resnet] } };
+const nm = k => SETS()[k] ? SETS()[k].name : k;
+const labOf = (k, i) => EP.sets && EP.sets[k] ? EP.sets[k].lab[i] : EP.pos_r[i];
+const lab = i => labOf(RULE, i);
+const AOf = k => EP.sets && EP.sets[k] && EP.sets[k].A ? EP.sets[k].A : EP.A_r;  // CSS px, re-set by layout()
+const PADL = 46, PADR = 10;
+
+function setup(c) {  // size from the PARENT's width so the canvas can never widen its own column
+  const dpr = window.devicePixelRatio || 1, w = Math.floor(c.parentElement.clientWidth), h = H[c.id];
+  c.style.width = w + "px"; c.style.height = h + "px";
+  const bw = Math.round(w * dpr), bh = Math.round(h * dpr);
+  if (c.width !== bw) c.width = bw; if (c.height !== bh) c.height = bh;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h); return [g, w, h];
+}
+function layout() {  // fit on one screen: dist = video height; timelines share what is left of the window
+  const two = getComputedStyle(document.querySelector(".stage")).gridTemplateColumns.split(" ").length > 1;
+  const vh = $("vid").getBoundingClientRect().height + 14, th = $("read").getBoundingClientRect().height + 4;
+  H.dist = Math.max(130, Math.round(two ? vh - th : 200));
+  const ids = ["heat", "ps", "adv", "labs"];
+  for (const id of ids) $(id).style.height = H[id] + "px";  // measure with the current heights applied
+  const top = $("heat").getBoundingClientRect().top + window.scrollY;
+  const bottom = document.querySelector(".note").getBoundingClientRect().bottom + window.scrollY;
+  const captions = bottom - top - ids.reduce((s, id) => s + H[id], 0);  // everything between / below the charts
+  const avail = Math.max(260, window.innerHeight - top - captions - 12);
+  H.labs = 2 + 6 * 13 + 36; const rest = avail - H.labs;
+  H.heat = Math.round(rest * 0.48); H.ps = Math.round(rest * 0.2); H.adv = rest - H.heat - H.ps;
+}
+
+const xS = (s, w) => PADL + s / EP.steps * (w - PADL - PADR);
+const sOfX = (x, w) => Math.max(0, Math.min(EP.steps - 1, Math.floor((x - PADL) / (w - PADL - PADR) * EP.steps)));
+const gridOf = s => { let i = Math.min(EP.frame_index.length - 1, Math.floor(s / EP.grid)); while (i > 0 && EP.frame_index[i] > s) i--; return i; };
+const cellEnd = i => i + 1 < EP.frame_index.length ? EP.frame_index[i + 1] : EP.steps;
+function axisY(g, w, h, y0, y1, ticks, fmt, top = 5, bot = 16) {
+  const Y = v => top + (1 - (v - y0) / (y1 - y0)) * (h - top - bot);
+  g.font = "11px system-ui"; g.fillStyle = css("--muted"); g.textAlign = "right"; g.textBaseline = "middle";
+  for (const v of ticks) { g.strokeStyle = css("--grid"); g.lineWidth = 1; g.beginPath(); g.moveTo(PADL, Y(v)); g.lineTo(w - PADR, Y(v)); g.stroke(); g.fillText(fmt(v), PADL - 6, Y(v)); }
+  return Y;
+}
+function line(g, w, Y, arr, color, dash) {
+  g.strokeStyle = color; g.lineWidth = 1.8; g.setLineDash(dash || []); g.beginPath();
+  arr.forEach((v, i) => { const x = xS(EP.frame_index[i], w); i ? g.lineTo(x, Y(v)) : g.moveTo(x, Y(v)); }); g.stroke(); g.setLineDash([]);
+}
+function timeAxis(g, w, h) {
+  g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.textAlign = "center"; g.textBaseline = "top";
+  const T = EP.steps / EP.step_hz, every = T > 20 ? 5 : 2;
+  for (let s = 0; s <= T; s += every) g.fillText(s + " s", xS(s * EP.step_hz, w), h - 13);
+}
+function cursor(g, w, h) { const x = xS(step + 0.5, w); g.strokeStyle = css("--cursor"); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, 1); g.lineTo(x, h - 15); g.stroke(); }
+function pots(g, w, h) {
+  for (let i = 1; i < EP.pots.length; i++) if (EP.pots[i] !== EP.pots[i - 1]) {
+    const x = xS(EP.frame_index[i], w); g.strokeStyle = css("--faint"); g.setLineDash([2, 3]); g.lineWidth = 1; g.beginPath(); g.moveTo(x, 3); g.lineTo(x, h - 16); g.stroke(); g.setLineDash([]); }
+}
+function isDark() { const t = document.documentElement.dataset.theme; return t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); }
+function heatImage() {
+  const n = EP.frame_index.length, nb = EP.probs[0].length;
+  const off = document.createElement("canvas"); off.width = n; off.height = nb; const g = off.getContext("2d"), im = g.createImageData(n, nb);
+  const flat = EP.probs.flat().sort((a, b) => a - b), mx = flat[Math.floor(flat.length * 0.995)] || 1;
+  const stops = isDark() ? [[35, 35, 33], [28, 92, 171], [134, 182, 239]] : [[252, 252, 251], [134, 182, 239], [28, 92, 171], [13, 54, 107]];
+  const ramp = s => { const u = s * (stops.length - 1), j = Math.min(stops.length - 2, Math.floor(u)), f = u - j; return stops[j].map((c, q) => c + (stops[j + 1][q] - c) * f); };
+  for (let i = 0; i < n; i++) for (let b = 0; b < nb; b++) {
+    const c = ramp(Math.min(1, Math.sqrt(EP.probs[i][b] / mx))), k = ((nb - 1 - b) * n + i) * 4;
+    im.data[k] = c[0]; im.data[k + 1] = c[1]; im.data[k + 2] = c[2]; im.data[k + 3] = 255;
+  }
+  g.putImageData(im, 0, 0); return off;
+}
+
+function drawTimelines() {
+  const n = EP.frame_index.length;
+  let [g, w, h] = setup($("heat")); const top = 5, bot = 16;
+  heatCache = heatCache || heatImage();
+  g.save(); g.beginPath(); g.rect(PADL, top, w - PADL - PADR, h - top - bot); g.clip(); g.imageSmoothingEnabled = false;
+  g.drawImage(heatCache, xS(0, w), top, xS(n * EP.grid, w) - xS(0, w), h - top - bot); g.restore();
+  let Y = axisY(g, w, h, -1, 0, [-1, -0.5, 0], v => v.toFixed(1), top, bot);
+  g.strokeStyle = css("--faint"); g.lineWidth = 1; g.beginPath(); g.moveTo(PADL, Y(-0.5)); g.lineTo(w - PADR, Y(-0.5)); g.stroke();
+  line(g, w, Y, EP.V_true, css("--fg"), [5, 3]); line(g, w, Y, EP.V_r, css("--resnet")); line(g, w, Y, EP.V_e, css("--expert"));
+  pots(g, w, h); timeAxis(g, w, h); cursor(g, w, h);
+
+  [g, w, h] = setup($("ps")); Y = axisY(g, w, h, 0, 1, h > 80 ? [0, 0.5, 1] : [0, 1], v => v.toFixed(h > 80 ? 1 : 0));
+  line(g, w, Y, EP.V_r.map(() => EP.success), css("--fg"), [5, 3]); line(g, w, Y, EP.ps_r, css("--resnet")); line(g, w, Y, EP.ps_e, css("--expert"));
+  pots(g, w, h); timeAxis(g, w, h); cursor(g, w, h);
+
+  [g, w, h] = setup($("adv"));
+  const As = AOf(RULE), own = As !== EP.A_r, all = EP.A_r.concat(EP.A_e, As), lo = Math.min(-0.1, ...all), hi = Math.max(0.1, ...all);
+  let ti = EP.term.indexOf(1);
+  const nlook = (SETS()[RULE] && /n=(\d+)/.exec(SETS()[RULE].name)) ? +/n=(\d+)/.exec(SETS()[RULE].name)[1] : 20;
+  if (nlook !== 20) { ti = EP.frame_index.findIndex(f => f + nlook >= EP.steps - 1); }
+  if (ti >= 0) { g.fillStyle = css("--term"); g.fillRect(xS(EP.frame_index[ti], w), 5, xS(EP.steps, w) - xS(EP.frame_index[ti], w), h - 21); }
+  Y = axisY(g, w, h, lo, hi, [...new Set([lo, 0, hi].map(v => Math.round(v * 10) / 10))], v => (v > 0 ? "+" : "") + v.toFixed(1));
+  g.strokeStyle = css("--faint"); g.beginPath(); g.moveTo(PADL, Y(0)); g.lineTo(w - PADR, Y(0)); g.stroke();
+  const thr = (SETS()[RULE] && SETS()[RULE].thr) || [IDX.thresholds.resnet, IDX.thresholds.resnet];
+  if (thr[1] > thr[0]) { g.fillStyle = css("--untag"); g.globalAlpha = 0.18; g.fillRect(PADL, Y(thr[1]), w - PADL - PADR, Y(thr[0]) - Y(thr[1])); g.globalAlpha = 1; }
+  for (const v of new Set(thr)) { g.strokeStyle = css("--resnet"); g.setLineDash([4, 3]); g.lineWidth = 1; g.beginPath(); g.moveTo(PADL, Y(v)); g.lineTo(w - PADR, Y(v)); g.stroke(); g.setLineDash([]); }
+  if (own) { line(g, w, Y, EP.A_r, css("--untag")); line(g, w, Y, As, css("--resnet")); }
+  else { line(g, w, Y, EP.A_e, css("--expert")); line(g, w, Y, EP.A_r, css("--resnet")); }
+  pots(g, w, h); timeAxis(g, w, h); cursor(g, w, h);
+
+  [g, w, h] = setup($("labs"));
+  g.font = "11px system-ui"; g.textAlign = "right"; g.textBaseline = "middle";
+  const rows = [["set ▸", EP.sets ? EP.sets[RULE].lab : EP.pos_r, 0], ["cmp", EP.sets && EP.sets[CMP] ? EP.sets[CMP].lab : EP.pos_r, 0],
+    ["now", EP.pos_r, 0], ["expert", EP.pos_e, 0], ["oracle", EP.pos_o, 0]]; if (EP.stall) rows.push(["stall", EP.stall, 1]);
+  rows.forEach(([nm, a, kind], r) => {
+    const y = 2 + r * 13; g.fillStyle = nm.endsWith("▸") ? css("--fg") : css("--muted"); g.fillText(nm, PADL - 6, y + 5);
+    a.forEach((v, i) => { const x0 = xS(EP.frame_index[i], w), x1 = xS(cellEnd(i), w);
+      g.fillStyle = kind ? (v ? css("--fg") : css("--pos")) : (v > 0 ? css("--pos") : v < 0 ? css("--untag") : css("--neg"));
+      g.fillRect(x0, y, Math.max(1, x1 - x0 - (x1 - x0 > 3 ? 1 : 0)), 10); });
+  });
+  const py = v => 2 + rows.length * 13 + 3 + (2 - v) * 6; g.fillStyle = css("--muted"); g.fillText("pots", PADL - 6, py(1));
+  g.strokeStyle = css("--fg"); g.lineWidth = 1.5; g.beginPath();
+  EP.pots.forEach((v, i) => { const x0 = xS(EP.frame_index[i], w); i ? g.lineTo(x0, py(v)) : g.moveTo(x0, py(v)); g.lineTo(xS(cellEnd(i), w), py(v)); }); g.stroke();
+  timeAxis(g, w, h); cursor(g, w, h);
+}
+
+function drawDist() {
+  const [g, w, h] = setup($("dist")), p = EP.probs[gi], nb = p.length, L = 40, R = 14, B = 30, T = 34;
+  const X = v => L + (v + 1) * (w - L - R), Y = v => T + (1 - Math.min(v, distMax) / distMax) * (h - T - B);
+  g.font = "600 12px system-ui"; g.fillStyle = css("--fg"); g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText(`ResNet value distribution at step ${EP.frame_index[gi]}`, 0, 0);
+  g.font = "11px system-ui"; g.fillStyle = css("--muted");
+  g.fillText("probability per bin (201 bins, fixed scale for the episode)", 0, 16);
+  g.fillStyle = css("--grid"); g.fillRect(X(-0.5), T, X(0) - X(-0.5), h - T - B);
+  g.textAlign = "right"; g.textBaseline = "middle"; g.fillStyle = css("--muted");
+  for (const v of [0, distMax / 2, distMax]) { g.strokeStyle = css("--line"); g.lineWidth = 1; g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(w - R, Y(v)); g.stroke(); g.fillText(v.toFixed(2), L - 5, Y(v)); }
+  const bw = (w - L - R) / nb; g.fillStyle = css("--resnet");
+  p.forEach((v, b) => { const y = Y(v); g.fillRect(L + b * bw, y, Math.max(1, bw - 0.4), h - B - y); });
+  for (const [v, col, dash] of [[EP.V_true[gi], css("--fg"), [5, 3]], [EP.V_r[gi], css("--resnet"), []], [EP.V_e[gi], css("--expert"), []]]) {
+    g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(dash); g.beginPath(); g.moveTo(X(v), T); g.lineTo(X(v), h - B); g.stroke(); g.setLineDash([]); }
+  g.fillStyle = css("--muted"); g.textAlign = "center"; g.textBaseline = "top";
+  for (const v of [-1, -0.75, -0.5, -0.25, 0]) g.fillText(v.toFixed(2), X(v), h - B + 3);
+  g.textAlign = "right"; g.fillText("← failure track", X(-0.5) - 4, h - 13); g.textAlign = "left"; g.fillText("success track →", X(-0.5) + 4, h - 13);
+}
+
+function readout() {
+  const f = (v, d = 3) => (v >= 0 ? "+" : "") + v.toFixed(d);
+  const tg = v => v < 0 ? `<span class="tag" style="background:var(--untag);color:#fff">untagged</span>` : `<span class="tag ${v ? "pos" : "neg"}">${v ? "positive" : "negative"}</span>`;
+  const sym = v => v < 0 ? "·" : v ? "+" : "−";
+  vid.className = lab(gi) === 0 ? "neg" : "";
+  $("bnote").textContent = `red border = negative under: ${nm(RULE)}`;
+  $("advlab").textContent = `advantage A (20 steps = 1 s) · solid blue = ${nm(RULE)}` + (AOf(RULE) !== EP.A_r ? " · gray = current A (n = 20, unsmoothed)" : " · orange = expert A") +
+    " · dashed = this set's threshold(s), gray band = untagged · shaded = terminal (outcome enters A)";
+  $("labslab").textContent = `labels · set ▸ = ${nm(RULE)} · cmp = ${nm(CMP)} · now = as trained (R0) · expert (R0) · oracle = rollout outcome · stall = hand moves < 1.5 cm in the next 20 steps · pots on the stove`;
+  $("slider").value = step;
+  $("tlabel").textContent = `step ${step} · ${(step / EP.step_hz).toFixed(2)} / ${EP.T_s.toFixed(1)} s`;
+  $("read").innerHTML = `<tr><th>step ${EP.frame_index[gi]} · pots on stove ${EP.pots[gi]}${EP.term[gi] ? " · terminal" : ""}</th><th>E[V]</th><th>P(success)</th><th>A (${(/n=(\d+)/.exec(nm(RULE)) || [0, 20])[1]} steps ahead)</th><th>label</th></tr>
+   <tr><td><i class="sw" style="background:var(--resnet)"></i>ResNet · set</td><td>${f(EP.V_r[gi])}</td><td>${EP.ps_r[gi].toFixed(2)}</td><td>${f(AOf(RULE)[gi])}</td><td>${tg(lab(gi))}</td></tr>
+   <tr><td colspan="5" class="meta">set ${sym(lab(gi))} · compare ${sym(labOf(CMP, gi))} (A ${f(AOf(CMP)[gi])}) · now ${sym(EP.pos_r[gi])} (A ${f(EP.A_r[gi])})${EP.stall && EP.stall[gi] ? " · <b>stall</b>" : ""}</td></tr>
+   <tr><td><i class="sw" style="background:var(--expert)"></i>expert</td><td>${f(EP.V_e[gi])}</td><td>${EP.ps_e[gi].toFixed(2)}</td><td>${f(EP.A_e[gi])}</td><td>${tg(EP.pos_e[gi])}</td></tr>
+   <tr><td>truth / oracle</td><td>${f(EP.V_true[gi])}</td><td>${EP.success}</td><td>—</td><td>${tg(EP.pos_o[gi])}</td></tr>`;
+}
+function render(force) {
+  const s = Math.max(0, Math.min(EP.steps - 1, Math.floor(vid.currentTime * EP.step_hz + 1e-6)));
+  if (!force && s === step) return;
+  step = s; const g2 = gridOf(step), changed = g2 !== gi; gi = g2;
+  drawTimelines(); if (force || changed) drawDist(); readout();
+}
+function tick() { if (EP) render(false); requestAnimationFrame(tick); }
+function seekStep(s) {
+  s = Math.max(0, Math.min(EP.steps - 1, s)); vid.pause();
+  vid.currentTime = (s + 0.5) / EP.step_hz; render(true);
+  try { history.replaceState(null, "", `?ep=${EP.episode}&s=${s}&rule=${RULE}&cmp=${CMP}`); } catch (_) {}
+}
+function setPlayLabel() { $("play").textContent = vid.paused ? "▶ Play" : "❚❚ Pause"; }
+function relayout() { if (!EP) return; layout(); render(true); layout(); render(true); }
+
+async function load(e, s0 = 0) {
+  vid.pause();
+  EP = await (await fetch(`ep${String(e).padStart(4, "0")}.json`)).json(); heatCache = null;
+  const flat = EP.probs.flat().sort((a, b) => a - b); distMax = Math.ceil(flat[Math.floor(flat.length * 0.999)] * 20) / 20 || 0.05;
+  $("slider").max = EP.steps - 1; $("ep").value = String(e);
+  $("meta").innerHTML = `<b>${EP.success ? "success" : "failure"}</b> after ${EP.steps} steps (${EP.T_s.toFixed(1)} s) · init state ${EP.init_state} (${EP.layout})`;
+  try { localStorage.setItem("adv-ep", e); } catch (_) {}
+  const base = EP.video.replace(/\.mp4$/, "");
+  vid.src = base + (vid.canPlayType('video/mp4; codecs="avc1.42E01E"') ? ".mp4" : ".webm"); vid.playbackRate = +$("speed").value;
+  await new Promise(r => vid.readyState >= 1 ? r() : vid.addEventListener("loadedmetadata", r, { once: true }));
+  gi = gridOf(Math.max(0, s0)); readout(); layout(); seekStep(s0); layout(); render(true); setPlayLabel();  // readout first: layout measures the filled table
+}
+function stepEpisode(d) { const o = [...$("ep").options], i = o.findIndex(x => x.selected); load(+o[(i + d + o.length) % o.length].value); }
+
+for (const id of ["heat", "ps", "adv", "labs"]) {
+  const c = $(id); let down = false;
+  const go = ev => seekStep(sOfX(ev.clientX - c.getBoundingClientRect().left, c.clientWidth));
+  c.addEventListener("pointerdown", ev => { down = true; go(ev); c.setPointerCapture(ev.pointerId); });
+  c.addEventListener("pointermove", ev => down && go(ev));
+  c.addEventListener("pointerup", () => down = false);
+  c.style.cursor = "pointer";
+}
+$("slider").addEventListener("input", ev => seekStep(+ev.target.value));
+$("play").addEventListener("click", () => { if (vid.paused) { if (step >= EP.steps - 1) seekStep(0); vid.play(); } else vid.pause(); });
+["play", "pause", "ended"].forEach(t => vid.addEventListener(t, setPlayLabel));
+vid.addEventListener("click", () => $("play").click());
+$("speed").addEventListener("change", () => vid.playbackRate = +$("speed").value);
+$("ep").addEventListener("change", ev => load(+ev.target.value));
+$("prev").addEventListener("click", () => stepEpisode(-1)); $("next").addEventListener("click", () => stepEpisode(1));
+addEventListener("keydown", ev => {
+  if (!EP || ev.target.tagName === "SELECT" || (ev.target.tagName === "INPUT" && ev.key === " ")) return;
+  const d = ev.shiftKey ? 1 : EP.grid;
+  if (ev.key === "ArrowRight") { seekStep(step + d); ev.preventDefault(); }
+  if (ev.key === "ArrowLeft") { seekStep(step - d); ev.preventDefault(); }
+  if (ev.key === " ") { $("play").click(); ev.preventDefault(); }
+});
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(relayout, 60); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { heatCache = null; relayout(); });
+(async () => {
+  IDX = await (await fetch("episodes.json")).json();
+  const S = SETS(), opts = '<optgroup label="Threshold rules (A as trained)">' + Object.keys(S).filter(k => k[0] === "R").map(k => `<option value="${k}">${S[k].name}</option>`).join("") +
+    '</optgroup><optgroup label="Denoising variants (own A)">' + Object.keys(S).filter(k => k[0] === "D").map(k => `<option value="${k}">${S[k].name}</option>`).join("") + "</optgroup>";
+  $("rule").innerHTML = opts; $("cmp").innerHTML = opts;
+  const qs = new URLSearchParams(location.search);
+  try { const r = localStorage.getItem("adv-rule"), c = localStorage.getItem("adv-cmp"); if (S[r]) RULE = r; if (S[c]) CMP = c; } catch (_) {}
+  if (S[qs.get("rule")]) RULE = qs.get("rule"); if (S[qs.get("cmp")]) CMP = qs.get("cmp"); if (!S[CMP]) CMP = RULE;
+  $("rule").value = RULE; $("cmp").value = CMP;
+  const onSet = () => { RULE = $("rule").value; CMP = $("cmp").value; try { localStorage.setItem("adv-rule", RULE); localStorage.setItem("adv-cmp", CMP); } catch (_) {} if (EP) seekStep(step); };
+  $("rule").addEventListener("change", onSet); $("cmp").addEventListener("change", onSet);
+  const groups = [["picked", "Picked examples"], ["random success", "Random successes (seed 0)"], ["random failure", "Random failures (seed 0)"]];
+  $("ep").innerHTML = groups.map(([k, nm]) => `<optgroup label="${nm}">` + IDX.episodes.filter(e => e.group === k).map(e =>
+    `<option value="${e.episode}">ep ${e.episode} · ${k === "picked" ? e.picked_as + " · " : ""}${e.success ? "success" : "failure"} · ${Math.round(e.neg_resnet * 100)}% neg</option>`).join("") + "</optgroup>").join("");
+  let start = IDX.episodes[0].episode;
+  try { const s = +localStorage.getItem("adv-ep"); if (IDX.episodes.some(e => e.episode === s)) start = s; } catch (_) {}
+  const q = new URLSearchParams(location.search), qe = +q.get("ep");
+  if (IDX.episodes.some(e => e.episode === qe)) start = qe;
+  await load(start, +q.get("s") || 0);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

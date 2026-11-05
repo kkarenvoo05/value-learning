@@ -137,6 +137,8 @@ def main():
                     help="with --history-gap: stack current + past frame as 6 input channels (C2a early fusion)")
     ap.add_argument("--still-time", action="store_true",
                     help="add the seconds the gripper has been still to the head input (Stage 5.5 B3 upper bound)")
+    ap.add_argument("--vel-history", action="store_true",
+                    help="add the hand's velocity over the last ~2 s to the head input (Stage 5.5 V1)")
     ap.add_argument("--cam-dropout", action="append", metavar="CAM=P",
                     help="training only: zero CAM's feature per sample with probability P (wrist-optimism arm)")
     ap.add_argument("--steps", type=int, help="override baseline.steps (smoke tests)")
@@ -171,6 +173,8 @@ def main():
         raise SystemExit("--history-stack needs --history-gap or --history-gaps")
     if args.still_time:
         dcfg["still_time"] = dict(dcfg["still_time"], enabled=True)
+    if args.vel_history:
+        dcfg["vel_history"] = dict(dcfg["vel_history"], enabled=True)
     dcfg["cam_dropout"] = {c: float(p) for c, p in (a.split("=") for a in args.cam_dropout or [])}
     steps = args.steps or bc["steps"]
     run = Path(cfg["paths"]["runs"]) / args.run
@@ -204,6 +208,7 @@ def main():
             "proprio": bool(dcfg.get("proprio", {}).get("enabled")), "crops": dcfg["crops"], "resize": dcfg["resize"],
             "image_size": dcfg["image_size"], "history": dcfg.get("history"),
             "still_time": bool((dcfg.get("still_time") or {}).get("enabled")),
+            "vel_history": dcfg["vel_history"] if (dcfg.get("vel_history") or {}).get("enabled") else None,
             "steps": steps, "trivial_baseline": trivial,
             "n_train": len(train), "n_val": len(val),
             "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu", "amp": str(dtype),

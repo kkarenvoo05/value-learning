@@ -41,6 +41,10 @@
 - Still time (Stage 5.5 B3 follow-up [ours]): `still_time=True` appends log1p(seconds the gripper has
   been still) (`vl.dataset` `still_time`) to the head input, one extra number: an upper bound for
   what image history can tell the head about a stall.
+- Velocity history (Stage 5.5 V1 [mentor's idea; scaling ours]): `vel_history=n` appends the hand's velocity
+  history (`vl.dataset` `vel_history`, 5 n raw numbers: 4 n velocities + n validity flags) to the head input,
+  velocities as sign(v) log1p(|v| / scale) with `vel_scale` (xyz m/s, gripper 1/s), flags as is. Head input
+  1024 + 5 n. Images of frame t only; an alternative to past frames.
 - Attention fusion (Stage 5.5 C3 [Lars: one token per image + a learnable readout; sizes ours]):
   `fusion="attention"` replaces the concat MLP with `TokenFusionHead`: each camera feature becomes a
   256-d token with a learned camera embedding, a readout token attends to them (2 cross-attention
@@ -69,7 +73,8 @@ import torchvision
 from vl.config import load_config
 
 
-BACKBONES = ("resnet18", "dinov2_vits14_reg")
+BACKBONES = ("resnet18", "dinov2_vits14_reg", "siglip_pi05")
+SIGLIP_PI05 = Path("/iris/u/ankile/karenvo/libero/siglip_pi05/weights.npz")  # scripts/export_pi05_siglip.py
 FUSIONS = ("concat", "attention")
 DINOV2_HF = ("timm/vit_small_patch14_reg4_dinov2.lvd142m", "c04b5193082a8d5b0c4856c7937384a48136c5de")
 
@@ -92,6 +97,30 @@ class DinoV2Features(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         t = self.vit.forward_features(x)                  # (B, 1 CLS + 4 registers + 256 patches, 384)
         return torch.cat([t[:, 0], t[:, self.vit.num_prefix_tokens:].mean(1)], dim=1)
+
+
+class SiglipPi05Features(nn.Module):
+    """pi05_libero's own SigLIP So400m/14 image encoder (PaliGemma/img, exported by scripts/export_pi05_siglip.py)
+    as timm `vit_so400m_patch14_siglip_224` -> (B, 1152) = mean of the 256 patch tokens after the encoder's final
+    LayerNorm (openpi's `encoded`; the 1152 -> 2048 projection into the LLM is dropped) [ours: mean pool, the
+    ResNet's pooled-feature analogue]. tanh GELU as flax `nn.gelu`; inputs in [-1, 1] as openpi (ValueModel sets
+    mean = std = 0.5 for this backbone). pretrained=False: random init, for shape tests only."""
+
+    def __init__(self, pretrained: bool, weights: Path = SIGLIP_PI05):
+        super().__init__()
+        import numpy as np
+        import timm
+        self.vit = timm.create_model("vit_so400m_patch14_siglip_224", pretrained=False, num_classes=0,
+                                     global_pool="", act_layer="gelu_tanh")
+        if pretrained:
+            with np.load(weights) as z:
+                sd = {k: torch.from_numpy(z[k]) for k in z.files}
+            missing, unexpected = self.vit.load_state_dict(sd, strict=False)
+            assert not unexpected and not missing, (missing[:5], unexpected[:5])
+        self.out_dim = self.vit.num_features  # 1152
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.vit.forward_features(x).mean(1)       # (B, 256, 1152) -> (B, 1152)
 
 
 def layer_decay_groups(model: "ValueModel", lr: float, decay: float) -> list[dict]:
@@ -190,15 +219,17 @@ class ValueModel(nn.Module):
                  proprio_mean=None, proprio_std=None, backbone: str = "resnet18", image_size: int = 224,
                  per_camera_backbone: bool = False, history: bool = False, still_time: bool = False,
                  fusion: str = "concat", fusion_cfg: dict | None = None, cam_dropout: dict | None = None,
-                 history_stack: bool = False, history_frames: int = 1):
+                 history_stack: bool = False, history_frames: int = 1, vel_history: int = 0,
+                 vel_scale: tuple = (0.01, 0.1), aux_classes: int = 0):
         super().__init__()
+        self.aux_classes = aux_classes
         self.cams = list(cams)
         if backbone not in BACKBONES:
             raise ValueError(f"backbone {backbone!r} not in {BACKBONES}")
         if fusion not in FUSIONS:
             raise ValueError(f"fusion {fusion!r} not in {FUSIONS}")
-        if fusion == "attention" and (history or still_time or proprio_mean is not None):
-            raise ValueError("attention fusion takes images only (history / still time / proprio not built)")
+        if fusion == "attention" and (history or still_time or vel_history or proprio_mean is not None):
+            raise ValueError("attention fusion takes images only (history / still time / velocity / proprio not built)")
         if fusion_cfg and fusion != "attention":
             raise ValueError(f"fusion_cfg {fusion_cfg} is only for attention fusion")
         self.fusion = fusion
@@ -225,6 +256,9 @@ class ValueModel(nn.Module):
                 if history_stack:             # C2a: [now, past] as 6 input channels
                     stack_conv1(net, 1 + history_frames)
                 return net, feat
+            if backbone == "siglip_pi05":
+                net = SiglipPi05Features(pretrained)
+                return net, net.out_dim       # 1152
             net = DinoV2Features(pretrained, image_size)
             return net, net.out_dim           # 768
 
@@ -243,17 +277,26 @@ class ValueModel(nn.Module):
             self.register_buffer("proprio_std", torch.tensor(proprio_std, dtype=torch.float32))
         self.history = history
         self.still_time = still_time
+        self.vel_history = int(vel_history)
+        sx, sg = vel_scale
+        self.register_buffer("vel_scale", torch.tensor([sx, sx, sx, sg] * self.vel_history, dtype=torch.float32))
         n_img = (feat * len(self.cams) * (2 if history and not history_stack else 1)
                  + ((history_frames if history_stack else 1) if history else 0))
         if fusion == "attention":             # C3: same head(f) interface, attention readout over cameras
             self.head = TokenFusionHead(len(self.cams), feat, n_bins, hidden=hidden, **(fusion_cfg or {}))
         else:
             self.head = nn.Sequential(
-                nn.Linear(n_img + self.proprio_dim + int(still_time), hidden),
+                nn.Linear(n_img + self.proprio_dim + int(still_time) + 5 * self.vel_history, hidden),
                 nn.ReLU(),
                 nn.Linear(hidden, n_bins),
             )
+        if aux_classes:  # E2 subtask head [ours]: linear on the value head's hidden layer, read with return_aux
+            if fusion != "concat":
+                raise ValueError("aux_classes is built for the concat head only")
+            self.aux_head = nn.Linear(hidden, aux_classes)
         self.register_buffer("bin_centers", torch.linspace(v_min, v_max, n_bins))
+        if backbone == "siglip_pi05":         # openpi scales images to [-1, 1]
+            mean = std = (0.5, 0.5, 0.5)
         self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
         self.backbone_frozen = False
@@ -280,16 +323,23 @@ class ValueModel(nn.Module):
         return torch.cat(f.chunk(len(self.cams)), dim=1)
 
     def forward(self, images: dict[str, torch.Tensor], proprio: torch.Tensor | None = None,
-                past: dict | None = None, still: torch.Tensor | None = None) -> torch.Tensor:
-        """images: {cam: uint8 (B, 3, H, W)}, proprio: raw float (B, 10) iff the model has a
+                past: dict | None = None, still: torch.Tensor | None = None,
+                vel: torch.Tensor | None = None, return_aux: bool = False) -> torch.Tensor:
+        """return_aux (aux_classes > 0 only): (value logits, aux logits (B, aux_classes)) instead of value logits.
+        images: {cam: uint8 (B, 3, H, W)}, proprio: raw float (B, 10) iff the model has a
         proprio input, past: {"images": {cam: uint8 (B, 3, H, W)}, "has_past": (B,)} iff the model has
-        history, still: raw seconds (B, 1) iff the model has still_time -> logits (B, n_bins)."""
+        history, still: raw seconds (B, 1) iff the model has still_time, vel: raw (B, 5 n) iff the model
+        has vel_history -> logits (B, n_bins)."""
         if (proprio is None) != (self.proprio_dim == 0):
             raise ValueError(f"model proprio_dim={self.proprio_dim} but proprio {'missing' if proprio is None else 'given'}")
         if (past is None) == self.history:
             raise ValueError(f"model history={self.history} but past {'missing' if past is None else 'given'}")
         if (still is None) == self.still_time:
             raise ValueError(f"model still_time={self.still_time} but still {'missing' if still is None else 'given'}")
+        if (vel is None) == bool(self.vel_history):
+            raise ValueError(f"model vel_history={self.vel_history} but vel {'missing' if vel is None else 'given'}")
+        if vel is not None and vel.shape[1] != 5 * self.vel_history:
+            raise ValueError(f"model vel_history={self.vel_history} needs vel width {5 * self.vel_history}, got {vel.shape[1]}")
         if self.history_stack:
             m = past["has_past"].float()
             m = m.view(-1, 1) if m.dim() == 1 else m             # (B, k)
@@ -309,6 +359,16 @@ class ValueModel(nn.Module):
             f = torch.cat([f, z.to(f.dtype)], dim=1)                # (B, n_cams * 512 + 10)
         if self.still_time:
             f = torch.cat([f, torch.log1p(still.float()).to(f.dtype)], dim=1)
+        if self.vel_history:
+            n4 = 4 * self.vel_history
+            v = vel.float()[:, :n4]
+            v = torch.sign(v) * torch.log1p(v.abs() / self.vel_scale)
+            f = torch.cat([f, v.to(f.dtype), vel[:, n4:].to(f.dtype)], dim=1)
+        if return_aux:
+            if not self.aux_classes:
+                raise ValueError("return_aux needs a model built with aux_classes > 0")
+            h = self.head[:-1](f)
+            return self.head[-1](h), self.aux_head(h)
         return self.head(f)
 
     def stacked_features(self, images: dict, past_images: dict, has_past: torch.Tensor) -> torch.Tensor:
@@ -358,6 +418,7 @@ def build_model(data_cfg: dict, target_cfg: dict, pretrained: bool = True) -> Va
         st = json.loads(Path(data_cfg["proprio"]["stats"]).read_text())
         assert st["split"] == "train", st["split"]
         pm, ps = st["mean"], st["std"]
+    vh = data_cfg.get("vel_history") or {}
     # DINOv2 was trained with the same ImageNet mean/std; a backbone that isn't needs its own entry.
     return ValueModel(data_cfg["cameras"], target_cfg["n_bins"], target_cfg["v_min"], target_cfg["v_max"],
                       pretrained=pretrained, mean=data_cfg["imagenet_mean"], std=data_cfg["imagenet_std"],
@@ -368,6 +429,8 @@ def build_model(data_cfg: dict, target_cfg: dict, pretrained: bool = True) -> Va
                                                           if v is not None}),
                       history_frames=len((data_cfg.get("history") or {}).get("gaps_s") or [None]),
                       still_time=bool((data_cfg.get("still_time") or {}).get("enabled")),
+                      vel_history=vh["n"] if vh.get("enabled") else 0,
+                      vel_scale=(vh.get("scale_mps", 0.01), vh.get("scale_grip", 0.1)),
                       fusion=data_cfg.get("fusion", "concat"), fusion_cfg=data_cfg.get("fusion_cfg") or {},
                       cam_dropout=data_cfg.get("cam_dropout") or {},
                       history_stack=bool((data_cfg.get("history") or {}).get("stack")))
@@ -394,6 +457,9 @@ def run_data_config(data_cfg: dict, run_dir: Path) -> dict:
     if meta.get("proprio"):
         cfg["proprio"] = dict(data_cfg["proprio"], enabled=True)
     cfg["still_time"] = dict(data_cfg.get("still_time") or {}, enabled=bool(meta.get("still_time")))
+    # V1 runs record their full velocity-history config; earlier runs: off
+    cfg["vel_history"] = dict(meta["vel_history"]) if meta.get("vel_history") else \
+        dict(data_cfg.get("vel_history") or {}, enabled=False)
     return cfg
 
 
@@ -406,6 +472,8 @@ def model_inputs(b: dict, device) -> dict:
                        "has_past": b["past"]["has_past"].to(device, non_blocking=True)}
     if "still" in b:
         inp["still"] = b["still"].to(device, non_blocking=True)
+    if "vel" in b:
+        inp["vel"] = b["vel"].to(device, non_blocking=True)
     return inp
 
 

@@ -1,0 +1,118 @@
+{
+  "setup": {
+    "out": "/iris/u/ankile/karenvo/libero/runs/tag_usage_18309419",
+    "val_eps": 40,
+    "per_ep": 8,
+    "k": 4,
+    "train_eps": 64,
+    "train_per_ep": 8,
+    "mb": 8,
+    "arms": [
+      "C_resnet",
+      "A_success_only"
+    ]
+  },
+  "labels": "/iris/u/ankile/karenvo/libero/tables/moka_fixed_fresh/labels/oof_resnet_n20_p30/labels.parquet",
+  "arms": {
+    "C_resnet": {
+      "action": {
+        "norm": {
+          "tag_pos_vs_neg": 0.0012827364262193441,
+          "tag_pos_vs_none": 0.010623984038829803,
+          "noise_same_tag": 0.05708799883723259,
+          "action_rms": 0.47105082869529724,
+          "ratio_tag_over_noise": 0.02246945910155773,
+          "ratio_ci95": [
+            0.02532252063974738,
+            0.03465856844559311
+          ],
+          "frames_tag_gt_noise": 0.0
+        },
+        "raw": {
+          "tag_pos_vs_neg": 0.0008070067822539088,
+          "tag_pos_vs_none": 0.007861377344667986,
+          "noise_same_tag": 0.044622097002439874,
+          "action_rms": 0.41717403804184433,
+          "ratio_tag_over_noise": 0.018085362106800645,
+          "ratio_ci95": [
+            0.024343322615453217,
+            0.036409865691110474
+          ],
+          "frames_tag_gt_noise": 0.0
+        },
+        "gripper_flip_tag": 0.0,
+        "gripper_flip_noise": 0.025833333333333333,
+        "frames": 320,
+        "k": 4
+      },
+      "loss": {
+        "frames": 512,
+        "episodes": 64,
+        "loss_correct": 0.006891237854476984,
+        "loss_flipped": 0.00688786351503623,
+        "loss_no_tag": 0.006948806279751807,
+        "flipped_minus_correct": -3.3743394407537153e-06,
+        "ci95": [
+          -9.68048390652676e-06,
+          3.0975721030390697e-06
+        ],
+        "rel_gain": -0.0004896565046817432,
+        "by_true_label": {
+          "False": -6.2181440654285325e-06,
+          "True": -5.305348160788981e-07
+        },
+        "frames_correct_lower": 0.53515625
+      }
+    },
+    "A_success_only": {
+      "action": {
+        "norm": {
+          "tag_pos_vs_neg": 0.002419858705252409,
+          "tag_pos_vs_none": 0.015324005857110023,
+          "noise_same_tag": 0.06739089637994766,
+          "action_rms": 0.47165507078170776,
+          "ratio_tag_over_noise": 0.0359077975153923,
+          "ratio_ci95": [
+            0.037943238578736785,
+            0.05417575323954225
+          ],
+          "frames_tag_gt_noise": 0.0
+        },
+        "raw": {
+          "tag_pos_vs_neg": 0.0016493316913666026,
+          "tag_pos_vs_none": 0.010685651713588495,
+          "noise_same_tag": 0.053342072582150804,
+          "action_rms": 0.4172223102687044,
+          "ratio_tag_over_noise": 0.0309199026495738,
+          "ratio_ci95": [
+            0.03530788444020663,
+            0.05363474120716909
+          ],
+          "frames_tag_gt_noise": 0.0
+        },
+        "gripper_flip_tag": 0.0003125,
+        "gripper_flip_noise": 0.035208333333333335,
+        "frames": 320,
+        "k": 4
+      },
+      "loss": {
+        "frames": 512,
+        "episodes": 64,
+        "loss_correct": 0.0069424079625726165,
+        "loss_flipped": 0.006939989698693694,
+        "loss_no_tag": 0.00679159233366633,
+        "flipped_minus_correct": -2.418263878922744e-06,
+        "ci95": [
+          -1.6941532061576227e-05,
+          1.0428355237923613e-05
+        ],
+        "rel_gain": -0.0003483321481480064,
+        "by_true_label": {
+          "False": -6.656492473666731e-06,
+          "True": 1.8199647158212429e-06
+        },
+        "frames_correct_lower": 0.490234375
+      }
+    }
+  }
+}

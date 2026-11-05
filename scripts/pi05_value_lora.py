@@ -48,7 +48,7 @@ from openpi.models import gemma as _gemma
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pi05_value_expert import (N_SUBTASK, CENTERS, CKPT, DATASET, Frames, ValueExpert, backbone_kv, fit_temperature,  # noqa: E402
-                               inner_states, value_config)
+                               inner_states, truncate_kv, value_config)
 
 LORA = r".*lora.*"
 
@@ -96,11 +96,14 @@ class Model:
     """LoRA backbone + value expert; trainable = {"lora": nnx.State, "expert": linen params}. The frozen weights
     (`rest`) are an explicit argument of every jitted function: closed over, they would be baked in as constants."""
 
-    def __init__(self, graphdef, expert: ValueExpert):
-        self.graphdef, self.expert = graphdef, expert
+    def __init__(self, graphdef, expert: ValueExpert, n_layers=None):
+        self.graphdef, self.expert, self.n_layers = graphdef, expert, n_layers
 
     def kv(self, lora, rest, obs, rng=None):
-        return backbone_kv(nnx.merge(self.graphdef, lora, rest), obs, rng)
+        kv, mask = backbone_kv(nnx.merge(self.graphdef, lora, rest), obs, rng)
+        # A3 (truncated + LoRA): as pi05_value_expert.py --n-layers, the expert reads only the first n layers' K/V.
+        # LoRA weights of layers >= n get no gradient (their K/V are unused) and stay at lora_b = 0.
+        return (truncate_kv(kv, self.n_layers), mask) if self.n_layers else (kv, mask)
 
     def apply(self, params, rest, obs, rng=None):
         kv, mask = self.kv(params["lora"], rest, obs, rng)
@@ -114,8 +117,13 @@ def observation(policy, f, idx):
 
 
 def build(a, policy, graphdef, lora, rest, base, f0):
+    n = getattr(a, "n_layers", None)
+    if n:
+        assert 1 <= n <= base.depth, n
+        print(f"truncated: value expert reads backbone layers 0..{n - 1} of {base.depth} (A3)", flush=True)
+        base = dataclasses.replace(base, depth=n)
     expert = ValueExpert(base, value_config(base, a.width, a.mlp_dim), subtask=getattr(a, "subtask_weight", 0) > 0)
-    m = Model(graphdef, expert)
+    m = Model(graphdef, expert, n)
     kv0, mask0 = jax.jit(m.kv)(lora, rest, observation(policy, f0, [0]))
     eparams = expert.init(jax.random.PRNGKey(a.seed), kv0, mask0)["params"]
     return m, {"lora": lora, "expert": eparams}
@@ -466,6 +474,8 @@ def main():
     ap.add_argument("--inner-stride", type=int, default=4)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--n-layers", type=int, default=None, help="A3: value expert reads only the first N backbone "
+                    "layers' K/V and has depth N (as pi05_value_expert.py; default all 18)")
     ap.add_argument("--augment", action="store_true", help="openpi train-time augmentation on fit (arm B: on)")
     ap.add_argument("--outcome-weight", type=float, default=1.0)
     ap.add_argument("--dataset", default=None,

@@ -1807,6 +1807,62 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       −0.039 [−0.073, −0.004]*; stall_auc +0.109 [+0.045, +0.186]* (ref 0.801), frozen_auc +0.085 [+0.011, +0.175]*
       (ref 0.808); CE / episode −0.010, MAE −0.002, shape MAE 0.000, eval-repo MAE −0.006, AUC 1 s −0.007 (all
       n.s.). Verdict "WIN, better: stall_auc, frozen_auc". The L40S C2a CE (3.627) matches the A5000 run (3.626)
+      **C2a gain probe (Karen, 2026-10-27; CPU)** [ours]: can hand-motion history or force stand in
+      for the past frame (cheaper: ~21 vs ~43 min per seed on L40S)? `.venv/bin/python scripts/c2a_gain_probe.py`
+      (new) → `reports/c2a_gain_probe.md`. Target dV = V(`c2a_stack2_l40s`, 3 seeds) − V(`g0_r0_l40s`, 10 seeds)
+      per val frame; residual_probe's binned ridge with episode folds, base = bins of V(R0). Groups: still time;
+      motion = residual_probe's memory groups + 0.5 / 1 / 2 s windows from positions (reported velocity not
+      used: 1–2 rows ahead of video); force = `telemetry.franka.ee_wrench` now + 0.5–2 s means / stds. **Force is
+      recorded in only 9 of 15 repos** (missing c00 ×2, c01, c02, r00, r01), so force is scored on the 6 val
+      repos that have it (134 episodes). Second target: C2a's own residual (would they add on top of C2a?).
+      **Result: neither can replace the past frame.** dV is 89–94% seed-reliable (split-half), but the best
+      group explains R² 0.16 (all frames) / 0.30–0.33 (hold-phase stalls), i.e. ≥ 2/3 of C2a's reliable change
+      is not predictable from the arm. Still time alone ≈ all of motion (all frames +0.106 vs +0.105 over base;
+      richer history adds nothing); force alone is weaker (+0.073 vs still +0.139 on force repos) and
+      motion + force is no better than motion. On C2a's residual: nothing on all / hold frames (≤ +0.016);
+      on hold-phase stall frames force +0.125* over base (still +0.077*, motion +0.073*), but every group stays
+      below predicting 0 there (25 episodes), so a weak hint only. Reading (Claude, to be checked): C2a's gain
+      is mostly what the camera sees, not how the arm moved, so a motion-history arm would at best match
+      b3_still (no win on 10 seeds). Odd: still time predicts 16% of C2a's change yet b3_still did not make
+      that change itself. Caveat: a linear probe bounds what a network could extract only loosely
+      (residual_probe registered still time at +0.4%). Not run: a motion-history or force training arm
+      **V1: hand velocity history instead of past frames (Karen, 2026-10-27; mentor's experiment)**: "velocity ≈ 0
+      during a stall, non-zero otherwise; if it gives the same value plot, prefer it over image stacking (less
+      compute, less distraction)". Velocity is recorded in all 15 repos (force only in 9, so force is not used).
+      **Code** [ours: sizes and scaling]: data config `vel_history: {enabled, n: 8, step_s: 0.25, scale_mps:
+      0.01, scale_grip: 0.1}`; `vl.dataset.velocity_history` / `load_vel` → item `vel` (40,) = 8 samples of
+      xyz + gripper velocity from *position* differences (sample j = (p[t − 4j] − p[t − 4j − 4]) · 15 / 4,
+      newest first, covering the last 2.1 s; the reported cartesian velocity is not used, it runs 1–2 rows ahead
+      of the video) + 8 validity flags (0 before the episode start). Model `vel_history=8`: velocities as
+      sign(v) log1p(|v| / scale), scale 1 cm/s (the still threshold) for xyz and 0.1 /s for the gripper, flags as is,
+      appended to the head input (1024 + 40 → 256 → 201, +10k params); frame t only, no past frames.
+      `vl.train_baseline --vel-history`; config.json records the full `vel_history` dict, `run_data_config`
+      reads it back (earlier runs: off). +4 tests (velocities, order, masking, causality; item = row t; head
+      input; width / presence refusals, attention refuses; config round trip + build_model); 154 pass.
+      Real data: 88% of frames have all 8 samples; speed on still ≥ 4 s frames p50 0.5 mm/s (p99 9.9 mm/s) vs
+      69 mm/s on moving frames; scaled inputs within ±3.9. CPU smoke (2 steps) trains, checkpoint reloads.
+      **Submitted** from frozen snapshot `Projects/vl-snap-v1` (same recipe as `vl-snap-c2b`; src identical
+      to live, 154 pass there): job **18139529**, one L40S, seeds 0–2 back to back (~20 min each): `NAME=v1_vel
+      SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 EXTRA="--vel-history" sbatch --job-name=vl-v1
+      --gres=gpu:l40s:1 scripts/cameras.sbatch` → `v1_vel_s{0,1,2}`.
+      **Reading fixed before results** [ours]: `compare_arms.py g0_r0_l40s v1_vel` (same win rule + stall_auc /
+      frozen_auc) and `compare_arms.py c2a_stack2_l40s v1_vel` (does it match C2a?), all on L40S. "Same value
+      plot" (mentor's criterion) = V1 vs C2a vs R0 curves on the same stall and frozen-success episodes, plus
+      frame-level |V(V1) − V(C2a)| on hold-phase still stalls. Expectation from b3_still (no win on 10 seeds)
+      and the C2a gain probe (velocity-type signals predict ≤ 1/3 of C2a's change): V1 ≈ b3_still, short of
+      C2a. Preferred over C2a only if it is not worse than C2a on stall_auc / frozen_auc and val CE
+      **Result (2026-10-27, job COMPLETED 58 min on move4 L40S, best steps 6.5k / 7.5k / 7.5k): no win; does not
+      replace C2a.** Val CE 3.655 ± 0.005 (3.653 / 3.653 / 3.661). vs `g0_r0_l40s` (n = 10): CE −0.011 [−0.027,
+      +0.005] n.s., stall_auc +0.011 [−0.025, +0.045] n.s., frozen_auc +0.007 n.s.; verdict "no win / no change",
+      the same place as `b3_still_l40s` (CE −0.007, stall_auc +0.021, both n.s.). vs `c2a_stack2_l40s`: CE +0.028
+      [−0.007, +0.066] n.s., **stall_auc −0.098 [−0.190, −0.028]*** (worse), frozen_auc −0.078 [−0.190, +0.009]
+      n.s.; verdict "no win / worse: stall_auc". Value check (seed means, hold phase): on still stalls (32 episodes)
+      target −0.622, R0 −0.481, V1 −0.479, C2a −0.537, |V1 − C2a| 0.066 vs |R0 − C2a| 0.063; on still frozen
+      successes (13) R0 −0.297, V1 −0.295, C2a −0.349. **V1 sits on R0**: it makes ~0% of C2a's shift on stalls
+      (and the frozen-success cost too). Reading (Claude, to be checked): the mentor's criterion fails; 2 s of
+      velocity gives the head what still time did (≈ nothing beyond the images), consistent with the C2a gain
+      probe. Not checked: whether the head uses the velocity input at all (counterfactual: feed a moving
+      frame's velocity on still stalls, would tell "ignored" from "used but uninformative"); no value-curve figures
       **C2a visual check (2026-10-26, running on CPU)**: `.venv/bin/python -m vl.c2a_visual` (new; +1 test) →
       `reports/c2a_visual.md`, `reports/figures/stage5_5/c2a_visual/`. (1) Counterfactual past frames on 100
       sampled hold-phase frames per group, 3 seeds: V with the real past vs past = frame t − 1 ("nothing moved",

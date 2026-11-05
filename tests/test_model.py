@@ -782,3 +782,46 @@ def test_build_model_reads_multi_gap_history(tmp_path):
     assert m.history and m.history_stack and m.history_frames == 3
     (tmp_path / "config.json").write_text(json.dumps({"history": {"gap_s": 2.0, "stack": True}}))   # C2a
     assert build_model(run_data_config(base, tmp_path), tc, pretrained=False).history_frames == 1
+
+
+# Stage 5.5 V1: velocity history as head input, signed log scaled per channel, flags as is.
+def test_vel_history_head_gets_signed_log_velocities_and_flags():
+    torch.manual_seed(0)
+    m = ValueModel(CAMS, pretrained=False, vel_history=2, vel_scale=(0.01, 0.1)).eval()
+    assert m.head[0].in_features == 2 * 512 + 10
+    x = images()
+    v = torch.tensor([[0.02, -0.01, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                      [0.0] * 8 + [1.0, 1.0]])
+    s = torch.tensor([0.01, 0.01, 0.01, 0.1] * 2)
+    with torch.no_grad():
+        z = torch.cat([torch.sign(v[:, :8]) * torch.log1p(v[:, :8].abs() / s), v[:, 8:]], dim=1)
+        assert torch.allclose(z[0, :4], torch.tensor([math.log(3.0), -math.log(2.0), 0.0, math.log(2.0)]))
+        assert torch.allclose(m(x, vel=v), m.head(torch.cat([m.features(x), z], dim=1)), atol=1e-5)
+        assert not torch.allclose(m(x, vel=v), m(x, vel=torch.zeros(2, 10)))
+    with pytest.raises(ValueError):
+        m(x)
+    with pytest.raises(ValueError):
+        m(x, vel=torch.zeros(2, 5))
+    with pytest.raises(ValueError):
+        ValueModel(CAMS, pretrained=False).eval()(x, vel=v)
+    with pytest.raises(ValueError):
+        ValueModel(CAMS, pretrained=False, fusion="attention", vel_history=2)
+
+
+def test_build_model_model_inputs_and_run_data_config_carry_vel_history(tmp_path):
+    import json
+    from vl.model import build_model, model_inputs, run_data_config
+    assert torch.equal(model_inputs({"images": images(), "vel": torch.ones(2, 40)}, "cpu")["vel"], torch.ones(2, 40))
+    assert "vel" not in model_inputs({"images": images()}, "cpu")
+    vh = {"enabled": True, "table": "t.parquet", "n": 8, "step_s": 0.25, "scale_mps": 0.02, "scale_grip": 0.1}
+    base = {"cameras": CAMS, "proprio": {"enabled": False}, "still_time": {"enabled": False},
+            "vel_history": dict(vh, enabled=False, scale_mps=0.01)}
+    (tmp_path / "config.json").write_text(json.dumps({"vel_history": vh}))
+    cfg = run_data_config(base, tmp_path)
+    assert cfg["vel_history"] == vh                              # the run's own settings, not data.yaml's
+    (tmp_path / "config.json").write_text(json.dumps({}))       # earlier runs: off
+    assert run_data_config(base, tmp_path)["vel_history"]["enabled"] is False
+    full = {"imagenet_mean": [0.485, 0.456, 0.406], "imagenet_std": [0.229, 0.224, 0.225], "image_size": 224}
+    m = build_model(dict(base, **full, vel_history=vh), {"n_bins": 201, "v_min": -1.0, "v_max": 0.0}, pretrained=False)
+    assert m.vel_history == 8 and torch.allclose(m.vel_scale[:4], torch.tensor([0.02, 0.02, 0.02, 0.1]))
+    assert build_model(dict(base, **full), {"n_bins": 201, "v_min": -1.0, "v_max": 0.0}, pretrained=False).vel_history == 0

@@ -1,0 +1,171 @@
+{
+  "thresholds": {
+    "resnet": -0.026030494082499783,
+    "expert": -0.024040981504556563
+  },
+  "episodes": [
+    {
+      "episode": 87,
+      "picked_as": "success most negative",
+      "success": 1,
+      "T_s": 21.95,
+      "init_state": 45,
+      "layout": "fixed",
+      "neg_share": {
+        "resnet": 0.4636363636363636,
+        "expert": 0.31818181818181823,
+        "oracle": 0.0
+      },
+      "label_disagreement_resnet_expert": 0.45454545454545453,
+      "max_abs_ev_recompute_error": 1.1102230246251565e-16,
+      "corr_A_vs_dPsucc_resnet": 0.9796719903313386,
+      "pots_changes_debounced": [
+        [
+          9.65,
+          0,
+          1
+        ],
+        [
+          21.95,
+          1,
+          2
+        ]
+      ],
+      "file": "ep0087_success_most_negative.png",
+      "fold": 1
+    },
+    {
+      "episode": 139,
+      "picked_as": "success typical",
+      "success": 1,
+      "T_s": 20.1,
+      "init_state": 28,
+      "layout": "fixed",
+      "neg_share": {
+        "resnet": 0.25742574257425743,
+        "expert": 0.40594059405940597,
+        "oracle": 0.0
+      },
+      "label_disagreement_resnet_expert": 0.42574257425742573,
+      "max_abs_ev_recompute_error": 0.0,
+      "corr_A_vs_dPsucc_resnet": 0.994051842303188,
+      "pots_changes_debounced": [
+        [
+          9.4,
+          0,
+          1
+        ],
+        [
+          20.1,
+          1,
+          2
+        ]
+      ],
+      "file": "ep0139_success_typical.png",
+      "fold": 1
+    },
+    {
+      "episode": 1265,
+      "picked_as": "failure most positive",
+      "success": 0,
+      "T_s": 26.0,
+      "init_state": -1,
+      "layout": "fresh",
+      "neg_share": {
+        "resnet": 0.10769230769230764,
+        "expert": 0.13076923076923075,
+        "oracle": 1.0
+      },
+      "label_disagreement_resnet_expert": 0.13076923076923078,
+      "max_abs_ev_recompute_error": 0.00011837604191811124,
+      "corr_A_vs_dPsucc_resnet": 0.8905782918372032,
+      "pots_changes_debounced": [],
+      "file": "ep1265_failure_most_positive.png",
+      "fold": 4
+    },
+    {
+      "episode": 1099,
+      "picked_as": "pot falls",
+      "success": 0,
+      "T_s": 26.0,
+      "init_state": -1,
+      "layout": "fresh",
+      "neg_share": {
+        "resnet": 0.36923076923076925,
+        "expert": 0.29230769230769227,
+        "oracle": 1.0
+      },
+      "label_disagreement_resnet_expert": 0.3076923076923077,
+      "max_abs_ev_recompute_error": 0.0005532921339782559,
+      "corr_A_vs_dPsucc_resnet": 0.9805749493001097,
+      "pots_changes_debounced": [
+        [
+          7.55,
+          0,
+          1
+        ],
+        [
+          8.2,
+          1,
+          0
+        ],
+        [
+          25.35,
+          0,
+          1
+        ]
+      ],
+      "file": "ep1099_pot_falls.png",
+      "fold": 3
+    },
+    {
+      "episode": 1176,
+      "picked_as": "resnet vs expert",
+      "success": 0,
+      "T_s": 26.0,
+      "init_state": -1,
+      "layout": "fresh",
+      "neg_share": {
+        "resnet": 0.46923076923076923,
+        "expert": 0.32307692307692304,
+        "oracle": 1.0
+      },
+      "label_disagreement_resnet_expert": 0.5769230769230769,
+      "max_abs_ev_recompute_error": 0.0004362290336227814,
+      "corr_A_vs_dPsucc_resnet": 0.9958785593009485,
+      "pots_changes_debounced": [
+        [
+          11.25,
+          0,
+          1
+        ],
+        [
+          12.2,
+          1,
+          0
+        ],
+        [
+          16.25,
+          0,
+          1
+        ]
+      ],
+      "file": "ep1176_resnet_vs_expert.png",
+      "fold": 4
+    }
+  ],
+  "all_train": {
+    "episodes": 900,
+    "neg_share_success_median": 0.257578850668572,
+    "neg_share_failure_median": 0.34615384615384615,
+    "neg_share_success_p10_p90": [
+      0.15184453227931488,
+      0.35098722415795586
+    ],
+    "neg_share_failure_p10_p90": [
+      0.25384615384615383,
+      0.4307692307692308
+    ],
+    "label_disagreement_resnet_expert_mean": 0.33291946933026956
+  }
+}

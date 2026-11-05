@@ -24,6 +24,7 @@ conclusions). Open only what the question needs. Dated reports and log entries a
 | What is running, what to do next | [CURRENT](CURRENT.md) |
 | LIBERO goal, stages, gates, paths | [libero_plan.md](libero_plan.md) top sections |
 | Is π₀.₅'s value noise in SigLIP, the LLM layers, or fine-tuning? | [frozen encoders report](../reports/2026-11-02-frozen-encoders/report.md) |
+| Does reading V straight from SigLIP (no LLM) beat π₀.₅ / the ResNet? | [SigLIP-direct report](../reports/2026-11-03-siglip-direct/report.md) |
 | Does layout variety or episode count matter? | same report, P1c |
 | Seed spread of LIBERO value arms (3a) | [libero_seeds.md](../reports/libero_seeds.md) |
 | Does frozen π₀.₅ encode pot-on-stove? | [libero_progress.md](../reports/libero_progress.md) |

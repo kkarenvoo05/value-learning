@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advantage Examples</title><style>
+:root{--bg:#fcfcfb;--fg:#0b0b0b;--muted:#52514e;--card:#ffffff;--line:#e4e3df}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1a19;--fg:#f0efec;--muted:#c3c2b7;--card:#232321;--line:#383835}}
+:root[data-theme="dark"]{--bg:#1a1a19;--fg:#f0efec;--muted:#c3c2b7;--card:#232321;--line:#383835}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;margin:0;padding:24px 16px}
+main{max-width:1180px;margin:0 auto} h1{font-size:24px;margin:0 0 4px} .sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:16px 0}
+.card h3{margin:0 0 6px;font-size:16px} .meta{color:var(--muted);font-size:13px}
+img{width:100%;height:auto;border-radius:6px;background:#fff} table{border-collapse:collapse;font-size:14px;margin:8px 0}
+td,th{border-bottom:1px solid var(--line);padding:4px 10px;text-align:left} ul{padding-left:20px}
+.tbl{overflow-x:auto}</style></head><body><main>
+<h1>What advantages did the value functions assign?</h1>
+<p class="sub">LIBERO moka pots · arm C labels on train rollouts · 2026-11-04</p>
+<p><a href="viewer/index.html"><b>Open the scroll-through viewer →</b></a> scrub each episode frame by frame with the cameras, the value distribution, P(success), A and labels in sync.</p>
+<section class="card"><h3>How to read each figure</h3><ul>
+<li><b>Frames:</b> 8 agentview frames, outlined in red where the ResNet label (the one arm C trained on) is negative.</li>
+<li><b>Heatmap:</b> the ResNet's 201-bin value distribution per frame, from each episode's own out-of-fold model (it reproduces the stored V to within 6e-4). Lines show ResNet E[V] in blue, expert E[V] in orange and the true Monte-Carlo target as black dashes. Success targets lie above −0.5 and failure targets below.</li>
+<li><b>P(success):</b> for the ResNet, the probability mass above −0.5; for the expert, its separate P(success) head.</li>
+<li><b>A = V(t+20 steps) − V(t) − 20/1040:</b> the dashed lines are each model's label threshold (30th percentile). Frames below the line are labelled negative.</li>
+<li><b>Label strips:</b> red = negative. Oracle = the rollout outcome copied to every frame.</li>
+<li><b>Pots on stove:</b> from the simulator's goal predicates, with sub-second flicker removed.</li></ul></section>
+<section class="card"><h3>Findings</h3><ul>
+<li><b>The ResNet's distribution is bimodal</b>: one band on the success track, one on the failure track. E[V] mostly moves when weight shifts between the bands.</li>
+<li><b>The advantage is the 1-second (20-step) change in predicted P(success)</b> (correlation 0.89–1.00 in these episodes). How fast the task progresses barely registers.</li>
+<li><b>At the key events the ResNet is mostly right</b>: 76–92% of frames are negative in the 20 steps (1 s) before a pot falls, and 19% before a successful first placement (the base rate is 30%). The expert sits near the base rate at both.</li>
+<li><b>Exceptions:</b> placement frames labelled negative (ep 139) and band-flicker labels in on-track successes (ep 87).</li>
+<li><b>Frames where nothing changes get positive labels by default</b> (A ≈ −0.019 is above the −0.026 threshold). That makes stuck failures mostly positive (ep 1265).</li></ul>
+<div class="tbl"><table><tr><th>20 steps (1 s) before…</th><th>n</th><th>ResNet % negative</th><th>expert % negative</th></tr>
+<tr><td>pot falls off stove (failure)</td><td>28</td><td>76%</td><td>53%</td></tr>
+<tr><td>pot falls off stove (success)</td><td>5</td><td>92%</td><td>48%</td></tr>
+<tr><td>first pot placed (success)</td><td>521</td><td>19%</td><td>32%</td></tr>
+<tr><td>first pot placed (failure)</td><td>325</td><td>41%</td><td>48%</td></tr></table></div>
+<p class="meta">All 900 train episodes: median negative share 26% in successes and 35% in failures. ResNet and expert labels disagree on 33% of frames.</p></section>
+<section class="card"><h3>Episode 139 · success typical · success</h3>
+<p>Typical success. After the first pot lands at 9.4 s (step 188) the ResNet's P(success) collapses from about 0.8 to near 0 and stays there for about 7.5 s, so the placement frames are labelled negative. The expert dips too but recovers in about 1.5 s.</p>
+<p class="meta">ResNet 26% negative · expert 41% · ResNet≠expert on 43% of frames · corr(A, ΔP(success)) = 0.99</p>
+<img src="ep0139_success_typical.png" alt="episode 139 value distribution, advantages and labels" loading="lazy"></section><section class="card"><h3>Episode 87 · success most negative · success</h3>
+<p>The success with the most negative frames. After about 13.5 s the ResNet's E[V] flips between the success and failure bands, so labels flip every 0.5–1 s even though the episode is on track.</p>
+<p class="meta">ResNet 46% negative · expert 32% · ResNet≠expert on 45% of frames · corr(A, ΔP(success)) = 0.98</p>
+<img src="ep0087_success_most_negative.png" alt="episode 87 value distribution, advantages and labels" loading="lazy"></section><section class="card"><h3>Episode 1099 · pot falls · failure</h3>
+<p>A pot is placed at 7.6 s and falls off at 8.2 s. Both models drop P(success) from about 0.7 to near 0 between 6.3 and 7.3 s, so the frames that led into the bad placement are labelled negative. That is the credit assignment we want. The next ~15 s are flat, so they are mostly positive by default.</p>
+<p class="meta">ResNet 37% negative · expert 29% · ResNet≠expert on 31% of frames · corr(A, ΔP(success)) = 0.98</p>
+<img src="ep1099_pot_falls.png" alt="episode 1099 value distribution, advantages and labels" loading="lazy"></section><section class="card"><h3>Episode 1176 · resnet vs expert · failure</h3>
+<p>The episode where ResNet and expert disagree most (58% of frames). The ResNet's E[V] swings between bands while the expert stays flat. Most of the disagreement is the ResNet's band switching.</p>
+<p class="meta">ResNet 47% negative · expert 32% · ResNet≠expert on 58% of frames · corr(A, ΔP(success)) = 1.00</p>
+<img src="ep1176_resnet_vs_expert.png" alt="episode 1176 value distribution, advantages and labels" loading="lazy"></section><section class="card"><h3>Episode 1265 · failure most positive · failure</h3>
+<p>The failure with the most positive frames. It never places a pot and V barely moves, so A stays near −0.019, just above the −0.026 threshold: 89% of frames are labelled positive.</p>
+<p class="meta">ResNet 11% negative · expert 13% · ResNet≠expert on 13% of frames · corr(A, ΔP(success)) = 0.89</p>
+<img src="ep1265_failure_most_positive.png" alt="episode 1265 value distribution, advantages and labels" loading="lazy"></section></main></body></html>
