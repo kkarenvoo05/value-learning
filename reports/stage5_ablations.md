@@ -39,7 +39,7 @@ Trivial baselines: global constant MAE 0.257, repo-only constant 0.140 (eval rep
   Side only reproduces the baseline's ordering (low for the early, mostly failing rounds, higher
   for r04). Wrist only also differs by round but in the *opposite* order, with r00 most
   optimistic, so it does not carry the outcome-related round cue. **The round cue that V uses is
-  in the side view.** The question for Lars (day/lighting/camera setup per round) can focus on `side_1`.
+  in the side view.** The question for the mentor (day/lighting/camera setup per round) can focus on `side_1`.
 - **Drops when the arm leaves the side view** (`vl.side_occlusion`, `reports/side_occlusion_{side_s0,wrist_s0}.md`):
   P(ΔV < −0.2 in 1 s | the arm leaves the side view) vs when occlusion doesn't jump:
 

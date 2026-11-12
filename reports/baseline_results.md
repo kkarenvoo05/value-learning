@@ -266,7 +266,7 @@ below are [ours]; they are defined in the `vl.analysis` docstring.
 Reviewer-truncated timeouts are **not** worse than the others. The capped ones are worst
 because a 53 s episode's targets start at −0.94, while V sits at about −0.45 on the same images (plot 09,
 r04/101: 45 s at the holder, V ≈ −0.2). So the arbitrary truncation point is not a major error
-source. **No need to ask Lars about changing T.** (Small n: 4 capped, 5 ended early.)
+source. **No need to ask the mentor about changing T.** (Small n: 4 capped, 5 ended early.)
 
 ### Stalls (robot in control, ≥ 3 s in, 3 s mean end-effector speed < 15 mm/s; a heuristic)
 
@@ -325,7 +325,7 @@ swings while the arm moves), and a structural plateau-then-jump (−0.5 at the h
 seat), which a straight countdown cannot match. For Stage 6, V(o_{t+n}) − V(o_t) will be
 dominated by this noise unless n spans seconds or V is smoothed.
 
-### Phase-one gate (Claude's assessment; Karen/Lars decide)
+### Phase-one gate (Claude's assessment; Karen/the mentor decide)
 
 - **Beats the trivial baselines on validation: yes, overall** (MAE 0.121 ± 0.004 over 3 seeds vs repo-only 0.140;
   eval repos 0.196 ± 0.008 vs 0.222; within-round AUC well above chance). Not on autonomous failures and
@@ -347,7 +347,7 @@ Autonomous eval episodes, train + val (800 episodes; V from `lowlr_8k`, val only
   (`vl.analysis --repo-sheet`: frame 0 of 4 random training episodes per repo) shows no
   obvious cue at a glance. Glare on the table in `side_1` varies between repos (strongest in
   c00), and r00–r04 look alike at this size. Locating the cue would need a probe (e.g. a
-  repo classifier on frame 0 with saliency); not done. **Still open: ask Lars whether rounds
+  repo classifier on frame 0 with saliency); not done. **Still open: ask the mentor whether rounds
   were recorded on different days, lighting or camera setups.**
 - **Within a round, the first frame is at chance:** within-round success AUC of V at frame 0
   is 0.55 (r01–r04, 103 val episodes) and rises to 0.66 by 0.5–1.5 s. Neither the initial

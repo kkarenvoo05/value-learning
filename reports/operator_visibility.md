@@ -92,7 +92,7 @@ Rows are time before T:
   That is better tested on the trained model: in Stage 4, compare predictions on matched
   frames with and without the operator, and look at the frames where V drops sharply.
 
-**Recommendation [ours, for Karen/Lars to decide]:** do not crop or mask for the baseline. The
+**Recommendation [ours, for Karen/the mentor to decide]:** do not crop or mask for the baseline. The
 operator is in about 1 in 5 frames and mostly at the corners, and the evidence above does
 not show an outcome shortcut. Keep `person_frac` per frame
 so Stage 4 can break metrics down by operator-visible vs not. Masking the bottom-left corner

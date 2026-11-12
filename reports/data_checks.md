@@ -3,7 +3,7 @@
 Covers PROGRESS checkpoints 3.1–3.6. Everything below ran on move2; commands are in the README.
 Generated tables: `reports/data_integrity.md` (3.1). Generated figures (gitignored, regenerate
 with `python -m vl.data_figures`): `reports/figures/stage3/`, review videos in
-`data/review_videos/`. Choices are tagged [paper], [lars] or [ours].
+`data/review_videos/`. Choices are tagged [paper], [mentor] or [ours].
 
 ## 3.1 Data on disk
 
@@ -59,7 +59,7 @@ with `python -m vl.data_figures`): `reports/figures/stage3/`, review videos in
     pass over the training frames per hour. Pre-extracting 224×224 JPEGs (~877k images,
     ~10 GB) would be roughly 4× faster but does not fit in the home quota (6.8 GB free) and
     would need storage outside home. Revisit if Stage 4 is loader-bound. Local `/scr` has room
-    but is not "NFS under Karen's name" (Lars's rule), so ask first.
+    but is not "NFS under Karen's name" (the mentor's rule), so ask first.
 
 ## 3.4 Crops and preprocessing [ours unless tagged]
 

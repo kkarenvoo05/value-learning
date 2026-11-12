@@ -5,7 +5,7 @@ Date: 2026-10-17. All numbers below come from `data/manifest/episodes.parquet` a
 pinned to its `release-1` tag commit (= `main` at audit time), listed in `audit_tables.md`.
 
 Legend: **[paper]** stated in a paper/release doc · **[data]** verified in the data ·
-**[ours]** our choice · **[Lars]** decided by Lars · **[open]** unresolved.
+**[ours]** our choice · **[mentor]** decided by the mentor · **[open]** unresolved.
 
 ## 1. Format and schema
 
@@ -54,7 +54,7 @@ Legend: **[paper]** stated in a paper/release doc · **[data]** verified in the 
   diagnostic only. [data]
 - The Mulligan critic gives **timeouts no terminal anchor** (bootstraps through them) [paper
   Table 17]; RECAP counts running out of time as failure [paper π*0.6 §VI]. → **Q1 decided: timeout =
-  failure, as in RECAP [Lars, 2026-10-17].**
+  failure, as in RECAP [mentor, 2026-10-17].**
 
 ### Anomalies [data]
 - 4 training-pool episodes are `unknown` (human `skip`, no auto event): c01/53, c03/60, c03/68,
@@ -99,8 +99,8 @@ fingerprint, or identical (release block, episode) identity. [ours]
 - Bug found and fixed during the audit: r02 and r05-screen sessions reuse one `source_repo`
   string with session-local indices; keying identity on `source_repo` falsely merged 100 pairs of
   distinct recordings. Identity now uses the release block.
-- Release metadata marks eval rounds `trainable: false` for *their* models; Lars's split
-  intentionally uses r00–r04 as value-model training data. [paper README + lars]
+- Release metadata marks eval rounds `trainable: false` for *their* models; the mentor's split
+  intentionally uses r00–r04 as value-model training data. [paper README + mentor]
 
 ## 5. Cameras
 
@@ -113,7 +113,7 @@ fingerprint, or identical (release block, episode) identity. [ours]
   [paper README].
 - **`side_1` is the only side camera in r00–r02** (500 of 1,624 training-pool episodes), so it is
   almost certainly the paper's second camera.
-- **Q2 decided: `wrist_left + side_1` [Lars].** Lars's meeting notes: of the 4 cameras only 2 are
+- **Q2 decided: `wrist_left + side_1` [mentor].** The mentor's meeting notes: of the 4 cameras only 2 are
   used for policies, the left wrist view and the side-on view; `side_1` is that side view. Camera
   set and proprioception remain ablations (PROGRESS Stage 5).
 - Crop check (f=0, initial-state extremes, `figures/initial_state_extremes.jpg`): marker and
@@ -190,7 +190,7 @@ Findings [data]:
 
 All 13 repos: 27.4 GB. Training pool `side_1 + wrist_left + data`: ~11.9 GB; test: ~3.3 GB.
 The original laptop disk had ~2.6 GB free, so nothing was bulk-downloaded. Work has since moved
-to the move2 machine. **[Lars]** Training data goes on NFS storage under Karen's name, not under
+to the move2 machine. **[mentor]** Training data goes on NFS storage under Karen's name, not under
 `/move/`. **Temporary (2026-10-17):** `data/` → `/sailhome/karenvo/vl-data` (home, 20 GB quota,
 ~19 GB free). Permanent: `/iris/u/karenvo`, pending `finnlab` access. Pre-decoding only valid
 frames at reduced resolution/rate would also cut the footprint.
@@ -209,7 +209,7 @@ Per episode with valid final frame T (0-indexed), for t = 0..T, in **seconds** (
 - Terminal: the frame at T gets R_T = 0 (success) or −C_fail (failure); frames > T are never
   sampled. Subsampling keeps each frame's original index t, so targets use true time.
 - Units in seconds keep later advantage lookahead defined in time, not frames.
-- **Timeouts — decided [Lars]:** failure terminal at T (RECAP-style Monte-Carlo target), same
+- **Timeouts — decided [mentor]:** failure terminal at T (RECAP-style Monte-Carlo target), same
   −C_fail as other failures. `outcome` stays 3-valued in the manifest so timeouts can still be
   broken out in evaluation; excluding them is an optional diagnostic only (timeouts are 32% of
   eval rollouts and are censored by the Mulligan critic).
@@ -235,7 +235,7 @@ Per episode with valid final frame T (0-indexed), for t = 0..T, in **seconds** (
 
 ## 9. Remaining uncertainties / next actions
 
-1. ~~Q1 timeout semantics, Q2 camera choice~~ — decided by Lars (timeout = failure;
+1. ~~Q1 timeout semantics, Q2 camera choice~~ — decided by the mentor (timeout = failure;
    `wrist_left + side_1`).
 2. ~~Inspect c02/82 and the four over-cap r03 episodes~~ (Section 5a; still frames, a person
    should watch them as video).

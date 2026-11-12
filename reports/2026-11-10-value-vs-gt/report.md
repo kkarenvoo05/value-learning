@@ -1,4 +1,4 @@
-# Learned values and labels vs simulator ground truth (Lars item 4)
+# Learned values and labels vs simulator ground truth (mentor item 4)
 
 **Question.** Is the value function's advantage informative about actions? Score every value / label source against
 the branching ground truth, with the ground truth's own noise ceiling.
@@ -35,7 +35,7 @@ ceiling for a half-K estimate; the plan's 0.57 used that). By run: fail_a 0.02, 
 
 **Interpretation (to check).** The ground truth is noisy but not the bottleneck: A* is reliable enough (ceiling 0.69)
 that a good advantage would show corr 0.4+; ours show ≤ 0.14. So the labels are weak because the value functions
-do not resolve action-level differences, not only because the truth is noisy. This answers Lars's "is the advantage
+do not resolve action-level differences, not only because the truth is noisy. This answers the mentor's "is the advantage
 informative?": barely, about actions.
 
 **Caveats.** 12 of 18 episodes are failures chosen for branching, so V* has a restricted range (lowers V's corr);

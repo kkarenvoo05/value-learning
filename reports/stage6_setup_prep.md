@@ -1,4 +1,4 @@
-# Stage 6.0 prep: what to settle with Lars and Rohan (draft, 2026-10-26)
+# Stage 6.0 prep: what to settle with the mentor and Rohan (draft, 2026-10-26)
 
 Draft for Karen, written by Claude from `PROGRESS.md` (Stage 6–8, Open questions) and the Stage 4–5.5 results.
 Nothing here has been asked yet. Stage 6 formally starts after the Stage 5.5 merge gate; this is the setup
@@ -19,7 +19,7 @@ the holder can't tell a stall from a pause before a seat, and part of V's skill 
 
 1. **Checkpoint.** Which π₀.₅ DROID checkpoint (openpi `pi05_droid`, or a lab fine-tune)? Where does it live
    on IRIS, and which code base runs it (openpi JAX vs a PyTorch port)? 6.1 needs access to intermediate
-   tokens (Lars: the value head cross-attends into them), so: which layer(s), and is there a hook for them?
+   tokens (mentor: the value head cross-attends into them), so: which layer(s), and is there a hook for them?
 2. **Inputs it expects.** π₀.₅ DROID is trained on DROID camera views and a language prompt. Does it take
    our `wrist_left` + `side_1` at 15 fps as-is, at what resolution, and with what prompt for Insert Marker?
    Does the Mulligan setup *already* run π₀.₅ (were the r00–r05 eval policies π₀.₅-based)?
@@ -49,15 +49,15 @@ the holder can't tell a stall from a pause before a seat, and part of V's skill 
     RECAP's advantage conditioning has been shown in sim only; the real-robot version is the contribution.
 11. **Evaluation.** How much robot time, which success measure, how many trials per arm for a decision? (Our
     val set resolves only ~0.025 CE with 247 episodes; policy success rates will have the same power problem.)
-    Lars's throughput objective (Stage 8.2): completions per minute at 1× speed.
+    The mentor's throughput objective (Stage 8.2): completions per minute at 1× speed.
 12. **Fair comparison.** Matched init, budget, preprocessing and data mixture; strong imitation baseline
     (filtered BC on Rohan's successes is the natural one).
-13. **Which V.** Lars's plan is the π₀.₅ value head (6.1). The Stage 5.5 ResNet V is the fallback (6.2 gate).
+13. **Which V.** The mentor's plan is the π₀.₅ value head (6.1). The Stage 5.5 ResNet V is the fallback (6.2 gate).
     Out-of-fold V for advantages on V's own training episodes (an overfit V gives ~0 advantages there)?
 
 ## D. Still-open data questions (from PROGRESS.md "Open questions"; good to clear in the same meeting)
 
-- **Q4** Does Lars have a loader that applies reviewed outcomes and endpoint trimming? (we wrote our own)
+- **Q4** Does the mentor have a loader that applies reviewed outcomes and endpoint trimming? (we wrote our own)
 - **Q5** Is `r05-screen` a separate diagnostic distribution? It and `r05-eval` share the same 50 starts.
 - **Q6** Compute and policy-evaluation setup (= A3 / C11).
 - **Q7** Soft truncation: what rule picked the stall frame (210 human `soft_truncate` edits)? Why do 47
@@ -70,5 +70,4 @@ the holder can't tell a stall from a pause before a seat, and part of V's skill 
 ## E. Decisions for Karen to take into the meeting
 
 - Whether to propose the ResNet V as the first advantage source (ready now) while the π₀.₅ head is built.
-- Which inference recipe V ships with (ensemble, smoothing, temperature): see `reports/lars_package_draft.md`,
-  "Inference recipe".
+- Which inference recipe V ships with (ensemble, smoothing, temperature): see `reports/inference_choices.md`.

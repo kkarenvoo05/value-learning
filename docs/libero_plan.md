@@ -2043,10 +2043,10 @@ counted as expert), fixed. No training run started yet.
 - 2026-11-08 18:20 **Tagged success-only eval 0.561** (18387310; vs base +0.036 [−0.027, +0.097], vs R1 +0.006):
   same as untagged success-only. Speed stage 2 tag check 18363756: tag not used (0.015× noise). Explore table built
   (18390928); OOF folds running.
-- 2026-11-09 18:00 **Contrastive guidance test queued** (Karen: set up + test; Lars direction 2, AG paper).
+- 2026-11-09 18:00 **Contrastive guidance test queued** (Karen: set up + test; mentor direction 2, AG paper).
   AdaRMS vb40 18355677, w in {0, 2, 4, 8, -4} = 18409259-63 after offline check 18409258. Details in CURRENT.md.
 
-### 2026-11-10 21:15 — Iterated filtered BC round 2 queued (Lars 11-10: "keep successes, more rollouts → ~100%?")
+### 2026-11-10 21:15 — Iterated filtered BC round 2 queued (mentor 11-10: "keep successes, more rollouts → ~100%?")
 `scripts/fbc_round2.sh` (SUBMIT=1). Round 1 = R1 arm A `policy_armA_frozensiglip_s0_18310771` (0.555, 18376075).
 Collect with it (no tag), round 1's design [ours]: 30 train states × 15 (18433688/89, env seeds 41/42) + 450 fresh
 layouts (18433690/91, seeds 43/44) → table `tables/moka_fbc_r2` (`libero_round2_table.py`, 18433692) → fine-tune
@@ -2057,7 +2057,7 @@ matched noise seed 1). Time limits lowered for backfill (collect 3 h, train 7.5 
 Read: rising round over round → self-improvement works here, tag failure is a labelling problem; flat ~0.55 → the
 learning step is the limit.
 
-### 2026-11-10 23:00 — Value vs ground truth (Lars 4); DSRL online set up (Lars direction 1); guidance w = 1
+### 2026-11-10 23:00 — Value vs ground truth (mentor item 4); DSRL online set up (mentor direction 1); guidance w = 1
 - `scripts/libero_value_vs_gt.py` → `reports/2026-11-10-value-vs-gt/`: 18 episodes / 424 points with A*. Ceiling
   (Spearman-Brown on split-half) V* 0.97, A* 0.69. corr(A, A*) 0.04–0.14 for every source (best lookahead n = 80),
   faithful labels 0.10 [0.02, 0.20], random 0.01; corr(V, V*) 0.22–0.29.
@@ -2106,7 +2106,7 @@ learning step is the limit.
 
 ### 2026-11-11 10:15 — week-9 page: "Since Nov 10" section; DSRL rising; round-2 s1 requeued
 - Page: `week09.json["since"]` + `scripts/site_since_data.py` → `week09_since_data.json`; `build_site.py since_html`
-  (Lars feedback table, AG chart + shift-vs-w, DSRL per-cycle curve, follow-ups, noise / value-vs-GT / round-2
+  (mentor feedback table, AG chart + shift-vs-w, DSRL per-cycle curve, follow-ups, noise / value-vs-GT / round-2
   collection, running jobs, next experiments). Built; publish blocked on expired gcloud auth.
 - DSRL 18434524, per cycle (30 train states once): both agent lives ~0.45-0.65 for ~13 cycles, then rising; life 2
   last 3 cycles 0.793 (87 eps) vs base 0.598 on the same states (training-time, stochastic actor).

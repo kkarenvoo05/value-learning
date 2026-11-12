@@ -78,4 +78,4 @@ Report also: the frame-0 round cue (does A1 weaken it?) and the drops when the a
 - **Won't:** the two-hump uncertainty itself. That is the expected answer from one frame. The Stage 5
   "current frame vs short history" ablation (and an elapsed-time input) is the test for that part,
   together with reading p_succ next to V. A temporal-consistency loss between neighbouring frames
-  would target flicker more directly but changes the loss, so only with Karen's and Lars's OK.
+  would target flicker more directly but changes the loss, so only with Karen's and the mentor's OK.

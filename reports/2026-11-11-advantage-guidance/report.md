@@ -134,7 +134,7 @@ Code: github.com/zhouzypaul/advantage-guidance (`agents/advantage_guidance.py`, 
 4. **Continuous advantages with per-state normalisation:** only meaningful with imagination (otherwise there is no
    per-state group), so it waits with item 3.
 5. **Reproducing their OGBench numbers:** their code runs as-is (JAX, state-based), but it tells us nothing about
-   pi0.5. Not worth GPU time unless Lars wants a sanity anchor.
+   pi0.5. Not worth GPU time unless the mentor wants a sanity anchor.
 
 ## 4. Residual parameterisation: built and queued
 

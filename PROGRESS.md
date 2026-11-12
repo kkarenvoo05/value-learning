@@ -7,7 +7,7 @@ Details for finished items are in `reports/dataset_audit.md`.
 - [x] Project skeleton, `pyproject.toml`, `.venv` (uv), `.gitignore` (data/videos/checkpoints excluded)
 - [x] `README.md` and `CLAUDE.md` for future sessions
 - [x] `git init`
-- [x] Storage. Lars: training data goes on NFS storage under Karen's name, **not** under `/move/`.
+- [x] Storage. Mentor: training data goes on NFS storage under Karen's name, **not** under `/move/`.
       **Moved (2026-10-23):** `data/` → `/iris/u/ankile/karenvo/vl-data` (38 TB NFS). Copied with
       rsync from orionp2 (no move2 login needed, `/sailhome` is mounted everywhere): 7,210 files,
       19,440,967,026 bytes, `rsync --checksum` dry-run clean. Old `/sailhome` copy deleted (home 96% → 9%).
@@ -18,13 +18,13 @@ Details for finished items are in `reports/dataset_audit.md`.
       tight, so fetch those later. Home filling up breaks the shell, so check `df -h ~` before
       each download.
       **Permanent:** `/iris/u/karenvo` does not exist and Karen is not in the `finnlab` group that
-      owns `/iris/u`. Ask Lars to get it created, then move `vl-data` there and re-point `data`.
+      owns `/iris/u`. Ask the mentor to get it created, then move `vl-data` there and re-point `data`.
       No other NFS mount on move2 is writable for this account (`/scr` is a local move2 disk).
       **2026-10-20: quota ran out** (96%, 855 MB free; each DINOv2 run is 363 MB). Job 17999270 seed 2
       died writing a checkpoint, and at 22:46 the uv Python binaries in `~/.local/share/uv/python`
       (3.11.16, which `.venv` uses, plus 3.8 / 3.9) were left as 0-byte files (cause unknown), so
       `.venv/bin/python` silently does nothing until it is reinstalled
-- [ ] Compute (GPU for Stage 3+): ask Lars (Q6)
+- [ ] Compute (GPU for Stage 3+): ask the mentor (Q6)
 - [ ] Phase 2 compute (π₀.₅ fine-tuning): IRIS cluster
 - [x] First commit
 
@@ -64,14 +64,14 @@ Details for finished items are in `reports/dataset_audit.md`.
       regenerated). Manifest, endpoints and targets were never affected
 
 ## Open questions
-- [x] Q1: timeouts → **failure, as in RECAP** (Lars, 2026-10-17). Not censored.
-- [x] Q2: cameras → **`wrist_left` + `side_1`**. Lars's meeting notes: of the 4 cameras, only 2
+- [x] Q1: timeouts → **failure, as in RECAP** (mentor, 2026-10-17). Not censored.
+- [x] Q2: cameras → **`wrist_left` + `side_1`**. The mentor's meeting notes: of the 4 cameras, only 2
       are used for policies, the left wrist view and the side-on view. `side_1` is the only side
       camera in r00–r02, so it is that view. Which cameras and whether to add proprioception
       remain empirical questions (Stage 5).
-- [x] Q3: storage → NFS under Karen's name, not under `/move/` (Lars). Now
+- [x] Q3: storage → NFS under Karen's name, not under `/move/` (mentor). Now
       `/iris/u/ankile/karenvo/vl-data` (2026-10-23, see Stage 0).
-- [ ] Q4: does Lars have an existing loader that applies reviewed outcomes and endpoint trimming?
+- [ ] Q4: does the mentor have an existing loader that applies reviewed outcomes and endpoint trimming?
 - [ ] Q5: should `r05-screen` be a separate diagnostic distribution?
 - [ ] Q6: what compute (GPU) and policy-evaluation setup can Karen use? (move2 has an idle
       TITAN RTX 24 GB: may Karen use it?)
@@ -88,7 +88,7 @@ Details for finished items are in `reports/dataset_audit.md`.
       task definition. Doesn't change the baseline: partial inserts are not seated, so not
       success either way (r00/29, reviewed by Karen 2026-10-18)
 
-## Guidance from the meeting with Lars
+## Guidance from the meeting with the mentor
 (Transcript: https://notes.granola.ai/t/393c9237-febd-434a-8d84-3418ff58cedb)
 - Start point: implement the RECAP way of learning V on the Mulligan Insert Marker data.
 - Simplest possible version first, get it working, then iterate.
@@ -104,7 +104,7 @@ Details for finished items are in `reports/dataset_audit.md`.
 ## Stage 2 — Targets (Check A: target arithmetic)
 - [x] Target design (seconds, C_fail = H = 60 s, v = R/120 s, 201 bins on [−1, 0]); all values
       in `configs/targets.yaml` with provenance tags
-- [x] Freeze failure penalty, normalization, support, timeout rule (timeout = failure, Lars)
+- [x] Freeze failure penalty, normalization, support, timeout rule (timeout = failure, per the mentor)
 - [x] Implement target construction (`src/vl/targets.py`); out-of-support frames get `bin = -1`,
       are counted per split/outcome, never clipped
 - [x] Tests on hand-computable synthetic episodes (`tests/test_targets.py`, 11 tests; checked
@@ -220,7 +220,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
 
 ### 3.8 Training step and Check C: tiny-subset overfit
 - [~] GPU: Karen OK'd the `move` partition's rtxpro6000 (move5) for Stage 3.8 (2026-10-18). Q6
-      (move2 TITAN RTX / standing compute) is still open with Lars
+      (move2 TITAN RTX / standing compute) is still open with the mentor
 - [x] `src/vl/train.py --check-c`, `configs/train.yaml`, `scripts/check_c.sbatch`. Settings
       [ours, not paper]: 224×224 per view, batch 32, AdamW (wd 0.01), lr 1e-4 backbone / 1e-3
       head, bf16 autocast, seed 0; config, git commit and device logged to the run's
@@ -299,7 +299,7 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
             round (r00–r02 ≈ −0.55, r04 ≈ −0.40), but no cue is obvious by eye (side-view glare
             varies, strongest in c00). Within a round, frame-0 V is at chance (AUC 0.55); the
             1 s AUC (0.66) comes from the first second of motion, not the initial layout or the
-            policy. **Open: ask Lars** whether rounds differ in day/lighting/camera setup
+            policy. **Open: ask the mentor** whether rounds differ in day/lighting/camera setup
             (`reports/baseline_results.md`, "Repo cues")
 - [x] Retrain the baseline with the settled recipe, **3 seeds** (2026-10-19; seeds 1–2 jobs
       17958964/17958965, L40S, ~20 min each, `RUN=lowlr_8k_s<k> SECTION=baseline_lowlr SEED=<k>`;
@@ -342,13 +342,13 @@ Eight checkpoints, done in order. Each one ends with something Karen checks dire
       base 0.046; 0 of the drops > 0.2). Uses the 1 fps audit samples (not extended)
 - [x] Timeout endpoints (val): soft-truncated MAE 0.174 (31 ep.), ended early 0.108 (5), cap
       0.283 (4). Truncated ones are **not** worse; capped are worst (long T → low targets).
-      No label change needed; no need to ask Lars
+      No label change needed; no need to ask the mentor
 - [x] Stall frames (heuristic: robot control, ≥ 3 s in, 3 s mean speed < 15 mm/s [ours]): 64% of
       timeout frames. V is flat in stalls (+0.02 vs target +0.145 per ~17 s segment), as expected;
       stall frames are not where timeout error concentrates (0.164 vs 0.224)
 - [x] **Decide operator masking: no masking** (pre-set rule: V does not react to the operator).
       The Stage 5 masking ablation is dropped
-- [~] Phase-one gate (Claude's assessment in `reports/baseline_results.md`; **Karen/Lars to
+- [~] Phase-one gate (Claude's assessment in `reports/baseline_results.md`; **Karen/the mentor to
       sign off**): beats the trivial baselines overall (not on autonomous failures/timeouts
       alone); curves partly interpretable (seat, progress; jittery); failure cases mostly
       understood (stall ambiguity, repo prior hedging). Stalls are evidence that a short history
@@ -587,7 +587,7 @@ One change at a time, in this order:
                   val MAE tie (< 1 sd); **eval-repo MAE is worse by 0.008 (~2 sd, every seed 0.187–0.189)**,
                   the metric that matters for the unseen test round; AUC 1 s slightly better, within seed
                   spread. Still peaks before ResNet. **Verdict: no reason to switch backbones**
-      - [x] **Full image augmentation** (2026-10-21; standard settings suggested by Lars on Slack, the
+      - [x] **Full image augmentation** (2026-10-21; standard settings suggested by the mentor on Slack, the
             LeRobot ImageTransforms scheme reimplemented in torchvision, no LeRobot import): per image,
             exactly 3 of 6 transforms (uniform without replacement, applied in a fixed order):
             brightness 0.8–1.2, contrast 0.8–1.2, saturation 0.5–1.5, hue ±0.05, sharpness 0.5–1.5,
@@ -599,7 +599,7 @@ One change at a time, in this order:
             translate stands in for A2's shift). +4 tests (77 pass). Real frames:
             `reports/figures/stage5/full_aug_examples.jpg` (marker/holder/gripper in view; hue can
             turn the orange holder yellowish). 4 ms per image. Judge on eval-repo MAE as well as val
-            CE: Lars's aim is generalization to the unseen test round, which val CE (held-out groups of
+            CE: the mentor's aim is generalization to the unseen test round, which val CE (held-out groups of
             the training repos) barely measures. Job **18009813** (after 18009514, A5000), 3 seeds,
             `DIST=1 DROP_LAST=1` -> `aug_full_s{0,1,2}`; diff `data/runs/aug_full_code_vs_2df9f76.diff`.
             Karen moved it forward: 18009813 cancelled unstarted, resubmitted as job **18011075**
@@ -901,8 +901,8 @@ One change at a time, in this order:
       call costs more and blended V swings more. The countdown slope halves (1/1800 → 1/3600 per step;
       one bin ≈ 1.2 s instead of 0.6 s). Stage 6 advantages would mostly be p_succ changes × a larger gap.
       A smaller penalty only hides the problem. Cheap offline check if wanted: rescale existing
-      predictions to the new target scale, no retraining. `c_fail_steps` is a label choice made with Lars
-- **Mentor update (2026-10-20, for Lars)**, answering "from 10 s to the end looks reasonable, before
+      predictions to the new target scale, no retraining. `c_fail_steps` is a label choice made with the mentor
+- **Mentor update (2026-10-20)**, answering "from 10 s to the end looks reasonable, before
   that it seems random": he is right, for two reasons. (1) The model picks between two outcomes and
   wrong picks (at the holder) cause ~60% of error; the end looks good because insertion is visible.
   (2) Frame-to-frame jitter in the hump balance (~97% of V's jumps). Augmentation didn't reduce (2);
@@ -1038,7 +1038,7 @@ One change at a time, in this order:
             unseen policy. Report val with true label and with `unknown`; must beat repo + time constant
             (0.146). Expected gain small: a per-policy offset cancels in Stage 6's V(o_{t+n}) − V(o_t),
             and the main error (holder ambiguity) is within-policy
-      - [ ] 4. **Target change, ask Lars now** (runs when he answers): count soft-truncated timeouts down
+      - [ ] 4. **Target change, ask the mentor now** (runs when he answers): count soft-truncated timeouts down
             to the 800-step cap instead of the reviewer's cut point (matches RECAP's fixed time limits,
             removes arbitrary endpoints). Changing C_fail won't help (see above); normalization already
             matches. Score on both old and new targets
@@ -1116,7 +1116,7 @@ One change at a time, in this order:
             0.044 vs 0.049, stall_auc +0.011; temperature ~0 on top and worse ECE; causal 0.5 s (live)
             ensemble 3.656. AUC 1 s unchanged, shape still above flat (0.042 vs 0.0365). **Proposed
             (awaiting Karen):** offline = ensemble ×3 + centred 0.5 s, no T; live = ensemble ×3 + causal 0.5 s
-      Order: 1 → 2 → 3, with 4 inserted when Lars answers. If a stronger backbone wins, make it the
+      Order: 1 → 2 → 3, with 4 inserted when the mentor answers. If a stronger backbone wins, make it the
       new baseline and re-test proprio on top of it
 - [ ] Optional diagnostic: timeouts excluded (baseline is timeout = failure)
 - [x] Not needed (Stage 4: V does not react to the operator). Was: if Stage 4 shows V reacting to the operator: masked `wrist_left` bottom-left corner vs
@@ -1124,12 +1124,12 @@ One change at a time, in this order:
 - [ ] Freeze all choices (after the Stage 5.5 merge gate)
 - [ ] Final test evaluation (r05-eval, r05-screen reported separately; check r05-screen
       provenance before treating it as equivalent; they share the same 50 starts)
-- [ ] Progress package for Lars: what was built (architecture, inputs, targets, split), metrics
+- [ ] Progress package for the mentor: what was built (architecture, inputs, targets, split), metrics
       + 3 representative plots/videos, failure examples, one comparison, next decision; with
       config, pinned revisions and checkpoint
 
-## Stage 5.5 — Meeting follow-ups (Lars, 2026-10-23), before policy improvement
-Source: Karen's notes from the 2026-10-23 meeting with Lars (transcript:
+## Stage 5.5 — Meeting follow-ups (mentor, 2026-10-23), before policy improvement
+Source: Karen's notes from the 2026-10-23 meeting with the mentor (transcript:
 https://notes.granola.ai/t/11106840-5292-42c7-ab27-01d614f49fde). Inserted before Stage 5's
 "Freeze all choices" / final test evaluation, which now wait for the 5.5 merge gate.
 
@@ -1148,7 +1148,7 @@ wrist, full aug on side; val CE 3.647 ± 0.008, MAE 0.112), with `lowlr_8k` as t
 ### 5.5.1 Gate 0 — crop alignment and resize (blocking; Karen, 2026-10-23)
 Why: the crops (`configs/data.yaml`) were chosen by eye in Stage 3 on 640×480 frames; nobody has
 checked, from the 224×224 tensors back, which pixels of each camera the model actually gets, or
-whether the boxes sit right relative to each camera's view. Lars also raised other ways to
+whether the boxes sit right relative to each camera's view. The mentor also raised other ways to
 resize/scale the original frame.
 - [ ] Back-projection sheet [ours]: for both cameras, the 224×224 model input (un-normalized,
       from the real loader path) next to the raw 640×480 frame with the box drawn on it, at
@@ -1190,7 +1190,7 @@ resize/scale the original frame.
         (antialiased); boxes are square, so no aspect distortion. Every repo is the same 640×480
 - **You check:** the sheet and the numbers; draw corrected boxes where the current ones are off
 - [ ] Resize/scale arms, 3 seeds each (seed 0 first as a screen). **Recipe (Karen, 2026-10-23): full
-      aug only (`baseline_lowlr_aug_full`, Lars's LeRobot set on both cameras), no crop jitter**, so
+      aug only (`baseline_lowlr_aug_full`, the mentor's LeRobot set on both cameras), no crop jitter**, so
       every arm gets the same augmentation after its own resize and squash/letterbox need no jitter
       rule. Reference for this gate = `aug_full_s{0,1,2}` (val CE 3.670 ± 0.009, MAE 0.113), re-run as R0
       on the same code and GPU type:
@@ -1216,7 +1216,7 @@ resize/scale the original frame.
       `reports/figures/stage5_5/gate0/arms.jpg` (r04 approach/insertion, c01 approach, r01 stall)
 - [x] **Runs submitted 2026-10-23** (`SECTION=baseline_lowlr_aug_full DIST=1 DROP_LAST=1 sbatch
       --gres=gpu:rtxpro6000:1 scripts/cameras.sbatch`, 3 seeds each → `g0_<arm>_s{0,1,2}`). Arms as
-      run (Karen, 2026-10-23, from Lars's transcript): R0 current (job 18058482); R1 wrist flush right
+      run (Karen, 2026-10-23, from the mentor's transcript): R0 current (job 18058482); R1 wrist flush right
       (160, 0, 640, 480) (18058485); R1b wrist half shift (120, 0, 600, 480) (18058486); R2 squash both
       (18058487); R3 letterbox both (18058488); R4 side full-height box (80, 0, 560, 480), wrist
       unchanged, i.e. one change vs R0 (18058489). The tighter side box and higher resolution (old
@@ -1325,9 +1325,9 @@ resize/scale the original frame.
       holder's colour is one of the few cues in `side_1`); affine rotation adds black corners
       (`fill=0`, not the ImageNet mean that `crop_pad` uses); A2 on the full-height wrist box only
       moves sideways (clamped), as intended
-- [x] Lars's LeRobot config at its extremes (Karen, 2026-10-23): `vl.input_sheets lerobot` →
+- [x] The mentor's LeRobot config at its extremes (Karen, 2026-10-23): `vl.input_sheets lerobot` →
       `reports/figures/stage5_5/lerobot/{singles,combos_wrist_left,combos_side_1}.jpg`, `hue.md`.
-      Asserts `baseline_lowlr_aug_full` = Lars's settings (3 of 6, fixed order, brightness/contrast
+      Asserts `baseline_lowlr_aug_full` = the mentor's settings (3 of 6, fixed order, brightness/contrast
       0.8–1.2, saturation 0.5–1.5, hue ±0.05, sharpness 0.5–1.5, rotate ±5°, translate ±5%) and that
       the fixed-value ops reproduce `full_augment` pixel for pixel. singles = each transform at
       low / none / high; combos = all 20 three-transform subsets at all-low and all-high.
@@ -1341,14 +1341,14 @@ resize/scale the original frame.
       **Confirmed 2026-10-24** (Karen). Gate 0 kept R0, so the sheets needed no regeneration
 
 ### 5.5.3 Track B — history / memory (after Gate 0)
-Lars's framing: history should help detect **stalling** (no progress), not how much progress a
+The mentor's framing: history should help detect **stalling** (no progress), not how much progress a
 success has made. Closer frames catch stalls sooner and overfit less (more correlated with the
 current frame); farther frames are less correlated, give a bigger fitting space and generalize
 worse. Status so far: frozen-feature probe (Stage 5, 2026-10-22): ≤ 2 s no gain, ≥ 16–24 s gain,
 partly from the first-frame fallback; masking keeps a narrow gain on long stalls. Current
 approach per the meeting: a past frame sampled at random 2–20 s back; not yet trusted (subset
 of data).
-- [x] B1. Side-by-side series [Lars]: current frame + 1, 2, 3, 4 steps back, at step sizes
+- [x] B1. Side-by-side series [mentor]: current frame + 1, 2, 3, 4 steps back, at step sizes
       0.5 / 1 / 2 / 4 / 8 s, both cameras. Episodes: hold-phase stalls, hold-phase successes
       (just before seating), failures, early-episode frames (where the past doesn't exist yet).
       Goal: see at which gap a stall becomes visible as "no change" while progress is still visible
@@ -1433,7 +1433,7 @@ of data).
       (torch RNG state replayed per camera, so an unmoving robot gives identical inputs; independent
       draws would fake motion). t − gap < 0: has_past = 0, placeholder = copy of frame t (keeps
       BatchNorm on real images), masked in the model. `ValueModel(history=True)`: one shared ResNet-18
-      across cameras *and* time [Lars: share across time steps], one backbone pass over
+      across cameras *and* time [mentor: share across time steps], one backbone pass over
       [now, past]; head input [now feats (1024), has_past · past feats (1024), has_past] = 2049 → 256
       → 201 (R0: 1024). `model_inputs` now returns keyword arguments (`model(**model_inputs(b, dev))`;
       train_baseline, value_dist updated, history_feats refuses history models). +9 tests (past frame
@@ -1497,7 +1497,7 @@ of data).
       ±0.003, so no first-frame or start-configuration effect. The only credible shift is 20–40 s
       (64 episodes): Δp_succ −0.040 / −0.059. Episode length: long failures Δp_succ −0.036 (gap 2 s,
       credible); medium-length successes ΔCE −0.048 in both arms (credible, unexplained).
-      Reading (Claude, to be checked): history does move p_succ the way Lars predicted, down on
+      Reading (Claude, to be checked): history does move p_succ the way the mentor predicted, down on
       failures that have gone still (and on the 14 non-stall failures), but by only 0.04–0.07, and
       that never becomes a CE gain. Moving stalls get nothing, as expected (no "no change" signal).
       At 4 s it also pulls frozen successes down (−0.064, not credible, n = 13): the harm the B1
@@ -1638,7 +1638,7 @@ of data).
 - [ ] **Gate B: Karen confirms** whether history goes into the baseline, and at which gap
 
 ### 5.5.4 Track C — architecture: combining images (after Gate 0; C3 uses Gate B's gap)
-Lars: share a backbone **across time steps, not across cameras**; wrist and side need different
+Mentor: share a backbone **across time steps, not across cameras**; wrist and side need different
 features. Each arm is one change vs the Gate 0 baseline, 3 seeds, same fair-comparison checks as
 Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
 - [x] C1. Two ResNet-18s, one per camera (paper's Insert Marker critic), concat → same head.
@@ -1677,8 +1677,8 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       reaches the same best val CE, with no extra overfitting by 8k (3.68–3.69 in both). Reading:
       separate BN statistics / features per camera don't matter at this data size and recipe;
       twice the parameters buy faster fitting, not better generalization. Stays on the list as the
-      per-camera trunk C3 would use (Lars: share across time, not cameras), but it is not a gain by itself
-- [ ] C2. Channel stacking for history [Lars, alternative]: current + past RGB stacked as 6
+      per-camera trunk C3 would use (mentor: share across time, not cameras), but it is not a gain by itself
+- [ ] C2. Channel stacking for history [mentor, alternative]: current + past RGB stacked as 6
       channels into one per-camera ResNet (first conv widened, pretrained weights copied to both
       halves and scaled ½). Needs Gate B's gap
       **C2a: started without Gate B (Karen, 2026-10-26)** [ours]: Gate B's 1b test (still time) decides
@@ -1726,7 +1726,7 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       (no past: ΔCE 0.000 / −0.006, so the grey stand-in is no shortcut), short and medium successes,
       moving stalls. Cost: frozen successes that are still now also lose p_succ (−0.084*, V −0.060*), as
       expected if they look like stalls, though their CE improves (−0.217 n.s.).
-      Reading (Claude, to be checked): (1) early fusion finds the stall signal Lars described, and B2's late
+      Reading (Claude, to be checked): (1) early fusion finds the stall signal the mentor described, and B2's late
       fusion of the same frames does not: the gain is about the fusion point, not the gap (same gap, frames,
       flag; second differences: head 1025 vs 2049 inputs, grey vs feature masking). (2) It exceeds what
       still time bought (Δp_succ on still stalls −0.128 vs −0.040), so **b3_still was not an upper bound on
@@ -1896,12 +1896,12 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       (wrist rotation, marker in the gripper) vs a 1 cm/s gripper-position threshold, or that early fusion lets
       stillness combine with scene features inside the backbone. Cheap check: correlate (real − none) with
       `stall_s` per frame. C2b (1 / 2 / 4 s) would give the model *how long* things have been still
-- [ ] C3. Transformer fusion [Lars]: each image (per camera, per time step) → one token
+- [ ] C3. Transformer fusion [mentor]: each image (per camera, per time step) → one token
       (ResNet feature + learned camera and time embeddings), a learnable readout/query token
       attends to all image tokens (1–2 small transformer layers), readout → same 201-bin head.
       Variants: cameras only (vs C1's concat), then cameras + history. Per-camera backbones
       shared across time
-      **Code, cameras-only variant (2026-10-25)** [Lars: one token per image, a learnable readout;
+      **Code, cameras-only variant (2026-10-25)** [mentor: one token per image, a learnable readout;
       sizes and block design ours]: `ValueModel(fusion="attention")` / `vl.train_baseline --fusion
       attention` → `model.head` is a `TokenFusionHead` with the same `head(f)` input as the concat MLP
       (so `features`, the head optimizer group at LR 1e-4, checkpoints and `history_feats` are
@@ -1952,7 +1952,7 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       Attention (last block, mean over heads; weights, not contributions, see caveat): wrist 0.52–0.58
       overall; last 5 s before T of successes 0.69 / 0.71 / 0.70 vs 0.47–0.54 earlier and 0.47–0.63 on
       failures, the same in all 3 seeds. Reading (Claude, to be checked): the fusion rule does not help at
-      this data size; the bigger from-scratch head overfits sooner. The attention does move the way Lars
+      this data size; the bigger from-scratch head overfits sooner. The attention does move the way the mentor
       expected (more wrist near insertion of successes); C4 should confirm it with a masking check
       **Regularised C3, second try (2026-10-25)** [ours]: the first C3 overfit (best at 3.5–4k, train loss
       below C1's) and had a 4× bigger head than C1. Two arms, one change each vs `c3_attn`:
@@ -1984,7 +1984,7 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       backbone's gradient depends on the other camera, so the per-camera ResNets fit the train set faster
       (untested). Dropout lowers fit a little (train 3.47) but costs val CE. Three C3 variants, none at or
       below C1 or R0: attention fusion of two cameras gives no gain here
-- [x] C4. Attention check for C3: log readout attention per token; expected [Lars]: wrist weight
+- [x] C4. Attention check for C3: log readout attention per token; expected [mentor]: wrist weight
       rises at insertion, history weight low outside stalls. Plots by task phase and outcome
       **Done 2026-10-26 as a masking check** (the C4 caveat: weights are not contributions) [ours]:
       `vl.camera_contrib` (new; +3 tests, 127 pass): backbone features of every val frame once, then the
@@ -2005,7 +2005,7 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
       | not success, last 5 s | 0.55 | 0.43 | −0.20 / +0.60 | 0.29 | −0.15 / +0.80 | −0.04 / +0.73 |
 
       (ΔCE = val CE with the camera removed − full, nats per frame; seed sd ≤ 0.2 except C3 / R0 side ≤ 0.35.)
-      Reading (Claude, to be checked): (1) **Lars's expectation holds as a contribution, not only as a
+      Reading (Claude, to be checked): (1) **The mentor's expectation holds as a contribution, not only as a
       weight**: in the last 5 s of successes the wrist dominates in all three architectures (share
       0.59–0.71), removing it costs +2.2–3.0 nats and lowers V by 0.09–0.13 (the wrist sees the seat);
       the side camera is nearly irrelevant there (+0.04–0.20). (2) **On failures the side camera carries V
@@ -2071,15 +2071,15 @@ Stage 5 (frame index, split, recipe, seeds; diff recorded under `data/runs/`).
 - [ ] Combine the confirmed winners of Gate 0 + A + B + C into one recipe; 3 seeds; check the
       combination is no worse than each winner alone (Stage 5 showed crop + full aug didn't stack)
 - [ ] **Merge gate: Karen confirms the new baseline** → then Stage 5's "Freeze all choices",
-      final test evaluation and the progress package for Lars
+      final test evaluation and the progress package for the mentor
 
 ## Stage 6 — Policy improvement (Phase 2; only after the Stage 4 gate and the Stage 5.5 merge gate pass)
 Advantage conditioning happens here, not in this week's deliverable.
-Context (Lars, 2026-10-23): the lab's goal is a π₀.₅ DROID policy that improves itself with no
+Context (mentor, 2026-10-23): the lab's goal is a π₀.₅ DROID policy that improves itself with no
 human in the loop. Two streams already run: Astra (slow, general; gets tasks from 0% to non-zero)
 and Rohan (rolls out the policy and keeps successes; 50% → 80–90%). The missing piece is value
 learning + RL, which is this project; likely done alongside Rohan.
-- [ ] 6.0 Setup with Lars/Rohan: π₀.₅ DROID checkpoint, compute (IRIS), their rollout data
+- [ ] 6.0 Setup with the mentor/Rohan: π₀.₅ DROID checkpoint, compute (IRIS), their rollout data
       format and success labels; which task(s) to start on. **Gate: Karen confirms** the setup
       **Prep (2026-10-27, offline, no robot)** [ours]: the lab's `pi05_droid` checkpoint is cached read-only at
       `/iris/u/rbhowmik/cache/openpi/openpi-assets/checkpoints/pi05_droid` (12 GB; Rohan serves it from openpi
@@ -2099,8 +2099,8 @@ learning + RL, which is this project; likely done alongside Rohan.
       train+val frames on one GPU (~1 h on 6–8). Full valid tokens = 2.3 MB/frame → ~1 TB, so pool or subsample as
       planned. Units check on recorded Mulligan `action.joint_velocity`: bounded at |1.0| like DROID's normalized
       actions, but its spread is close to the measured joint velocity in rad/s (std ratio ~1–2), so the scale is
-      still ambiguous: ask Lars before using it as a policy target. Actions not yet compared against recorded ones
-- [ ] 6.1 Value head on π₀.₅ [Lars]: a value head that cross-attends into the π₀.₅ DROID
+      still ambiguous: ask the mentor before using it as a policy target. Actions not yet compared against recorded ones
+- [ ] 6.1 Value head on π₀.₅ [mentor]: a value head that cross-attends into the π₀.₅ DROID
       model's tokens (frozen VLA first, then low-LR fine-tune), same 201-bin targets and Stage 5.5
       inputs. Compare on the same val set against the Stage 5.5 baseline
 - [ ] 6.2 Does it learn something meaningful? Same Stage 4/5 checks (MAE, shape, within-round
@@ -2132,20 +2132,20 @@ learning + RL, which is this project; likely done alongside Rohan.
       seat (65% → 54%), so the time-matched pause-vs-stall split is unchanged (+13.1 pp [+6.5, +20.7] vs +12.7
       [+2.9, +25.2]); successes vs failures +7.5 vs +6.1; flips 0.52/s vs 0.62/s; 73% label agreement with R0.
       Neither a reason to prefer nor to reject C2a for advantages
-- [ ] π₀.₅ advantage-conditioned fine-tuning; compare with vs without V (IRIS cluster). Lars:
+- [ ] π₀.₅ advantage-conditioned fine-tuning; compare with vs without V (IRIS cluster). Mentor:
       conceptually simpler than learning V but needs more compute.
 - [ ] Fair comparison: matched initialization, budget, preprocessing and data mixture; include a
       strong imitation baseline; separate the effect of conditioning from the effect of which
       data reaches the actor
 - [ ] Real policy improvement needs robot rollouts (or an execution environment); offline
-      imitation loss alone cannot show it. Ask Lars what evaluation setup is available.
+      imitation loss alone cannot show it. Ask the mentor what evaluation setup is available.
 
 ## Stage 7 — LWD comparison (later)
 - [ ] LWD as a comparison: does bootstrapped value learning give better improvement signals?
       Matched comparison; trade-offs between the two (both are SOTA VLA post-training)
 
-## Stage 8 — Autonomous improvement loop and throughput (after Stage 6; Lars, 2026-10-23)
-Final system [Lars]: π₀.₅ policy (core) + learning module (BC now, full RL the goal) + success
+## Stage 8 — Autonomous improvement loop and throughput (after Stage 6; mentor, 2026-10-23)
+Final system [mentor]: π₀.₅ policy (core) + learning module (BC now, full RL the goal) + success
 classifier (labels rollouts good/bad) + System 2 model (Astra or equivalent, slow fallback for
 tasks at 0%). Main emphasis: **throughput, not only success rate** (89% success alone isn't
 economically enough; e.g. 1 box/min → 3–4), at 1× speed looking reliable (not sped-up
@@ -2159,4 +2159,4 @@ videos). Each step ends with **Gate: Karen confirms** before the next.
 - [ ] 8.3 Iterate: rollouts → V/advantages → retrain → rollouts, no human labels; track success
       rate and throughput per iteration; decide when V must be re-trained on new rollouts. **Gate**
 - [ ] 8.4 Interface with System 2 (Astra) for tasks at 0%: which tasks hand over and when
-      (out of scope to build; agree the hand-off with Lars)
+      (out of scope to build; agree the hand-off with the mentor)

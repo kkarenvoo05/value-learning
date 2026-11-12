@@ -1,4 +1,4 @@
-# DSRL online on moka: calibration baseline (Lars direction 1) — setup
+# DSRL online on moka: calibration baseline (mentor direction 1) — setup
 
 **Status 2026-11-10 (setup, no result yet).** Code built and checked; smoke run on the interactive L40S works (~6 ms per SAC update, ~12 s of updates + ~23 s rollout per episode → ~18 h for 1800 episodes). Training job 18434524, queued after the round-2 collectors.
 

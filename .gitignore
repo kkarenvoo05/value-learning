@@ -27,3 +27,6 @@ reports/figures/
 logs/
 .superpowers/
 *.swp
+
+# Large prediction / label dumps (regenerable by their scripts; kept on disk, not in git)
+reports/**/*.parquet

@@ -91,7 +91,7 @@ Main setting below: n = 2 s, threshold at the 30th percentile (70% positive), R0
 3. **Stalls vs pauses before a seat: R0 gets the direction right.** With the gripper still ≥ 4 s at the holder,
    pause-before-seat frames get +12.7 pp more positives than stall frames [+2.9, +25.2] time-matched (n = 2 s),
    +24.6 [+5.3, +42.7] at 5 s; the control has no signal. Small sample: 23 stall vs 13 frozen-success episodes.
-   This is what Lars's throughput argument needs (a stall should not look like progress), but V's stall/pause
+   This is what the mentor's throughput argument needs (a stall should not look like progress), but V's stall/pause
    ambiguity from Track B is still there: it is a lean, not a separation.
 4. **Labels flicker.** R0 flips label 0.62 times per second on interior frames at n = 2 s (one change every ~1.6 s);
    the unsmoothed single model flips 2.1/s, so the ensemble + smoothing recipe matters 3.4× here. At n = 5 s it is

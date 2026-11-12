@@ -54,4 +54,3 @@ conclusions). Open only what the question needs. Dated reports and log entries a
 | Mulligan dataset audit, splits, targets | [dataset_audit.md](../reports/dataset_audit.md), [audit_tables.md](../reports/audit_tables.md), [targets_summary.md](../reports/targets_summary.md) |
 | Mulligan baseline and ablations | [baseline_results.md](../reports/baseline_results.md), [stage5_ablations.md](../reports/stage5_ablations.md) |
 | Mulligan history / camera / still-time studies | [history_gain.md](../reports/history_gain.md), [camera_contrib.md](../reports/camera_contrib.md), [still_time_gain.md](../reports/still_time_gain.md) |
-| Package for Lars | [lars_package_draft.md](../reports/lars_package_draft.md) |
