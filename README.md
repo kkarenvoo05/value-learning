@@ -29,20 +29,36 @@ link of that loop, small models and limited data first:
 LIBERO is where the whole loop runs end to end: every rollout stores the executed actions and MuJoCo states, so
 episodes replay exactly and the simulator can be branched from any step (used to measure best-of-N headroom).
 
-## What we have learned so far (2026-11-04)
+## What we have learned so far (2026-11-12)
 
-Settled conclusions with evidence: `docs/findings.md`. Headlines:
+Settled conclusions with evidence: `docs/findings.md`. Headlines (LIBERO libero_10 task 8, 330 val trials, base
+π₀.₅ 0.524 under matched noise; every policy result below is **one training seed**):
 
+**Value functions**
 - π₀.₅'s features *know* task progress (pot-on-stove probe AUC 0.96–0.99) and give more accurate V than the ResNet,
   but a far noisier one within an episode. The noise has two separate sources: the upper LLM layers (inherited
   from PaliGemma, not caused by robot training) and fine-tuning SigLIP. Layout variety matters more than episode count.
 - Reading only the first 4 of 18 backbone layers (truncated value expert) gives the steadiest π₀.₅ critic so far,
   consistent across seeds 0–1.
-- Advantage-conditioned fine-tuning has **not** yet beaten success-only imitation (0.409 vs 0.406, 330 trials); a
-  tag-usage diagnostic shows the policy ignores the tag, so the next test separates weak labels from weak conditioning.
-- Best-of-N steering of base π₀.₅ has ~no headroom on this task (candidate chunks end ~2 mm apart).
-- Mulligan: critics latch onto collection-session shortcuts; early-fusion frame stacking is the only memory variant
-  that improved stall-vs-success separation.
+- Against simulator ground truth, every value / label source's advantage is only weakly informative about actions
+  (corr(A, A*) 0.04–0.14, ceiling 0.69).
+
+**Policy improvement**
+- Plain fine-tuning on our rollouts costs ~13–16 points; stopping early is not a fix (two seeds at step 1,000: 0.639
+  vs 0.518). Making demos 75% of the training frames with a 10× lower learning rate keeps base performance (0.536).
+- Sampled normally, the advantage-tagged policy barely uses its tag. The conditioning can learn (planted tags are
+  learned); the labels are weak because the data has little action variety at the same states, not because of V.
+- **Amplifying the tag at inference works** (Advantage Guidance): contrastive guidance w 8 on the AdaRMS checkpoint
+  0.658 (+0.133 paired vs base), and the residual version (frozen base + small zero-init head) **0.754 (+0.230)**.
+  An episode-shuffled-label control falls to ~0.36, so the gain comes from the labels. Guidance removes the
+  "gripper closed and frozen" failure seen in base rollouts.
+- Online RL in π₀.₅'s noise space (DSRL, 1,800 episodes) reaches **0.861** held-out, the best result so far; random
+  best-of-N noise resampling gives no gain. Iterated filtered BC did not climb (round 2 below round 1's 0.555).
+- Next: rollout rounds with the residual-guided policy (running), IQL, and second seeds.
+
+**Mulligan (real robot)**
+- Critics latch onto collection-session shortcuts; early-fusion frame stacking is the only memory variant that
+  improved stall-vs-success separation.
 
 ## Where to look
 
