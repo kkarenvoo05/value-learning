@@ -2154,3 +2154,11 @@ learning step is the limit.
 - Submitted rounds 1-3 (18460302-19: r1 collect 18460302/03, label 18460304, train 18460305, check 18460306, eval 18460307; r2 18460308-13; r3 18460314-19). Hit the iris QOS submit limit (25 per user) in round 4: its 4 partial jobs 18460320-23 cancelled.
 - `scripts/ag_rounds_feed.sh 4 9 18460317 18460318` (background, interactive node iris2) submits each later round when <= 19 jobs are queued; stops on any failed round job. Log: `/iris/u/ankile/karenvo/libero/logs/ag_rounds_feed.log`.
 - Same session: DSRL final agent (ep 1800, 18452292) 86.1% held-out (+10.6 [+4.8, +16.7] vs residual 75.4%); residual w16 65.8%, shift 0.57 69.7% (0.99 is the peak); shuffled-label AdaRMS w8 36.3% on 289/330 (-30.4 vs real labels); filtered BC round 2 s0 44.2% / 48.8% (below round 1 on both seeds).
+
+### 2026-11-11 22:30: docs refresh + push for mentor
+- Committed all work since 5ea48d3 (6974457) and pushed. Rewrote `docs/CURRENT.md` (was 11-08: results table, round
+  jobs, feeder, open decisions, traps); moved the mentor 11-03 steps and the SmolVLA / SeeQ directions to the new
+  `docs/directions.md`. `docs/INDEX.md`: 16 report folders added. `docs/findings.md`: new "Policy improvement"
+  section (guidance, residual AG, null control, DSRL, filtered BC round 2, value vs GT; all single seed).
+- Not done: report.md is missing in 4 data-only folders (td-labels, coach-curve, noise-sweep, step1-followup);
+  summary.json is missing in 10 folders.

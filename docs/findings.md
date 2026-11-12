@@ -73,6 +73,30 @@ interpretations are labelled. Live status is in `docs/CURRENT.md`, chronology in
   [−0.049, +0.077]; `runs/steer_v2_scale2p0_libero_10_18329176/analysis`), although ×2.0 doubles gripper
   disagreement between candidates (0.10 → 0.22). [`reports/2026-11-04-steer-probe/` for v1]
 
+### Policy improvement (2026-11-09 to 11-11; same 330 val trials, matched noise seed 1, base 0.524)
+All single training seed; *observations* unless marked. Chronology in `docs/libero_plan.md` log 11-10 to 11-11.
+- **Amplifying the learned tag difference at inference beats base** (Advantage Guidance, arXiv 2610.19783, Eq. 4,
+  v = v_none + w (v_pos − v_neg)). On the AdaRMS vb40 checkpoint (the one real-label run whose tag moves actions,
+  13.6% of noise): w 8 0.658, +0.133 [+0.070, +0.197] paired; w 0 / 2 / 4 / −4 0.385 / 0.348 / 0.497 / 0.230
+  (dose-response, and the sign control falls). Shuffled-label null control (same recipe, w 8): 0.363 on 289/330,
+  −0.304 vs real labels, so the gain comes from the labels, not from guidance itself. *Interpretation:* the tag
+  carries usable signal; it was too small to matter at w = 1, which refines "tagged policies ignore the tag" above.
+  [`reports/2026-11-11-advantage-guidance/`]
+- **Residual parameterisation is better still**: frozen base π₀.₅ + zero-init AdaLN head on the action-expert
+  features, ±1 tags, at the action shift matched to AdaRMS w 8 (shift 0.99 × noise, w 9.26, picked offline):
+  **0.754, +0.230 [+0.164, +0.300]**; +0.097 [+0.030, +0.167] vs AdaRMS w 8 on the same trials. Shift 0.57 0.697,
+  w 16 0.658: 0.99 is the peak. Base vs guided videos: guidance removes the "closed freeze" (gripper closed on a
+  handle, no lift ≥ 3 s: base 12/30 wrist-view episodes, guided 0/30); guided failures are pots left on their side
+  and open-hand hovers. [log 11-11 11:55, 17:00; `reports/site/value-learning/gallery-residual/`]
+- **DSRL** (noise-space SAC on base π₀.₅, online, 1800 episodes): held-out 0.861, +0.106 [+0.048, +0.167] vs the
+  residual. *Interpretation:* π₀.₅'s noise space holds a lot of outcome-relevant headroom on this task; online RL
+  is the stronger reference. [`reports/2026-11-10-dsrl-online/`]
+- **Iterated filtered BC does not climb**: round 2 (round 1 + round 2 successes, from base) 0.442 / 0.506 (s0 / s1)
+  vs round 1 0.555. [log 11-11 15:30]
+- **Advantages vs simulator ground truth**: corr(A, A*) 0.04–0.14 for every value / label source (ceiling 0.69);
+  corr(V, V*) 0.22–0.29 (ceiling 0.97). The labels are weak per frame, yet guidance turns them into +0.13 to +0.23.
+  [`reports/2026-11-10-value-vs-gt/`]
+
 ### Method traps
 - One training seed per recipe is not evidence: same recipe and step, two seeds 0.639 vs 0.518 (above). Train
   ≥ 2–3 seeds before reading a policy-recipe effect of ≤ 0.1. Eval noise alone is ±0.054 per arm at 330 trials

@@ -9,6 +9,7 @@ conclusions). Open only what the question needs. Dated reports and log entries a
 |---|---|
 | `docs/CURRENT.md` | Live state; overwritten each session |
 | `docs/findings.md` | Settled conclusions by topic; corrected in place |
+| `docs/directions.md` | Longer-lived direction lists (mentor 2026-11-03 steps, SmolVLA layers, SeeQ) |
 | `docs/libero_plan.md` | LIBERO plan (stages, gates) + dated lab notebook (`## Log`), append-only |
 | `PROGRESS.md` | Mulligan stage checklist |
 | `reports/YYYY-MM-DD-<slug>/` | One folder per experiment from 2026-11-02 on: `report.md` + data (`*.json`) + figures |
@@ -35,6 +36,20 @@ conclusions). Open only what the question needs. Dated reports and log entries a
 | Is the value function the bottleneck for the labels? (hindsight labels) | [coach test](../reports/2026-11-08-coach-test/report.md) |
 | Does exploration noise add action variety without ruining episodes? | [explore pilot](../reports/2026-11-08-explore-pilot/report.md) |
 | Why the tagged policy ignores its tag (labels vs conditioning, positive controls, prompt test) | [tag deep dive](../reports/2026-11-06-tag-deep-dive/report.md), [tag predictability](../reports/2026-11-05-tag-predictability/report.md), [tag usage](../reports/2026-11-04-tag-usage/) |
+| Does guidance (amplifying the tag difference at inference) beat base? Residual AG? | [advantage guidance](../reports/2026-11-11-advantage-guidance/report.md), [findings](findings.md) "Policy improvement" |
+| What does an established RL method (DSRL) get on this task? | [DSRL online](../reports/2026-11-10-dsrl-online/report.md) |
+| Do learned values / advantages match simulator ground truth? | [value vs GT](../reports/2026-11-10-value-vs-gt/report.md) |
+| Fitted n-step TD critic / V-ensemble labels (lane 3 gate) | [td-labels](../reports/2026-11-07-td-labels/) (data only: `ideal_shift/`) |
+| Coach test across collection rounds | [coach curve](../reports/2026-11-08-coach-curve/) (data only) |
+| How much exploration noise is tolerable (×2–×8)? | [noise sweep](../reports/2026-11-09-noise-sweep/) (data only: `pilot.json`) |
+| Step-1 recipe grid follow-up (demo fraction, lr) | [step1 follow-up](../reports/2026-11-09-step1-followup/decision.json) (data only) |
+| Why the tag is ignored: untested hypotheses | [tag hypotheses](../reports/2026-11-06-tag-hypotheses/report.md) |
+| How other RECAP-style work handles value noise / conditioning | [literature review](../reports/2026-11-05-literature-advantage-conditioning/report.md) |
+| Denoising labels (smoothing, longer lookahead, margin); value-binned calibration | [label denoise](../reports/2026-11-05-label-denoise/report.md), [value calibration](../reports/2026-11-05-value-calibration/report.md) |
+| Which advantages did V assign; what each threshold rule flips | [advantage examples](../reports/2026-11-04-advantage-examples/report.md), [label rules](../reports/2026-11-04-label-rules/report.md) |
+| Truncated value expert (first N of 18 layers, SmolVLA idea) | [truncated value expert](../reports/2026-11-04-truncated-value-expert/report.md) |
+| What causes the value expert's frame-to-frame jumps (layer interventions) | [layer interventions](../reports/2026-11-05-layer-interventions/report.md) |
+| Best-of-N steering by resampling noise | [steer probe](../reports/2026-11-04-steer-probe/report.md), [findings](findings.md) "Policy fine-tuning" |
 | E2 subtask head, LoRA, arm C status | [libero_plan.md](libero_plan.md) log, 2026-11-02 E2 → 2026-11-03 08:45 |
 | Mulligan dataset audit, splits, targets | [dataset_audit.md](../reports/dataset_audit.md), [audit_tables.md](../reports/audit_tables.md), [targets_summary.md](../reports/targets_summary.md) |
 | Mulligan baseline and ablations | [baseline_results.md](../reports/baseline_results.md), [stage5_ablations.md](../reports/stage5_ablations.md) |
