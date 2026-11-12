@@ -1,0 +1,82 @@
+{
+  "table": "/iris/u/ankile/karenvo/libero/tables/moka_fixed_fresh",
+  "labels": "resnet_valuebinned_p40",
+  "v_labels": "oof_resnet_n20_p30",
+  "layout": "fixed",
+  "group_col": null,
+  "max_episodes": null,
+  "folds": 5,
+  "results": [
+    {
+      "group": "0",
+      "episodes": 450,
+      "success": 0.5977777777777777,
+      "frames": 51658,
+      "tag_free_r2": 0.9037734270095825,
+      "action_rms": 0.4151245653629303,
+      "labels": "resnet_valuebinned_p40",
+      "pos_share": 0.4028030508343335,
+      "ideal_shift_raw": 0.016012346372008324,
+      "ideal_shift_ci95": [
+        0.0156382500942718,
+        0.016417760274368608
+      ],
+      "ideal_shift_arm": 0.005309347994625568,
+      "ideal_shift_gripper": 0.03828924521803856,
+      "noise_ref_raw": 0.11250015527697069,
+      "ideal_ratio_vs_noise_ref": 0.14233177129921817,
+      "auc_S": 0.7845998406671914,
+      "auc_SA": 0.8294523955067774,
+      "gain_action_over_state": 0.07365305965900279,
+      "gain_ci95": [
+        0.06421417066080397,
+        0.08351441857950102
+      ]
+    },
+    {
+      "group": "0",
+      "episodes": 450,
+      "success": 0.5977777777777777,
+      "frames": 51658,
+      "tag_free_r2": 0.9037734270095825,
+      "action_rms": 0.4151245653629303,
+      "labels": "random 40%",
+      "pos_share": 0.4004994386155097,
+      "ideal_shift_raw": 0.003954361192882061,
+      "ideal_shift_ci95": [
+        0.0038899816409051586,
+        0.004021201751919912
+      ],
+      "ideal_shift_arm": 0.001852179761044681,
+      "ideal_shift_gripper": 0.00883147120475769,
+      "noise_ref_raw": 0.11250015527697069,
+      "ideal_ratio_vs_noise_ref": 0.035149828754872284
+    },
+    {
+      "group": "0",
+      "episodes": 450,
+      "success": 0.5977777777777777,
+      "frames": 51658,
+      "tag_free_r2": 0.9037734270095825,
+      "action_rms": 0.4151245653629303,
+      "labels": "positive control PC1 (50%)",
+      "pos_share": 0.5000193580858725,
+      "ideal_shift_raw": 0.049054864794015884,
+      "ideal_shift_ci95": [
+        0.04782823034528336,
+        0.05034418567578471
+      ],
+      "ideal_shift_arm": 0.029938431456685066,
+      "ideal_shift_gripper": 0.09258962422609329,
+      "noise_ref_raw": 0.11250015527697069,
+      "ideal_ratio_vs_noise_ref": 0.43604264077009364,
+      "auc_S": 0.44531243526444425,
+      "auc_SA": 0.7710514818510207,
+      "gain_action_over_state": 0.18738548387134613,
+      "gain_ci95": [
+        0.17316733630022685,
+        0.20248591109882982
+      ]
+    }
+  ]
+}

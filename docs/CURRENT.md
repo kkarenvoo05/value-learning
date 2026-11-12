@@ -1,39 +1,291 @@
 # Current state
 
-**Updated 2026-11-04 18:30 PST.** Overwrite this file at the end of every session; do not append. History lives
+**Updated 2026-11-08 14:00 PST.** Overwrite this file at the end of every session; do not append. History lives
 in `docs/libero_plan.md` (LIBERO) and `PROGRESS.md` (Mulligan stages). Where to find things: `docs/INDEX.md`.
-Progress site: https://storage.googleapis.com/zima-robot/reports/karenvo/value-learning/index.html. Week 7 =
-everything before the 2026-11-03 mentor meeting (frozen). **New work goes on Week 8** (`reports/site/content/week08.json`,
-built by `scripts/build_site.py`).
+Progress site: https://storage.googleapis.com/zima-robot/reports/karenvo/value-learning/index.html. New work goes on
+Week 8 (`reports/site/content/week08.json`, built by `scripts/build_site.py`).
 
-## Running and queued jobs
+## Running and queued jobs (iris only; Karen 2026-11-07: max 6 GPUs incl. the interactive session; 18359363 timed out 18:15, now 18377277)
 
-GPU cap (Karen, 2026-11-04): **≤ 3 batch GPUs on top of the interactive session.** Karen counts jobs as they
-appear in `squeue`, so keep CPU jobs chained too (one running at a time). TITANs (move1/move2): π₀.₅/JAX policy
-fine-tunes OOM at 24 GB; layer probes need ≥ 48 GB (exclude move1–3).
+Comparable evals: libero_10 task 8, val states 9 12 13 17 25 32 40 42 44 48 × 33, env seed 7, matched noise seed 1.
+Base under these settings = **0.524** (18355478). `runs/` = `/iris/u/ankile/karenvo/libero/runs/`.
 
-| job | what | state | output |
-|---|---|---|---|
-| **lane 1** 18310224 → 18310225 | oracle-tag fine-tune (tag = rollout outcome) → its tag-usage check | running | `runs/policy_armC_oracle_s0_18310224`, `runs/tag_usage_18310225` |
-| lane 1 → 18310775 → 18310776 → 18310777 | recipe R3: arm A original recipe, `--save-every 1000` → evals at step 1000, 3000 (does the drop grow with training?) | queued | `runs/policy_armA_ckpts_s0_18310775`, `runs/eval_armA_ckpt{1000,3000}_*` |
-| lane 1 → 18309643 → 18309644 | steering pre-check v2, noise scale 1.5 then 2.0 | queued | `runs/steer_v2_scale{1p5,2p0}_libero_10_*` |
-| **lane 2** 18315373 → 18315374 | recipe R2: arm A, LoRA lr 1e-5 / rest 2.5e-6 (10× lower), save every 1000 → eval final. **Resumed** on L40S from step 4000 of 18310773 (move5, cancelled 21:42 after saving `trainable_4000`); weights + lr schedule + data position restored, Adam moments restart at 0 | queued | `runs/policy_armA_lowlr_s0_18315373` (steps 1000–4000 in `…_18310773`), `runs/eval_armA_lowlr_*` |
-| lane 2 → 18309646 (now afterany:18315374) | A2 N=4 seed 2 | queued | `runs/value_expert_trunc4_fixedfresh_w256_s2_18309646` |
-| **lane 3** 18309647 | A3: truncated N=4 + LoRA value expert, seed 0 | running | `runs/value_lora_trunc4_fixedfresh_lr1e4_s0_18309647` |
-| lane 3 → 18310771 → 18310772 | recipe R1: arm A, `--freeze-siglip` (new flag; only LoRA + action projections + time MLP train), save every 1000 → eval final | queued | `runs/policy_armA_frozensiglip_s0_18310771`, `runs/eval_armA_frozensiglip_*` |
-| lane 3 → 18313821 → 18313822 | **B1** subtask-scoped ResNet V (`vl.libero_resnet --subtask-scoped`), fixed+fresh, seeds 0, 1 (~1.5 h each) | queued | `runs/resnet18_fixedfresh_scoped_s{0,1}_*` |
+| lane | jobs | what (2026-11-07 log entry "items 1-4") |
+|---|---|---|
+| speed pre-training | 18363753 (stage 1, preempted 6×, resumes) → 18363754 check → 18363755 stage 2 → 18363756 check → 18364109 eval | prompt route + our 127-symbol discrete loss, tag pre-learned on the speed tag of all LIBERO demos |
+| 1 (item 1) | 18376075 eval R1 arm A (matched noise) **done: 0.555** → 18376076 **untagged all-rollout control** (preempted at step 0 20:03, requeued) (929 eps + demos, `--tag-dropout 1.0`) → 18376077 eval | is the −8 to −12 pt drop of the tagged runs the failure rollouts? |
+| 2 (item 2) | 18376078 **weighted arm** (`resnet_valuebinned_weights`, exp(clip(z,±2))) → 18376079 eval | advantage weighting instead of a tag |
+| 3 (item 3) | 18376106-10 TD-target OOF ResNet folds (TITAN) → 18376129 labels + offline gate → 18376130 AdaRMS run on the chosen labels → 18376131 check → 18376132 eval | better labels: fitted n-step TD critic / V ensembles; the chain stops at the gate (exit 3) if no candidate beats the current labels' action information |
+| 4 (item 4) | 18376189 selftest **passed** (parity 256/256, 0 truncated; FAST CE at init 16.6 vs uniform 7.6) → 18376190 (running, step 1400/5000 at 20:25) **RECAP-complete run** (prompt + real FAST BPE + KI + subtask text + vb40 + dropout 0.3 + demos) → 18376191 check → 18376192 eval (`FT_SUBTASK=1`) | RECAP's missing pieces; round 2 built (`scripts/recap_round2.sh`), not run |
 
-Recipe bar: a variant "does not hurt" if its eval is within ~5 pts of base 0.564 on the same 330 trials (CI of the
-paired difference covering 0). New flags: `pi05_policy_finetune.py --freeze-siglip` (load_finetuned reads it from
-results.json), `libero_eval.sbatch FT_STEP=<n>`.
+## Contrastive guidance on the AdaRMS checkpoint (queued 2026-11-09 ~18:00, Karen: set up + test)
 
-Done today: per-layer analysis 18306065 (375 fixed), A2 rescores 18305874 (N=9) / 18305875 (N=4), per-layer analysis 18305897
-(fixed+fresh), π₀.₅ OOF labels 18306000 (CPU). `runs/` = `/iris/u/ankile/karenvo/libero/runs/`;
-logs `/iris/u/ankile/karenvo/libero/logs/slurm-<job>.out`.
+Question: does amplifying the learned tag difference at inference move success? Advantage Guidance (Zhou & Levine,
+arXiv 2610.19783) Eq. 4: v = v_none + w (v_pos - v_neg) [paper]; v_none = the tag-dropout branch of the same net [ours;
+paper uses a separate reference]. Run = AdaRMS vb40 18355677 (the only real-label run whose tag moves actions: 13.6%
+of noise), trained on all rollouts + demos; reference + tag 0.409 (18355679), same settings (matched noise seed 1).
+Code: `TagPi0.mix` + `set_mix` / `contrastive_mix` / `--contrast` in `scripts/pi05_tag_adarms.py`, `FT_CONTRAST` and
+`MODE=contrastcheck` in its sbatch, offline check `scripts/pi05_contrast_check.py` (self-check: one-hot mixes = plain
++/-/none sampling; then shift/noise per w). 251 tests pass.
+- 18409258 check (w 1 2 4 8 -4; `runs/contrast_check_adarms_vb40`), afterany peer noise-sweep 18408589
+- lane A (afterok check): 18409259 none (w = 0) -> 18409260 w 2 -> 18409261 w 8
+- lane B (afterok check, afterany 18408591): 18409262 w 4 -> 18409263 w -4 (sign control: should not beat w 0)
+- **Check done (19:26): self-check exact (err 0.0 for +/−/none).** Shift/noise vs none: w 1 0.137, 2 0.295, 4 0.574,
+  8 0.992, −4 0.438 (linear, ~0.14 per w; plain + vs − 0.120). No blow-up (max |raw| ≤ 1.13 vs 1.01 none); gripper flips
+  vs none 0.4/1.0/2.2/3.8% at w 1/2/4/8 (below the 4.3% between two noise draws). So w 8 moves actions by one noise SD.
+  Evals 18409259 / 18409262 pending on Priority at 19:30 (4 GPUs in use, these make 6).
+- Read: paired vs none 18409259 and vs + tag 18355679. A dose-response (w 2 < 4 < 8 rising, -4 falling) = the tag carries
+  usable signal; flat = the learned difference is noise. Caveat: this checkpoint sits ~11 pts below base (failure data).
 
-## Latest verdicts (2026-11-04)
+## Morning read 2026-11-09 (overnight results)
 
-- **R2 low-lr recipe passes the bar**: arm A 0.521 vs base 0.564, −0.042 [−0.115, +0.027] (18315374).
+Paired CIs vs base 18355478 (pairs = state × repeat, bootstrap 5000).
+- **Grid @2000 (done):** d50 orig 18396164 **0.430** (142/330), −0.094 [−0.164, −0.024]; d75 orig 18396168 **0.415**
+  (137/330), −0.109 [−0.176, −0.042]. Both a bit above ref 0.391 but still below base. Partial at ~09:00: d75 low @2000
+  18396176 161/299 = 0.54 (the first arm near base); d50 orig @final 90/187 = 0.48; d75 orig @final 40/79.
+  d50 low 18396170 and d02 low 18396975 still training.
+- **Weighted success-only eval 18387308: 0.567** (187/330), +0.042 [−0.030, +0.115] vs base (unread until now).
+- **Coach, 4 label rules (18394844):** rules barely differ (shift 0.016–0.018 round 1, 0.0185–0.0194 explore; mse
+  gain 0.003–0.015). Explore is above round 1 (vb40 0.0192 [0.0188, 0.0197] vs 0.0175 [0.0170, 0.0180]) but PC1 rose
+  as much (0.050 → 0.059): explore actions are noisier, so label/PC1 stays ≈ 0.33–0.35. Read: variety helps only marginally.
+- **Explore curve (18394908), pooled 112/225/450/900:** shift over random 0.0144 / 0.0158 / 0.0139 / 0.0136 (flat);
+  action info 0.060 / 0.064 / 0.083 / 0.079 (flat); mse gain over random 0.011 / 0.015 / 0.016 / 0.026 (vb40;
+  single draw at 900, sd ≈ 0.01 at 450). With the old-data curve: **flat → more of the same data won't raise the tag signal.**
+- **Test 2, failure branching (18395412/13/14, 12 eps, K 12, 299 points):** A* split-half 0.02 / 0.43 / 0.47 (all < the
+  0.5 bar), V* 0.90 / 0.75 / 0.92. vb40 labels vs A* corr 0.03 / 0.27 / 0.02; + share at A*>0 vs A*<0: 0.40 vs 0.33,
+  0.24 vs 0.11, 0.48 vs 0.29 (right direction, weak). OOF V vs V* 0.09 / −0.05 / 0.31. Replay outcome = recorded in
+  only 9/12 eps (state diff up to 0.098), and 3 failure eps have V* = 1 at the last point. **Read: A* still mostly
+  noise at K 12 → branching corrections unlikely to give a usable tag signal.** Pooled analysis not built.
+- **Test 1 rollouts done:** more_plain a 113/225, b 130/225 (0.54), 0 errors. Not tabled; the curve no longer needs it.
+- **d75 low @2000 (18396176) done: 0.536, +0.012 [−0.048, +0.076] → passes** (first recipe to hold base).
+- **Follow-up auto-queued (Karen 2026-11-09: set it up):** decision job **18401829** (CPU, afterany the d50-low, d75-low
+  final and d02-low evals) runs `scripts/step1_followup.py`: picks the best passing low-lr checkpoint (rule above) and
+  submits 3 lanes on its recipe, 5000 steps, evals @2000 + @final: `fu_<arm>_seed1_s1` (untagged, seed 1),
+  `fu_<arm>_tag_s0` (tag dropout 0.3, eval tag positive, + tag negative at the winner's step),
+  `fu_<arm>_wsucc_s0` (weighted, 516 train successes, `resnet_valuebinned_weights_succ`, demos weight 1).
+  No pass → nothing submitted. Job ids → `reports/2026-11-09-step1-followup/decision.json`.
+- **Finals in:** d50 orig **0.515** (−0.009 [−0.076, +0.061], passes); d75 low 0.470 (−0.055 [−0.118, +0.012]);
+  d75 orig 0.455 (−0.070 [−0.133, −0.006]). Original-lr arms added to the decision's candidates (rule is per recipe).
+- **Released early (checkpoints already saved):** d50 low @2000 18396172, d02 low @2000 18396976, ref armU @2000
+  18396978 (dependencies cleared). Finals re-pointed to their training: 18396173 afterok 18396170, 18396977 afterok
+  18396975. Peak = 6 GPUs incl. the interactive session.
+- **The two early @2000 evals failed (my bug, fixed 12:10):** 18396172 / 18396976 died in 1.4 min, "target dict contains
+  keys {'img'}": `load_finetuned` read freeze_siglip from results.json, which is only written at the end of training,
+  so a mid-training eval assumed an unfrozen SigLIP (arm/tag default and seed were also lost). Fix: trainer writes
+  `args.json` at start; `pi05_policy_finetune.run_args` (results.json, else args.json, else a clear error) used by
+  `load_finetuned` and `serve_pi05_finetuned.res_seed / uses_subtask`. 251 tests pass. Resubmitted: d02 low @2000
+  **18404064**, d50 low @2000 **18404065** (afterok 18396170); decision 18401829 now afterany 18404064:18404065:
+  18396173:18396977; `step1_followup.py` skips eval dirs without episodes.csv.
+- **Week 9 page built** (`reports/site/content/week09.json` + `week09_data.json` from `scripts/site_week09_data.py`;
+  `build_site.py week9`; charts.js `ciPlot` / `lineChart`). Rebuild after evals finish: run the data script, then
+  `build_site.py`. **Not uploaded yet: gcloud has no active account in this session.**
+- **Discrepancies found building it:** (1) AdaRMS real-label run 18355677 *does* respond to its tag: 0.0060 raw
+  (13.6% of noise, 40% of the 0.015 ideal shift), loss 1% lower with the correct tag; prompt routes 0.0008. Never
+  evaluated with the − tag. (2) Data-curve rule used the ideal shift, which is flat even for PC1; the right metric is
+  action information (labels plateau ~450 eps, PC1 keeps rising). (3) Prompt-route models move more when the tag is
+  removed (0.0045) than flipped (0.0008). (4) 25% of branch points restored inexactly (state diff > 1e-3); results
+  unchanged without them (A* split-half 0.33, label corr 0.14). Pooled branching: A* split-half 0.33 (0.50 full K).
+
+## 2026-11-08 20:45 (Karen: go on step 1 + build A)
+
+- **Speed pre-training eval 18364109: 157/330 = 0.476** (base 0.524, −4.8 pts); tag check already showed the tag unused.
+- **Step 1, RECAP label rules:** 18390934 cancelled and replaced by **18394844** (same afterok 18390932:18390933),
+  `scripts/coach_explore_rules.sh`: labels `explore_vb40` (ours), `explore_thr40` (one threshold on A, RECAP Eq. 5),
+  `explore_vb40_round` / `explore_thr40_round` (40% cut within each round; thr40_round = RECAP exact) → coach test per set
+  → `reports/2026-11-08-explore-pilot/coach_explore*/`. Code: `labels_from_v(binned=, groups=)`,
+  `libero_td_labels.py oof --rule thr --share-by round` (+1 test).
+- **A, data curve:** `libero_tag_ideal_shift.py --table ... --curve N.. --curve-seeds k` (episodes spread evenly over
+  start states; new column `tag_mse_gain` = held-out action-error drop from knowing the true tag, read against random
+  labels, because the ideal shift alone can be inflated by overfitting on small data). `scripts/coach_curve.sh`:
+  **18394907** old 450 fixed (N 56/112/225/450 × 5) → `reports/2026-11-08-coach-curve/old_fixed/`;
+  **18394908** (afterok 18394844) explore table, per round and pooled to 900, labels explore_vb40 + explore_thr40_round.
+  Reading [set before]: label excess over random (shift and mse gain) still rising from 225 → 450 (→ 900 pooled) =
+  data-limited, more data should help; flat = more of the same data won't.
+- V training data confirmed rollouts only (moka tables hold no demos).
+- Folds reach best inner-val CE at step 2000–3000 of 8000; cap future refits at 4000 steps (halves cost).
+
+## Step-1 recipe grid queued 2026-11-08 21:45 (Karen: set it up) + first A result
+
+- **A, old data (18394907, done):** label excess over random, by episodes 56/112/225/450: shift 0.0122 / 0.0140 /
+  0.0132 / 0.0120; held-out error drop 0.002 / 0.015 / 0.008 / 0.016; action info 0.040 / 0.062 / 0.070 / 0.074.
+  The PC1 control keeps growing (action info 0.029 → 0.171), so the test can see data growth when the signal
+  is real. **Reading [set before]: flat → more of the same data won't raise the label signal.** V fixed (trained
+  on all 900), curve only to 450; the pooled-to-900 explore curve (18394908) is the check. `reports/2026-11-08-coach-curve/old_fixed/`.
+- **Grid** (`scripts/step1_grid.sh`, all untagged: `--arm advantage --tag-dropout 1.0`, 900 rollouts + 29 moka demos,
+  frozen SigLIP, 5000 steps, seed 0; ref 18376076 = 2% demos, original lr: 0.391). New `--demo-share p`
+  (`fd.oversample_demos`: each demo listed k times; 0.5 → k 35, 0.75 → k 106; +1 test, 251 pass). Low lr = R2 (LoRA
+  1e-5, rest 2.5e-6). Each lane: train → eval @2000 → @final (FT_TAG none, matched noise 1, val states × 33).
+  @1000 evals dropped (Karen 23:15; 18396163/67/71/75 cancelled, @2000 evals re-pointed afterok:train).
+  - d50 orig 18396162 → 64 / 65 (after 18395411); d75 orig 18396166 → 68 / 69 (after 18395412);
+    d50 low 18396170 → 72 / 73 (after 18395413); d75 low 18396174 → 76 / 77 (after 18395414);
+    d02 low (each demo once + low lr) 18396975 → 18396976 / 77 (after 18394908); reference 18376076 @2000: 18396978.
+    (The last arm went in at 23:21 via `scripts/step1_grid_rest.sh` after the iris QOS limit, 25 queued / user.)
+  - `--exclude` now also drops `iris-hgx-[1-2]` in libero_eval.sbatch and libero_branch_value.sbatch (and on the
+    queued grid evals): neither needs the shared H100/H200s (branching runs on 20 GB A4500s, evals on 24 GB cards).
+  - Pass [set before]: a recipe whose paired CI vs base 0.524 includes 0 or is above it; then repeat it with seed 1.
+
+## Overnight 2026-11-08 21:00 (Karen: queue tests 1 and 2), chained to stay at <= 6 GPUs
+
+- **E1 analysed at last** (18355241, Nov 6; `runs/branch_value_libero_10_18355241/analysis.json`): 6 eps, K 6, 143
+  points. V* split-half reliability 0.84, A* (true n=20 advantage) only 0.30; labels vs A*: corr 0.08 (vb40), OOF A
+  vs A* −0.01; OOF V vs V* 0.17 (vs G* 0.54). Failures decided in jumps (−0.83 at t 300 ep 165, −0.5 at t 140 ep 336).
+  With the steer probe (best-of-8 chunk oracle gain +0.006, also null at x1.5 / x2.0): branching corrections only
+  make sense at decision moments, with many continuations.
+- **Test 1, more plain rollouts:** 18395410 (states 0–22, noise seed 11) + 18395411 (states 23–47, seed 12,
+  afterany 18394907); 30 fixed train states x 15 = 450 eps, base via BASE_OURS, env seed 23, split `more`, raw saved,
+  run dirs `runs/more_plain_{a,b}_libero_10_<job>`. Use: next point of the A curve (450 → 900 same-kind fixed eps;
+  needs a table + 5-fold OOF V refit at 4000 steps) and training data if A is still rising.
+- **Test 2, failure branching (E1, larger):** K 12, stride 20, 12 failure eps (one per state, state success
+  0.33–0.80, all 520-step timeouts): 18395412 (189 341 22 349, afterany 18390932), 18395413 (76 21 29 183, afterany
+  18387308), 18395414 (200 7 227 280, afterany 18395410). Run dirs `runs/branch_fail_{a,b,c}_libero_10_<job>`.
+  `libero_branch_analyze.py` takes one run: analyse each, then pool (merge not built). Reading [set before]: A*
+  reliable (split-half >= ~0.5) and large at the V* drops → build branching corrections there; A* still noise →
+  branching unlikely to add a usable tag signal.
+
+## Queued 2026-11-08 11:30 (Karen: queue both): success-only diagnostics, NOT RECAP
+
+Same 516 train successes as R1 arm A (`subsets/train_successes.txt`), R1 recipe (frozen SigLIP, original lr), no
+demos, seed 0; only change vs arm A = labels used as weights or tag. Compare with R1 arm A 0.555 (18376075).
+- 18387031 **weighted, successes only** (`labels/resnet_valuebinned_weights_succ`: the all-data weights rescaled to
+  mean 1 on these frames, ×1/1.146 [ours]) → eval 18387032 (tag none)
+- 18387033 **tagged, successes only** (prompt route, vb40 labels: 51.5% of these frames positive, dropout 0.3) →
+  eval 18387034 (+ tag)
+Reading: either beats arm A → the labels carry usable information and the failure data is the obstacle; neither →
+the labels are the bottleneck.
+
+## Data-variety pilot queued 2026-11-08 (Karen: option A without B, pilot first)
+
+**Result (13:55): ×2.0 qualifies; awaiting Karen's go on the 450-episode collection.** Success control 0.644,
+×1.5 0.489 (−0.156, CI [−0.27, −0.04]), ×2.0 0.567 (−0.078, CI [−0.20, +0.06]); early arm spread ratio 1.23 / 1.64.
+Server applies the scale (spread rises with it; ×2.0 noisy chunks flip the gripper 0.081 vs 0.046 per chunk).
+Non-monotone success is likely n=90 noise. Report `reports/2026-11-08-explore-pilot/`.
+**Collection queued 14:40 (Karen: go at ×2.0):** 18390881 (states 0–16) + 18390883 (states 18–47), 15 states ×
+15 repeats each = 450 episodes, p 0.5, ×2.0, env seed 22, explore seed 1 (fresh vs the pilot), split name
+`explore`, run dirs `runs/explore_x2p0_{a,b}_libero_10_<job>`. Next: table → 5-fold OOF ResNet V → vb40 labels →
+coach test. **Collection done 16:25:** 450/450 episodes, success 0.609 (a 0.542, b 0.676), no client errors. **Chain queued (afterok):** table + pack 18390928 (`tables/moka_explore`, round 2 = explore) →
+OOF ResNet V folds 18390929/30 → 31/32 → 33 (2 lanes) → labels `explore_vb40` + coach test 18390934 →
+`reports/2026-11-08-explore-pilot/coach_explore/` (`--table` mode, groups = round within the fixed layout: old 450
+fixed-state rollouts vs the 450 explore ones, same V and rule). Old-data reference in the same mode:
+`coach_ref_old_fixed/` = 0.0160 [0.0156, 0.0164] (random 0.0040, PC1 control 0.0491). **Reading [set before]:**
+explore ideal shift CI clearly above the round-1 group's → the variety helps, consider policy training (ask
+Karen); about equal → noise doesn't add useful variety, consider option C (replay from saved sim states).
+Speed stage 2 (18363755) was requeued and restarted 13:20, so its eval 18364109 lands later than ~15:00.
+
+Base pi05_libero, 30 fixed train states x 3 repeats, env seed 21, raw saved, all arms on `serve_pi05_finetuned.py
+--base` (BASE_OURS=1): control 18388271 → ×1.5 18388272 → ×2.0 18388273 (one GPU, chained, ~30 min each).
+Exploration = each new chunk with p 0.5 sampled from start noise × s (`libero_rollouts.py --args.explore-prob /
+--args.explore-scale / --args.explore-seed`, raw `noisy`, run-dir explore.json; +3 tests, 248 pass). Analysis:
+`.venv/bin/python scripts/libero_explore_pilot.py --runs control=<dir> x1.5=<dir> x2.0=<dir> --out
+reports/2026-11-08-explore-pilot`. Rule [set before]: largest scale with success ≥ control − 10 pts (point) and
+early (first 60 steps) arm-action spread across repeats ≥ 1.5× control; none → stop, consider option C (replay
+from saved sim states). Then (Karen's go): 450 noisy episodes on the 30 fixed states → table + 5-fold OOF ResNet V +
+vb40 labels → coach test on the new table (needs `libero_tag_ideal_shift.py --table`, not built) → policy runs only
+if the ideal shift clearly rises above 0.0151.
+
+## Coach test queued 2026-11-08 11:45 (Karen: set it up) — is the value function the bottleneck?
+
+**Result (18387077, 11:13): V is not the bottleneck.** Hindsight 0.0091 (ensemble baseline 0.0093), 4 s 0.0102,
+8 s 0.0094, outcome 0.0112, all below the current 1 s labels 0.0151. Report `reports/2026-11-08-coach-test/`.
+Success-only runs: first submission (18387031/33) failed at start (comment line in the episode list, my bug, fixed);
+resubmitted as weighted 18387307 → eval 18387308, tagged 18387309 → eval 18387310 (dead evals cancelled).
+**Tagged success-only eval (18387310, 18:17): 0.561** (185/330); vs base +0.036 [−0.027, +0.097], vs R1 arm A
++0.006 [−0.052, +0.070]: adding the tag to success-only training changes nothing (the tag is ignored, as before).
+**Speed stage 2 tag check (18363756): tag still not used** (action shift 0.015× noise, loss correct = flipped);
+eval 18364109 running.
+
+18387077 (TITAN, ~15 min): `libero_tag_ideal_shift.py --candidates` (no gate) → `reports/2026-11-08-coach-test/ideal_shift/`.
+Candidates (`scripts/libero_td_labels.py hindsight`, `vl.libero_td.hindsight_labels`, test in `tests/test_item3_item4.py`):
+`hind_v0_vb40` A = realised return G_t − V0(t) (what actually happened replaces V's guess; 1% of failure frames +,
+76% of success frames +; κ vs current 0.21), `hind_ens_vb40` (ensemble baseline), `look_n80_vb40` / `look_n160_vb40`
+(current rule at 4 s / 8 s), `oracle_outcome` (per episode; earlier 0.0112). Current labels 0.0151, random 0.0039,
+planted positive control 0.0485 (25% flipped 0.0203). **Reading set before the result:** hindsight clearly above
+0.0151 (CI above) → a better V could help, up to that ceiling; about equal or below → V is not the bottleneck,
+the data (one policy, little action variety) is. Caveat: hindsight spreads credit over the whole episode (it is
+mostly the outcome), so it is the ceiling for "knowing the future", not for credit assignment; n80/n160 show the
+local versions.
+
+## Latest verdicts (2026-11-07)
+
+- **2026-11-08 01:40.** Item 2 weighted arm (18376079): 173/330 = **0.524 = base 0.524**, +0.000 [−0.064, +0.061];
+  vs R1 arm A (0.555) −0.030. Weighting with the same labels removes the tagged runs' loss but adds no gain.
+  Per scene base → W: 9 .64/.73, 12 .12/.27, 13 .18/.36, 17 .61/.30, 25 .79/.88, 32 .61/.52, 40 .91/.70, 42 .12/.30,
+  44 .70/.42, 48 .58/.76.
+- **2026-11-08 06:15. Item 1 untagged all-rollout control** (18376077, 330/330, resumed after preemption): 129/330 =
+  **0.391** vs base 0.524, −0.133 [−0.197, −0.076]; vs R1 arm A 0.555 −0.164 [−0.221, −0.106]. Training on all 929
+  rollouts (incl. 384 failures) + demos with no tag costs ~13 pts: the failure data, not the tag, is the drop. Against
+  this control, every tagged run is at or above it (AdaRMS 0.409, prompt + discrete 0.445, RECAP-complete 0.458:
+  +0.067 [+0.003, +0.130]), and weighting 0.524 is +0.133 [+0.076, +0.191]. Reading (to check, one seed each): the
+  tag recovers part of the cost of the failure data despite the small tag effect at test time; weighting recovers
+  all of it but no more than success-only R1.
+- **2026-11-08 02:40.** Item 4 RECAP-complete eval (18376192, + tag, oracle subtask): 151/330 = **0.458** vs base
+  0.524, −0.067 [−0.133, 0.000]; vs R1 arm A 0.555 −0.097 [−0.161, −0.033]. Between AdaRMS 0.409 and prompt +
+  discrete 0.445 tagged runs: FAST + subtask text did not change the picture. Scene 9 .64 → .24. Round 2 not
+  warranted (gate: match base). Item 1 run 18376076 preempted again, resumed at step 4000 (eval ~05:45).
+- Item 3 gate (18376129) **failed (exit 3)**: ideal shift current vb40 0.0151 [0.0149, 0.0154]; td_vb40 0.0131,
+  ens_vb40 0.0121, td_ens_vb40 0.0112 (random 40% 0.0039). TD V corr with V0 0.91. No new labels carry more action
+  information; 18376130-32 left pending with DependencyNeverSatisfied (cancel needs Karen's OK).
+- Item 4 tag check (18376191): tag pos vs neg 0.0011, 1.8% of noise at final (2.5% @1000); loss correct ≈ flipped.
+  The RECAP-complete run ignores its tag too. Eval 18376192 running.
+- Speed stage 1 tag check (18363754, speed_p30 labels on demos): pos vs neg 0.0009, 3.3% of noise [2.7, 4.0];
+  loss correct ≈ flipped. **The speed tag was not learned in stage 1** (δ 0.02 control: 0.34× noise), so stage 2
+  (18363755, running) starts without a pre-learned tag.
+
+- **R1 arm A, matched noise** (18376075): 183/330 = 0.555 vs base 0.524, +0.030 [−0.036, +0.088] (scene-stratified
+  paired bootstrap, 4000). Success-only R1 does not hurt under the current eval settings, so the tagged runs' drop
+  (0.409 / 0.445) is not the recipe; lane 1's untagged all-rollout control tests whether it is the failure data.
+  Per scene base → R1: 9 .64/.88, 12 .12/.24, 13 .18/.42, 17 .61/.42, 25 .79/.97, 32 .61/.64, 40 .91/.61, 42 .12/.52,
+  44 .70/.27, 48 .58/.58 (large per-scene swings both ways).
+- Lane 4 selftest 18376189: the official-FAST parity holds; pi05_libero has no prior FAST knowledge (CE at init
+  16.6, above uniform 7.6), so RECAP's "tokenizer the model already knows" is not reproduced by switching to FAST.
+
+- Real RECAP labels (value-binned 40%), R1 recipe, + tag at eval: **AdaRMS 0.409** (−0.115 [−0.185, −0.045] vs base
+  paired) and **prompt + discrete 0.445** (−0.079 [−0.148, −0.009]). Both worse than base.
+- Planted-tag controls: prompt, AdaRMS and prompt + discrete all carry δ = 0.1 (1.5× noise); prompt and AdaRMS learn
+  δ = 0.02 fully (0.020-0.022, 0.34× noise). Real labels: AdaRMS 0.007, discrete 0.001. The routes work; the labels
+  carry little action information (ideal-shift upper bound 0.015, mostly gripper).
+- Correction (2026-11-07): the tagged runs used R1 (frozen SigLIP, original lr), which passed the bar for arm A
+  (0.521 vs 0.564, seed-0 noise). The difference from arm A is the data (all rollouts incl. 384 failures + demos),
+  not the lr: lane 1 tests this.
+
+## Resume steps
+
+1. Lane 3 gate result: `reports/2026-11-07-td-labels/ideal_shift/gate.json` (+ `ideal_shift_table.csv`). If it
+   exits 3, 18376130-32 are cancelled by the dependency: report the candidates' numbers.
+2. Lane 4 selftest 18376189: check (9) parity, (10) truncation, and (11) CE at init (does pi05_libero know FAST?).
+3. When the evals land: paired comparison vs base 18355478 (same script as 2026-11-07 log), and vs each other.
+4. Round 2 (`scripts/recap_round2.sh <run>`, dry run by default) only for a round-1 run that matches base.
+5. Write `reports/2026-11-07-items-1-4/` when the lanes finish; update docs/findings.md.
+
+## Earlier verdicts (2026-11-05)
+
+- **R1 frozen-SigLIP recipe also passes the bar** (18310772): arm A 172/330 = 0.521 vs base 0.564, −0.042
+  [−0.106, +0.024] (scene-stratified paired bootstrap, 4000). Same total as R2 but a different per-episode pattern
+  (per scene R1/R2: 9 .91/.79, 12 .12/.21, 17 .30/.42, 25 .85/.67, 40 .67/.85, 42 .48/.21). Week 8 card `recipe-fixes`.
+- **A2 N=4 seed 2** (18309646): SNR **0.191** / MAE 0.171 / AUC10 0.797. **3 seeds: SNR 0.184 ± 0.006, MAE 0.170**
+  vs N=18 0.152 / 0.160 → steadier on every seed; still far below ResNet 0.247. N=9 has seed 0 only (0.158 / 0.162).
+  *Corrected 2026-11-05 (reports/2026-11-05-layer-interventions/):* 0.152 / 0.160 is N=18 seed 0; its 3-seed mean is
+  SNR 0.166 / MAE 0.170, and N=18 seed 2 (0.194) beats N=4 seed 2. N=4 − N=18 SNR +0.018, 95% CI [−0.020, +0.050]:
+  not resolved. "change_snr_2s" is a 1 s change. **Offline 3-seed ensembles (mean of V, no new training):** N=18
+  SNR 0.208 (noise 0.101/0.102/0.074 → 0.072), MAE 0.169; N=4 SNR 0.214, MAE 0.170. Much of the flicker is
+  seed-specific (learned expert), not the shared backbone. **ResNet fixed+fresh 3-seed average** (18237895-7): SNR
+  0.247 mean of singles → 0.278, noise 0.076 → 0.067, MAE 0.189, AUC10 0.770. After averaging, the noise is about
+  equal (0.067 vs 0.072); ResNet's remaining SNR lead comes from a larger signal (≈0.019 vs 0.015), and π₀.₅ stays
+  more accurate (MAE 0.169, AUC10 0.803). Point estimates, no CI yet.
+  **Scene check (offline, 3-seed-avg V, val only):** a no-image "scene + clock" lookup (leave-one-episode-out mean
+  target of the same val init state at the same frame) gets MAE 0.180 / AUC 0.802, better MAE than ResNet (0.189).
+  V frozen at frame 0 + mean trend: π₀.₅ AUC 0.782 vs ResNet 0.698 (π₀.₅'s first look is much more informative);
+  freezing costs both models MAE (π₀.₅ 0.169 → 0.228, ResNet 0.189 → 0.256). π₀.₅ AUC5 actual 0.741 < frozen 0.782.
+  Reading: π₀.₅'s accuracy lead over ResNet is mostly setup recognition, which cancels in advantages (tags); ResNet
+  reacts more to events. Script: scratchpad scene_check.py (not in repo).
+- **Which cut the per-layer probe points to (not run):** in `pi05_layer_hidden.py`, h_l = the input to block l. The
+  probe's single-layer head is flat 0.14–0.16 for h0–h15 and drops at h17 (0.122) / h18 (0.107). h16 was not
+  extracted (probe: h0–5, odd layers to h17, h18). A truncated expert at N reads the K/V of blocks 0..N−1, i.e. h0..h_{N−1},
+  so the probe's cut is **N = 16–17** (drop only the last 1–2 blocks). The 4/9 cuts came from SmolVLA's
+  "first half" before the probe. The probe doesn't explain why N=4 > N=9 (single-layer heads: h3 0.153, h4 0.157, h9 0.144, all within ~1 sd):
+  the truncation gain is in how the expert reads several layers, not in one steadier layer.
+  Accuracy: "flat with depth" holds only for the single-layer probe head (MAE ~0.175 vs SigLIP 0.171). In the full
+  value expert the LM adds accuracy: SigLIP-direct 0.215 (1 seed) → N=4 0.170 → N=9 0.162 → N=18 0.160.
+- **R2 low-lr recipe passes the bar**: arm A 0.521 vs base 0.564, −0.042 [−0.112, +0.027] (18315374).
 - **Tag predictability** (`reports/2026-11-05-tag-predictability/`): the action carries 3.2% of the current tag's
   information beyond the state (≈ the ignored oracle's 2.3%); RECAP's 30–40% positive → 7.4–8.1%, + value-binned
   calibration → 8.5%. **Value-binned calibration** (`reports/2026-11-05-value-calibration/`): κ +0.05–0.06, no
@@ -71,7 +323,7 @@ logs `/iris/u/ankile/karenvo/libero/logs/slurm-<job>.out`.
   running on move5 when this was asked. 18310224 finished 20:45; 18310773 was let run to step 4000 (Karen) and
   resumed on L40S as 18315373 (eval 18315374; 18309646 re-chained). Nothing on move5 now.
 
-- **A2 N=4 seed 1** (18309645): SNR 0.182 / MAE 0.170, replicates seed 0 (0.180 / 0.169); seed 2 queued.
+- **A2 N=4 seed 1** (18309645): SNR 0.182 / MAE 0.170, replicates seed 0 (0.180 / 0.169).
 
 - **Fine-tuning hurts the policy** (`reports/2026-11-04-base-vs-finetuned/`, 18309278): base π₀.₅ 186/330 =
   **0.564** on the arms' exact trials; success-only −0.158 [−0.224, −0.091], + tag −0.155, − tag −0.133. Drops
@@ -108,8 +360,9 @@ logs `/iris/u/ankile/karenvo/libero/logs/slurm-<job>.out`.
 
 ## Open decisions for Karen
 
-1. A2 seeds 1–2 for N=4 (and N=9): 4 GPU jobs × ~3–5 h (`pi05_value_expert.sbatch`, `--mem=96G` or scoring
-   OOMs; ARGS in the A2 report). Two lanes fit the cap.
+1. A2 follow-ups (N=4 seeds 1–2 done): N=9 seeds 1–2 (not run), and/or the probe-implied **N = 16–17** cut
+   (`pi05_value_expert.sbatch`, `--mem=96G`, ~3 h each on L40S). Tests whether dropping just the top blocks
+   recovers N=18's accuracy (MAE 0.160) with less flicker.
 2. Policy "no gain → diagnose" (meeting step 5): labels are weak for both backbones (~6–7 pt success/failure gap).
    Options: tag usage at test time, a stronger label rule (longer lookahead / stricter percentile), or train-all
    labels (paused).
@@ -240,18 +493,16 @@ is easy to read (~97%) but an auxiliary subtask head did not change steadiness. 
   Then B1's target with a TD/SARSA backup, ResNet Q (image + chunk MLP), shuffled-action check, steering eval on
   the 330 trials. Cost: new rollouts (~900 episodes, GPU hours) + Q training; noisier candidates are also worse on
   average, so the gain must beat that.
+- **Try later (Karen, 2026-11-08): AdaRMS + discrete, with the tag in both places.** Not run. As the code stands,
+  `pi05_tag_adarms.py` strips the tag from the prompt (`vl.tag_route`) and puts it only into the action expert's
+  AdaRMS conditioning. The discrete action-token loss (`--discrete-weight`) trains the backbone to predict the actions
+  from the prompt, so combined as is it would never see the tag and would learn untagged action tokens. A real
+  version keeps the tag text in the prompt (for the backbone + discrete loss) and also adds it to AdaRMS (for the
+  expert): a small change in the tag-routing patch. Low priority: every tag check so far (prompt, AdaRMS,
+  prompt + discrete, RECAP-complete, speed stage 1) shows the real tag moving the actions by only 2-3% of the
+  sampling noise, so a second route for the same weak tag is unlikely to change that.
 - Pre-training (SeeQ/RECAP style) stays on hold: infra is being arranged by the mentor and is not the bottleneck;
   keep pushing with small models and limited data.
-
-## Resume steps
-
-1. When 18305873 ends: `PYTHONPATH=scripts:src .venv/bin/python scripts/libero_frozen_encoders.py analyze --out
-   /move/u/karenvo/libero_features/step0_paligemma_hidden_18286806 --fit-subset fit_fixed_fresh.txt --tag fixedfresh
-   --encoders llm_h0 ... llm_hfinal` via `FEAT=... FIT=fit_fixed_fresh.txt TAG=fixedfresh sbatch
-   scripts/layer_analyze_cpu.sbatch` (CPU). Plot π₀.₅ vs PaliGemma per-layer SNR / MAE together: did robot
-   training make layers 17–18 noisy?
-3. Karen's open decisions above.
-4. Update `reports/2026-11-02-frozen-encoders/report.md`, `docs/findings.md`, the Week 8 site, and this file.
 
 ## Traps
 
@@ -261,3 +512,20 @@ is easy to read (~97%) but an auxiliary subtask head did not change steadiness. 
 - Never `scancel` other sessions' jobs; re-chain only your own.
 - Site rebuild: `.venv/bin/python scripts/build_site.py`; upload with
   `/iris/u/ankile/karenvo/google-cloud-sdk/bin/gcloud storage cp -r --cache-control=no-cache reports/site/value-learning/* gs://zima-robot/reports/karenvo/value-learning/`.
+
+## Noise sweep queued 2026-11-09 (mentor: "maybe 2x is still not enough"; Karen: set it up)
+
+Pilot design reused (control 18388271 + x2.0 p0.5 18388273 as-is): base on our server, 30 train states x 3 repeats,
+env seed 21, explore seed 0, raw saved. `scripts/noise_sweep.sh`: lane A x3.0 p0.5 **18408588** -> x8.0 p0.5
+**18408589**; lane B x5.0 p0.5 **18408590** -> x2.0 every chunk **18408591**; analysis **18408592** (CPU, afterany)
+-> `reports/2026-11-09-noise-sweep/`. Rule [set before, the pilot's]: success >= control - 10 pts (point) and early
+arm spread >= 1.5x control; choice = largest spread among those; -10 to -15 pts flagged borderline. A qualifying
+setting beyond x2.0 -> (Karen's go) 450 episodes -> table -> OOF V -> vb40 -> coach test, read by action info.
+`libero_explore_pilot.py`: choice now by spread (name parse broke on x2.0_all), + borderline column. 251 tests pass.
+Mentor feedback 2026-11-09 answered from existing data: base success per init state 12-91% (val, 33 each) and
+13-93% (30 train states, 15 each), no state at 0; best-of-16 per state 0.99. Next after the sweep: rounds of
+collect -> keep successes -> fine-tune on the step-1 winning recipe (needs Karen's go).
+GPU chaining (session karenvo-15, 2026-11-09): its contrast check 18409258 waits afterany:18408589, then evals
+18409259 -> 60 -> 61; 18409262 -> 63 wait afterany:18408591. New GPU jobs from this session go after 18409261 or
+18409263. It edited scripts/pi05_tag_adarms.py / .sbatch (+ `--contrast`, MODE=contrastcheck) and added
+scripts/pi05_contrast_check.py; the sweep and step-1 follow-ups don't use those files.

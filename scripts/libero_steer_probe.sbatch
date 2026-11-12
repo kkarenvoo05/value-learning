@@ -5,10 +5,10 @@
 #        SCALE=1.5 ...  v2: candidates 1..N-1 with start noise x SCALE (serves via serve_pi05_finetuned.py --base,
 #                       which honours a per-request noise_scale; same pi05_libero weights and transforms)
 #SBATCH --job-name=job
-#SBATCH --account=move
-#SBATCH --partition=move
+#SBATCH --account=iris
+#SBATCH --partition=iris
 #SBATCH --gres=gpu:1
-#SBATCH --exclude=move1,move2,move3
+#SBATCH --exclude=iris[1-4,9],iris-hp-z8   # Turing GPUs fail the pi05 bf16 self-check; iris9: JAX finds no CUDA device (2026-11-05)
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=10:00:00

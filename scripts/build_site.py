@@ -6,7 +6,9 @@ Inputs (reports/site/content/):
   jobs.json        in-progress section for the current week: [{job, what, why, after, out}] (state read live from sacct)
   episodes.json    per-episode value traces for the week-7 episode player (made by scripts/site_episode_assets.py)
 Figures named in the content files are copied next to each page. Output: reports/site/value-learning/
-  index.html, site.css, charts.js, week-05/ … week-08/ (each index.html + assets/)
+  index.html, site.css, charts.js, week-05/ … week-09/ (each index.html + assets/)
+  week09.json + week09_data.json (scripts/site_week09_data.py) → week-09/ [2026-11-09]
+  week09.json["since"] + week09_since_data.json (scripts/site_since_data.py) → "Since Nov 10" block on week-09 [2026-11-11]
 Publish: scripts/publish_week_report.sh value-learning   (public bucket; review first)
 """
 
@@ -325,6 +327,279 @@ def week8(c8: dict, jobs: list):
     (d / "index.html").write_text(page("Week 8 progress", '<a href="../index.html">Value learning</a> › Week 8', body, 1))
 
 
+def _js(fn: str, cid: str, spec: dict) -> str:
+    return f'<div id="{cid}"></div><script>{fn}(document.getElementById("{cid}"),{json.dumps(spec, ensure_ascii=False)})</script>'
+
+
+def _legend(items) -> str:
+    return '<div class="legend">' + "".join(f'<span><i style="background:{c};height:10px;width:10px;border-radius:50%"></i>{e(t)}</span>'
+                                            for t, c in items) + "</div>"
+
+
+def _card(cid: str, c: dict, body: str, status="settled", date="") -> str:
+    return (f'<div class="finding" id="{cid}"><h3>{inline(c["title"])}</h3>'
+            f'<div class="meta"><span class="pill {status}">{status}</span> {e(date)}</div><p class="q">{inline(c["question"])}</p>'
+            f'<ul>{"".join(f"<li>{inline(v)}</li>" for v in c["verdict"])}</ul>{body}'
+            f'<div class="src">Source: {inline(c["source"])}</div><p class="cap"><a href="#summary">↑ back to summary</a></p></div>')
+
+
+def w9_policy(d: dict) -> str:
+    col = {"untagged": "var(--s1)", "tag": "var(--s2)", "weights": "var(--s3)", "success+": None}
+    heads = {"untagged": "No tag: which data, demo share and learning rate", "tag": "All rollouts + a tag or advantage weights",
+             "success+": "Successful rollouts only, + a tag or weights"}
+    rows, seen = [], set()
+    for r in d["rows"]:
+        g = "tag" if r["group"] == "weights" else r["group"]
+        if g not in seen:
+            seen.add(g); rows.append({"head": True, "label": heads[g]})
+        c = col[r["group"]] or ("var(--s2)" if r["label"].endswith("tag") else "var(--s3)")
+        note = f'{r["success"] * 100:.1f}% success ({r["n"]}/330 trials{"" if r["complete"] else ", still running"}) · {r["note"]} · job {r["job"]}'
+        rows.append({"label": r["label"] + ("" if r["complete"] else " (running)"), "value": r["diff"], "lo": r["lo"], "hi": r["hi"],
+                     "color": c, "note": note, "dim": not r["complete"], "hollow": not r["complete"],
+                     "right": f'{r["success"] * 100:.1f}%  ({"+" if r["diff"] >= 0 else ""}{r["diff"] * 100:.1f})'})
+    spec = {"rows": rows, "unit": "change vs base (points)", "pct": True, "labelWidth": 260, "width": 820, "domain": [-0.25, 0.15],
+            "zeroLabel": f'base π₀.₅ {d["base"] * 100:.1f}%', "title": "Change in success vs base"}
+    return (_legend([("no tag", "var(--s1)"), ("tag", "var(--s2)"), ("advantage weights", "var(--s3)")])
+            + '<div class="cap">x axis: change in success rate vs base, in points. Right column: success rate (change). Hover a row for details.</div>'
+            + _js("ciPlot", "w9pol", spec))
+
+
+def w9_tag(d: dict) -> str:
+    col = {"real": "var(--s2)", "floor": "var(--fg3)", "control": "var(--s1)"}
+    rows = [{"label": r["label"], "value": round(100 * r["ratio"], 1), "color": col[r["group"]],
+             "note": f'raw shift {r["shift_raw"]:.4f} · loss with correct / flipped tag {r["loss_correct"]:.5f} / {r["loss_flipped"]:.5f}'}
+            for r in d["rows"]]
+    rows.append({"label": "Swap the task instruction (reference)", "value": round(100 * d["prompt_swap_far"], 1), "color": "var(--s3)",
+                 "note": "a different LIBERO instruction in the prompt, RECAP-tagged model"})
+    return (_legend([("real labels", "var(--s2)"), ("never tagged", "var(--fg3)"), ("planted tag (control)", "var(--s1)"),
+                     ("instruction swap", "var(--s3)")])
+            + '<div class="cap">Action change when the tag flips, as % of the change between two noise draws (100% = as large as the policy\'s own randomness).</div>'
+            + _js("barChart", "w9tag", {"rows": rows, "unit": "% of sampling noise", "labelWidth": 270, "width": 820, "digits": 1}))
+
+
+def w9_coach(d: dict) -> str:
+    src = [{"label": r["label"], "value": r["value"],
+            "color": "var(--fg3)" if "Random" in r["label"] else "var(--s2)" if r["label"].startswith("Current") else "var(--s1)",
+            "note": f'95% CI {r["lo"]:.4f} to {r["hi"]:.4f} (bootstrap over frames)'} for r in d["sources"]]
+    src.sort(key=lambda r: -r["value"])
+    src.append({"label": "Learned by the prompt-tag policy", "value": 0.0008, "color": "var(--s4)", "note": "RECAP-faithful run 18338571, tag check"})
+    src.append({"label": "Learned by the AdaRMS-tag policy", "value": 0.006, "color": "var(--s4)", "note": "run 18355677, tag check"})
+    rules = []
+    for r in d["rules"]:
+        rules.append({"label": f'{r["label"]} · {"round 1" if r["round"] == "1" else "explore"}', "value": r["value"],
+                      "color": "var(--fg3)" if "Random" in r["label"] else ("var(--s1)" if r["round"] == "1" else "var(--s4)")})
+    return (_legend([("current labels", "var(--s2)"), ("other value functions / lookaheads", "var(--s1)"), ("random floor", "var(--fg3)"),
+                     ("what trained policies learned", "var(--s4)")])
+            + '<div style="font-weight:600;margin-top:8px">Label source (all 900 rollouts)</div><div class="cap">Ideal shift: RMS action difference between + and − (raw action units). Higher = more signal the tag could carry.</div>'
+            + _js("barChart", "w9coach", {"rows": src, "unit": "ideal shift", "labelWidth": 290, "width": 820, "digits": 4})
+            + '<div style="font-weight:600;margin-top:16px">Label rule, on round 1 vs the exploration round (450 rollouts each)</div>'
+            + _legend([("round 1 (normal sampling)", "var(--s1)"), ("explore round (2× noise)", "var(--s4)"), ("random floor", "var(--fg3)")])
+            + _js("barChart", "w9rules", {"rows": rules, "unit": "ideal shift", "labelWidth": 290, "width": 820, "digits": 4}))
+
+
+def w9_curve(d: dict) -> str:
+    out = '<div class="grid2">'
+    for key, title in [("old", "Round 1 data (450 rollouts, 30 scenes)"), ("explore", "Round 1 + exploration round pooled (900)")]:
+        ser = []
+        for kind, name, c in [("pc1", "PC1 positive control", "var(--s1)"), ("labels", "our labels", "var(--s2)")]:
+            ser.append({"name": name, "color": c, "pts": [{"x": r["n"], "y": r["info"], "sd": r["info_sd"],
+                        "note": f'{r["draws"]} draw{"s" if r["draws"] > 1 else ""}'} for r in d[key] if r["kind"] == kind]})
+        xt = sorted({r["n"] for r in d[key]})
+        out += (f'<div class="card"><div style="font-weight:600">{e(title)}</div>'
+                + _js("lineChart", f"w9curve{key}", {"series": ser, "xlab": "episodes used (log scale)", "xname": "episodes",
+                      "ylab": "action information", "xticks": xt, "xlog": True, "width": 460, "height": 280,
+                      "yticks": [0, 0.05, 0.1, 0.15, 0.2] if key == "old" else [0, 0.1, 0.2, 0.3]})
+                + "</div>")
+    return out + '</div><div class="cap">Action information = share of the uncertainty in the tag that the action explains beyond the state, on held-out episodes (0.08 = 8%). Bars = ±1 sd over 5 subsamples.</div>'
+
+
+def w9_branch(d: dict) -> str:
+    out = ('<div class="legend"><span><i style="background:var(--s2)"></i>V* (true chance of success, 12 continuations)</span>'
+           '<span><i style="background:var(--s3);height:10px;width:8px"></i>labelled + by our pipeline</span>'
+           '<span><i style="background:var(--grid);height:10px;width:8px"></i>labelled −</span></div>'
+           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px">')
+    for i, ep in enumerate(d["episodes"]):
+        spec = {"series": [{"name": "V*", "color": "var(--s2)", "pts": [{"x": t, "y": v} for t, v in zip(ep["t"], ep["v"])], "endLabel": False}],
+                "xlab": "env step (20 Hz)", "xname": "step", "ylab": "V*", "yticks": [0, 0.25, 0.5, 0.75, 1], "xticks": [0, 100, 200, 300, 400, 500],
+                "width": 460, "height": 230, "strip": {"label": "label", "pts": [{"x": t, "on": p} for t, p in zip(ep["t"], ep["pos"])],
+                                                       "onColor": "var(--s3)", "onLabel": "+", "offLabel": "−"}}
+        out += f'<div class="card" style="margin:0"><div style="font-weight:600">Failed episode {ep["ep"]} <span style="color:var(--fg3);font-weight:400">· job {ep["job"]}</span></div>' + _js("lineChart", f"w9br{i}", spec) + "</div>"
+    p = d["pooled"]
+    rel = [{"label": "True value V*: split-half", "value": round(p["v"], 2), "color": "var(--s1)", "note": "6 vs 6 continuations, 299 points"},
+           {"label": "True advantage A*: split-half", "value": round(p["a"], 2), "color": "var(--s2)", "note": "per run: " + ", ".join(f'{r["a"]:.2f}' for r in d["reliability"])},
+           {"label": "A* reliability, all 12 continuations", "value": round(2 * p["a"] / (1 + p["a"]), 2), "color": "var(--s2)", "note": "Spearman-Brown from the split-half"},
+           {"label": "Our labels vs A*: correlation", "value": round(p["label_corr"], 2), "color": "var(--s4)", "note": f'+ share when A* > 0: {p["pos_when_up"]:.2f}; when A* < 0: {p["pos_when_down"]:.2f}'},
+           {"label": "Our value V vs V*: correlation", "value": round(p["oofV_vs_Vstar"], 2), "color": "var(--s4)", "note": "out-of-fold ResNet"}]
+    return (out + '</div><div style="font-weight:600;margin-top:10px">Reliability and agreement (12 failed episodes pooled; 1 = perfect)</div>'
+            + _js("barChart", "w9rel", {"rows": rel, "unit": "correlation", "labelWidth": 290, "width": 820, "digits": 2, "domain": [0, 1]}))
+
+
+def _pct(x, sign=False):
+    return f'{"+" if sign and x >= 0 else ""}{100 * x:.1f}'
+
+
+def _dsrl_eval(r, base) -> str:
+    """Held-out eval of the DSRL agent snapshot, paired with base on the 330 trials [2026-11-11]."""
+    if not r or r["pending"]:
+        return " Held-out eval of the episode-971 snapshot on the 330 trials (job 18445300) is running."
+    state = "" if r["complete"] else f' (partial, {r["n"]} of 330 trials; too early to call)'
+    return (f' **On the 330 held-out trials, the episode-971 agent gets {_pct(r["success"])}% vs base {_pct(base)}%, '
+            f'{_pct(r["diff"], True)} points [{_pct(r["lo"], True)}, {_pct(r["hi"], True)}]**{state}; start states up / down '
+            f'{r["states_up"]} / {r["states_down"]}.')
+
+
+def since_dyn(key: str, sd: dict) -> str:
+    """Headline sentences whose numbers change while jobs run [2026-11-11]."""
+    if key == "residual":
+        r = next(x for x in sd["ag"]["rows"] if x["label"].startswith("Residual, shift of AdaRMS w 8"))
+        if r["pending"]:
+            return "**Residual parameterisation (the paper's fix):** trained; eval at the action shift of AdaRMS w 8 is queued."
+        c = sd["res_vs_ada"]
+        state = "final" if r["complete"] else f'partial, {r["n"]} of 330 trials, all 10 states'
+        return (f'**Residual parameterisation (the paper\'s fix; {state}): {_pct(r["success"])}% vs base, '
+                f'{_pct(r["diff"], True)} points [{_pct(r["lo"], True)}, {_pct(r["hi"], True)}].** On the same trials AdaRMS w 8 has '
+                f'{_pct(c["adarms"])}%, so the residual is {_pct(c["diff"], True)} [{_pct(c["lo"], True)}, {_pct(c["hi"], True)}] above it at the same action shift'
+                + ("." if r["complete"] else "; too early to call."))
+    if key == "dsrl":
+        d = sd["dsrl"]
+        return (f'**DSRL (the suggested RL baseline) is flat near base for ~400 episodes, then rising:** the last 3 cycles through the 30 train '
+                f'states average {_pct(d["last3"])}% vs base {_pct(d["base_train"])}% on the same states ({d["episodes"]} episodes so far; '
+                'training-time success).' + _dsrl_eval(sd.get("dsrl_eval"), sd["ag"]["base"]))
+    return ""
+
+
+def since_html(cs: dict, sd: dict) -> str:
+    """'Since Nov 10' block under the week-9 summary: Nov 10 feedback, AG + DSRL experiments, running jobs, next steps."""
+    pill = {"settled": "done", "running": "running", "open": "open", "queued": "queued"}
+    head = "".join(f"<li>{inline(since_dyn(b['dyn'], sd) if 'dyn' in b else b['t'])}{ev_links(b)}</li>" for b in cs["headline"])
+    lars = "".join(f'<tr><td><b>{inline(r["ask"])}</b></td><td>{inline(r["did"])}</td><td>{inline(r["result"])}{ev_links(r)}</td>'
+                   f'<td><span class="pill {r["status"]}">{pill[r["status"]]}</span></td></tr>' for r in cs["lars"])
+    cd = cs["cards"]
+
+    def ci_rows(rows, colors, labels=None):
+        out, seen = [], set()
+        for r in rows:
+            if r["pending"]:
+                continue
+            if labels and r["group"] not in seen:  # heading only for groups with at least one evaluated row
+                seen.add(r["group"]); out.append({"head": True, "label": labels[r["group"]]})
+            part = "" if r["complete"] else f' (running, {r["n"]}/330)'
+            out.append({"label": r["label"] + part, "value": r["diff"], "lo": r["lo"], "hi": r["hi"], "color": colors[r["group"]],
+                        "dim": not r["complete"], "hollow": not r["complete"],
+                        "note": f'{_pct(r["success"])}% success ({r["n"]}/330 trials) · {r["note"]} · start states up / down: '
+                                f'{r["states_up"]} / {r["states_down"]} · job {r["job"]}',
+                        "right": f'{_pct(r["success"])}%  ({_pct(r["diff"], True)})'})
+        return out
+
+    agc = {"adarms": "var(--s2)", "residual": "var(--s3)", "control": "var(--fg3)"}
+    agl = {"adarms": "Contrastive guidance on the AdaRMS-tag checkpoint (zero training)",
+           "residual": "Residual parameterisation (frozen π₀.₅ + zero-init tag head)", "control": "Control"}
+    pend = [r["label"] for r in sd["ag"]["rows"] if r["pending"]]
+    ag_body = (_legend([("AdaRMS checkpoint", "var(--s2)"), ("residual model", "var(--s3)"), ("control", "var(--fg3)")])
+               + '<div class="cap">x axis: change in success vs base, points. Hollow = eval still running. Hover a row for details.</div>'
+               + _js("ciPlot", "w9ag", {"rows": ci_rows(sd["ag"]["rows"], agc, agl), "unit": "change vs base (points)", "pct": True,
+                                         "labelWidth": 300, "width": 820, "domain": [-0.35, 0.4],
+                                         "zeroLabel": f'base π₀.₅ {_pct(sd["ag"]["base"])}%', "title": "Guidance vs base"})
+               + (f'<div class="cap">Not yet evaluated: {e(", ".join(pend))}.</div>' if pend else ""))
+    ser = [{"name": k, "color": "var(--s2)" if k.startswith("AdaRMS") else "var(--s3)",
+            "pts": [{"x": p["w"], "y": p["ratio"], "note": f'gripper flips {100 * p["flip"]:.1f}%'} for p in v]} for k, v in sd["shift"].items()]
+    ag_body += ('<div style="font-weight:600;margin-top:16px">How far guidance moves the action (offline check)</div>'
+                '<div class="cap">Action shift caused by guidance at weight w, as a multiple of the shift between two noise draws '
+                '(1 = as large as the policy\'s own randomness). The residual needs w 9.3 for the shift AdaRMS reaches at w 8.</div>'
+                + _js("lineChart", "w9shift", {"series": ser, "xlab": "guidance weight w", "xname": "w", "ylab": "shift / noise",
+                                               "xticks": [1, 2, 4, 8, 16], "xlog": True, "width": 620, "height": 260,
+                                               "yticks": [0, 0.5, 1, 1.5, 2]}))
+    d = sd["dsrl"]
+    xmax = max(p["x"] for p in d["cycles"])
+    dser = [{"name": f"agent life {life}", "color": "var(--s2)" if life == 1 else "var(--s3)",
+             "pts": [{"x": p["x"], "y": p["y"], "note": f'cycle {p["cycle"]}, {p["n"]} episodes'} for p in d["cycles"] if p["life"] == life]}
+            for life in (1, 2)]
+    dser.append({"name": "base π₀.₅", "color": "var(--fg3)", "dash": "5 4", "noMarkers": True,
+                 "pts": [{"x": 0, "y": d["base_train"]}, {"x": xmax, "y": d["base_train"]}]})
+    dcard = dict(cd["dsrl"])
+    dcard["verdict"] = [v.replace("{last3}", f'{_pct(d["last3"])}%').replace("{base}", f'{_pct(d["base_train"])}%') for v in dcard["verdict"]]
+    dsrl_body = ('<div class="cap">Training success per cycle (each of the 30 train states once). Life 2 = fresh agent after the requeue at '
+                 f'episode {d["restart"]}. Dashed: base π₀.₅ on the same states ({d["base_n"]} rollouts). One cycle has ±9 points of noise.</div>'
+                 + _js("lineChart", "w9dsrl", {"series": dser, "xlab": "episode", "xname": "episode", "ylab": "success",
+                                               "yticks": [0, 0.25, 0.5, 0.75, 1], "width": 820, "height": 300}))
+    fuc = {"untagged": "var(--s1)", "tag": "var(--s2)", "weights": "var(--s3)"}
+    fu_body = (_legend([("no tag", "var(--s1)"), ("prompt tag", "var(--s2)"), ("advantage weights", "var(--s3)")])
+               + _js("ciPlot", "w9fu", {"rows": ci_rows(sd["followup"]["rows"], fuc), "unit": "change vs base (points)", "pct": True,
+                                        "labelWidth": 330, "width": 820, "domain": [-0.15, 0.2],
+                                        "zeroLabel": f'base π₀.₅ {_pct(sd["followup"]["base"])}%', "title": "Follow-ups vs base"}))
+    nz = "".join(f'<tr><td>{e(r["arm"][1:].replace("_all", "") + "×" if r["arm"].startswith("x") else "none (base)")}'
+                 f'{" on every chunk" if r["arm"].endswith("_all") else ""}</td><td>{r["n"]}</td><td>{_pct(r["success"])}%</td>'
+                 f'<td>{"—" if r["spread"] is None else str(r["spread"]) + "×"}</td></tr>' for r in sd["noise"])
+    v = sd["vgt"]
+    vrows = [{"label": r["source"], "value": round(r["a"] if r["a"] is not None else r["label"], 3),
+              "color": "var(--fg3)" if "random" in r["source"] else "var(--s1)" if r["a"] is not None else "var(--s2)",
+              "note": "learned advantage vs true advantage" if r["a"] is not None else "binary labels vs true advantage"} for r in v["rows"]]
+    vrows.append({"label": "Ceiling (noise in the ground truth)", "value": v["ceiling"], "color": "var(--s4)",
+                  "note": f'split-half reliability {v["split_half"]} over 12 continuations'})
+    r2 = "".join(f'<tr><td>{e(r["layout"])}</td><td>{_pct(r["r1"])}% ({r["n"]})</td><td>{_pct(r["base"])}% ({r["base_n"]})</td></tr>'
+                 for r in sd["round2"])
+    other_body = ('<div class="grid2"><div class="card"><div style="font-weight:600" id="noise">Exploration-noise sweep (train states)</div>'
+                  '<div class="tw"><table><tr><th>start-noise scale</th><th>episodes</th><th>success</th><th>action spread vs base</th></tr>'
+                  + nz + '</table></div></div><div class="card"><div style="font-weight:600">Round-2 collection: round-1 policy vs base</div>'
+                  '<div class="tw"><table><tr><th>layouts</th><th>round-1 policy</th><th>base π₀.₅</th></tr>' + r2 + '</table></div>'
+                  '<div class="cap">Same states and layouts, different random draws (not paired).</div></div></div>'
+                  f'<div style="font-weight:600;margin-top:14px">Learned values and labels vs the simulator\'s true advantage ({v["points"]} branch points)</div>'
+                  '<div class="cap">Correlation with the true advantage A* (1 = perfect). The ceiling is the best any labeller could score, given the noise in A*.</div>'
+                  + _js("barChart", "w9vgt", {"rows": vrows, "unit": "correlation with A*", "labelWidth": 300, "width": 820, "digits": 2, "domain": [0, 0.8]}))
+    fut = "".join(f'<tr><td><b>{inline(f["exp"])}</b></td><td>{inline(f["why"])}</td><td style="white-space:nowrap">{inline(f["cost"])}</td>'
+                  f'<td><span class="pill {"running" if f["pri"] == "high" else "queued" if f["pri"] == "medium" else "open"}">{e(f["pri"])}</span></td></tr>'
+                  for f in cs["future"])
+    return (f'<h2 id="since">{inline(cs["title"])}</h2><p class="lead">{inline(cs["lead"])}</p>'
+            f'<div class="sumcard res"><ul>{head}</ul></div>'
+            f'<h3 id="lars" style="margin-top:22px">Feedback, and what came of it</h3><div class="tw"><table><tr><th>feedback</th>'
+            f'<th>what I did</th><th>result</th><th></th></tr>{lars}</table></div>'
+            + _card("ag", cd["ag"], ag_body, "running", "2026-11-10 – 11-11")
+            + _card("dsrl", dcard, dsrl_body, "running", "2026-11-11")
+            + _card("followup", cd["followup"], fu_body, "settled", "2026-11-09 – 11-10")
+            + _card("other", cd["other"], other_body, "settled", "2026-11-09 – 11-11")
+            + '<h3 id="running" style="margin-top:22px">Running and queued</h3><p class="lead">State is read from Slurm when the page is built.</p>'
+            + jobs_html(cs["jobs"])
+            + f'<h3 id="future" style="margin-top:22px">Next experiments to discuss</h3><div class="tw"><table><tr><th>experiment</th>'
+              f'<th>why</th><th>cost</th><th>priority</th></tr>{fut}</table></div>'
+            + f'<h3 style="margin-top:22px">Questions</h3><div class="sumcard"><ol>{"".join(f"<li>{inline(q)}</li>" for q in cs["ask"])}</ol></div>'
+            + '<h2 style="margin-top:34px">The Nov 10 update</h2><p class="lead">The summary at the top of the page and everything below this line are the update as sent for the Nov 10 meeting.</p>')
+
+
+def week9(c9: dict, data: dict, since: dict | None = None):
+    d = OUT / "week-09"
+    d.mkdir(parents=True, exist_ok=True)
+    lis = lambda items: "".join(f"<li>{inline(b['t'])}{ev_links(b)}</li>" for b in items)
+    nav = ('<nav class="jump"><a href="#summary">Summary</a><a href="#since">Since Nov 10</a><a href="#ag">AG</a><a href="#dsrl">DSRL</a>'
+           '<a href="#future">Next experiments</a><a href="#story">How I got here</a><a href="#gaps">RECAP gaps</a>'
+           '<a href="#checks">Discrepancies</a><a href="#progress">Running now</a><a href="#questions">Questions</a>'
+           '<a href="#evidence">Charts</a><a href="#minor">Smaller results</a></nav>')
+    gaps = "".join(f'<tr><td><b>{inline(g["gap"])}</b></td><td>{inline(g["did"])}</td><td>{inline(g["result"])}'
+                   f'{ev_links(g)}</td><td><span class="pill {g["status"]}">{"tried" if g["status"] == "settled" else "open"}</span></td></tr>'
+                   for g in c9["gaps"])
+    cd = c9["cards"]
+    body = (f'<h1>{e(c9["title"])}</h1><div class="sub">{inline(c9["sub"])}</div>{nav}'
+            f'<h2 id="summary" style="border:0;margin-top:18px">Summary</h2><div class="goal">{inline(c9["goal"])}</div>'
+            f'<div class="sumcard res"><ul>{lis(c9["summary"])}</ul></div>'
+            + (since_html(c9["since"], since) if since else "")
+            + f'<h2 id="story">How I got here</h2><div class="sumcard"><ol>{lis(c9["story"])}</ol></div>'
+            f'<h2 id="gaps">Gaps vs RECAP, and what I did</h2><div class="tw"><table><tr><th>RECAP has</th><th>what I did</th>'
+            f'<th>result</th><th></th></tr>{gaps}</table></div>'
+            f'<h2 id="checks">Discrepancies found while checking the results</h2><div class="note"><ul>'
+            + "".join(f"<li>{inline(x)}</li>" for x in c9["discrepancies"]) + "</ul></div>"
+            + '<h2 id="progress">Running now</h2><p class="lead">The last policy fine-tuning runs of the recipe grid (untagged, '
+              'different demo shares and learning rates), then automatic follow-ups on the best recipe. State is read from Slurm when the page is built.</p>'
+            + jobs_html(c9["jobs"])
+            + f'<h2 id="questions">Questions</h2><div class="sumcard"><ol>{"".join(f"<li>{inline(q)}</li>" for q in c9["questions"])}</ol></div>'
+            + '<h2 id="evidence">Charts behind the claims</h2>'
+            + _card("policy", cd["policy"], w9_policy(data["policy"]), "running", "2026-11-09")
+            + _card("tag-effect", cd["tag-effect"], w9_tag(data["tag"]), "settled", "2026-11-04 – 11-08")
+            + _card("coach", cd["coach"], w9_coach(data["coach"]), "settled", "2026-11-06 – 11-09")
+            + _card("curve", cd["curve"], w9_curve(data["curve"]), "settled", "2026-11-09")
+            + _card("branching", cd["branching"], w9_branch(data["branch"]), "settled", "2026-11-09")
+            + '<h2 id="minor">Smaller results since Nov 3</h2>' + minor_html(c9["minor"], d / "assets"))
+    (d / "index.html").write_text(page("Week 9 progress", '<a href="../index.html">Value learning</a> › Week 9', body, 1))
+
+
 def earlier(ce: dict):
     for w in ce["weeks"]:
         n = int(w["week"])
@@ -339,8 +614,11 @@ def earlier(ce: dict):
         (d / "index.html").write_text(page(f"Week {n} progress", f'<a href="../index.html">Value learning</a> › Week {n}', body, 1))
 
 
-def hub(c7: dict, ce: dict, c8: dict):
-    cards = (f'<a class="wk" href="week-08/index.html"><div class="wn">Week 8 · Nov 3 – Nov 10 · current</div>'
+def hub(c7: dict, ce: dict, c8: dict, c9: dict):
+    cards = (f'<a class="wk" href="week-09/index.html"><div class="wn">Week 9 · update for Nov 10, follow-up Nov 11 · current</div>'
+             f'<div class="wt">LIBERO: a fine-tune recipe that keeps base performance, and why the advantage tag goes unused</div>'
+             f'<div style="color:var(--fg2)">{inline(c9["summary"][0]["t"])}</div></a>'
+             f'<a class="wk" href="week-08/index.html"><div class="wn">Week 8 · Nov 3 – Nov 10</div>'
              f'<div class="wt">LIBERO: first policy results, label strategy, and which π₀.₅ layers a value function needs</div>'
              f'<div style="color:var(--fg2)">{inline(c8["headline"])}</div></a>'
              f'<a class="wk" href="week-07/index.html"><div class="wn">Week 7 · Oct 27 – Nov 3</div>'
@@ -367,8 +645,11 @@ def main():
     c8 = json.loads((CONTENT / "week08.json").read_text())
     week7(c7, jobs)
     week8(c8, jobs)
+    c9 = json.loads((CONTENT / "week09.json").read_text())
+    sp = CONTENT / "week09_since_data.json"  # scripts/site_since_data.py [2026-11-11]
+    week9(c9, json.loads((CONTENT / "week09_data.json").read_text()), json.loads(sp.read_text()) if sp.exists() else None)
     earlier(ce)
-    hub(c7, ce, c8)
+    hub(c7, ce, c8, c9)
     print("->", OUT)
 
 

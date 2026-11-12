@@ -39,6 +39,12 @@ outcome loss make the expert's h noisy within episodes?).
 linear head on h predicts the pots on the stove (vl.libero_subtask, 0 / 1 / 2), CE weight W (SeeQ: 0.1) added to the
 loss. Value target, selection (inner value CE) and val metrics unchanged; inner subtask accuracy logged, val
 predictions gain `subtask` and `p_subtask{0,1,2}`.
+--subtask-scoped: B1 on pi05 (as vl.libero_resnet --subtask-scoped; Karen: go 2026-11-05): the value target is the
+value of finishing the *current* subtask (vl.libero_subtask.scoped_targets: place the first pot, then the second;
+boundary = vl.libero_milestone's milestone frame) and the value head outputs 2 x 201 logits, of which the true
+scope's half is read (scope from the simulator's goal predicates, as the ResNet B1). Selection and val metrics are on
+the scoped target; val predictions add `scope` and `value_task` (the whole-task target). The outcome head is kept
+(same recipe as the whole-task pi05 runs, so only the target changes) [ours: MC, not SeeQ's TD].
 """
 
 import argparse
@@ -57,7 +63,7 @@ from flax import traverse_util
 from openpi.models import gemma as _gemma
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from vl.libero_subtask import N_SUBTASK, subtask_labels  # noqa: E402  (numpy only)
+from vl.libero_subtask import N_SUBTASK, scoped_targets, subtask_labels  # noqa: E402  (numpy only)
 
 CKPT = "/iris/u/rbhowmik/cache/openpi/openpi-assets/checkpoints/pi05_libero"
 DATASET = Path("/iris/u/ankile/karenvo/libero/lerobot/libero_moka_stage2")
@@ -87,9 +93,10 @@ class ValueExpert(nn.Module):
     dtype: str = "bfloat16"
     time_input: bool = False
     subtask: bool = False  # E2: a third head; __call__ then returns 4 values (+ subtask logits)
+    scoped: bool = False  # B1: 2 x N_BINS value logits; `scope` (0 / 1 per row) picks the half
 
     @nn.compact
-    def __call__(self, kv_cache, prefix_mask, t=None):
+    def __call__(self, kv_cache, prefix_mask, t=None, scope=None):
         b = prefix_mask.shape[0]
         query = jnp.broadcast_to(self.param("query", nn.initializers.normal(0.02), (1, 1, self.expert.width)),
                                  (b, 1, self.expert.width))
@@ -100,8 +107,17 @@ class ValueExpert(nn.Module):
         positions = jnp.sum(prefix_mask, axis=-1)[:, None].astype(jnp.int32)
         (_, out), _ = llm([None, query], positions=positions, mask=mask, kv_cache=kv_cache)
         h = out[:, 0].astype(jnp.float32)
-        out = nn.Dense(N_BINS, name="value_head")(h), nn.Dense(2, name="outcome_head")(h), h
+        vl = nn.Dense(N_BINS * (2 if self.scoped else 1), name="value_head")(h)
+        if self.scoped:
+            vl = pick_scope(vl, jnp.zeros(b, jnp.int32) if scope is None else scope)
+        out = vl, nn.Dense(2, name="outcome_head")(h), h
         return (*out, nn.Dense(N_SUBTASK, name="subtask_head")(h)) if self.subtask else out
+
+
+def pick_scope(logits, scope):
+    """(b, 2 * N_BINS) -> (b, N_BINS): row i's half `scope[i]` (0 = first pot, 1 = second pot)."""
+    lg = logits.reshape(logits.shape[0], 2, N_BINS)
+    return jnp.take_along_axis(lg, jnp.asarray(scope, jnp.int32)[:, None, None], axis=1)[:, 0]
 
 
 def backbone_kv(self, obs, rng=None):
@@ -123,9 +139,11 @@ def truncate_kv(kv, n: int):
     return k[:n], v[:n]
 
 
-def losses(params, model, kv, pmask, bins, success, t=None, outcome_weight=1.0, sub=None, subtask_weight=0.0):
-    """sub given (model.subtask): + subtask_weight * subtask CE; aux gains the subtask CE as a 5th element."""
-    logits, ologits, *rest = model.apply({"params": params}, kv, pmask, t)
+def losses(params, model, kv, pmask, bins, success, t=None, outcome_weight=1.0, sub=None, subtask_weight=0.0,
+           scope=None):
+    """sub given (model.subtask): + subtask_weight * subtask CE; aux gains the subtask CE as a 5th element.
+    scope: B1 (model.scoped), the subtask whose value half is trained."""
+    logits, ologits, *rest = model.apply({"params": params}, kv, pmask, t, scope)
     ce = optax.softmax_cross_entropy_with_integer_labels(logits, bins).mean()
     oce = optax.softmax_cross_entropy_with_integer_labels(ologits, success).mean()
     if sub is None:
@@ -184,6 +202,17 @@ def selftest():
     tmodel = ValueExpert(bcut, vcut, dtype="float32")
     tparams = tmodel.init(jax.random.PRNGKey(1), truncate_kv(kv, nt), pmask)["params"]
     tmodel.apply({"params": tparams}, truncate_kv(kv, nt), pmask)
+    # B1 scoped head: scope picks the matching half of the 2 x N_BINS logits
+    smodel = ValueExpert(base, vcfg, dtype="float32", scoped=True)
+    sparams = smodel.init(jax.random.PRNGKey(2), kv, pmask, None, jnp.zeros(b, jnp.int32))["params"]
+    assert sparams["value_head"]["kernel"].shape[-1] == 2 * N_BINS
+    l0, l1, lm = (smodel.apply({"params": sparams}, kv, pmask, None, jnp.asarray(sc))[0]
+                  for sc in ([0, 0], [1, 1], [0, 1]))
+    assert l0.shape == (b, N_BINS) and float(jnp.abs(l0 - l1).max()) > 1e-4, "scope does not change the value logits"
+    assert jnp.allclose(lm[0], l0[0]) and jnp.allclose(lm[1], l1[1]), "mixed scopes pick the wrong halves"
+    raw = jnp.arange(2 * 2 * N_BINS, dtype=jnp.float32).reshape(2, 2 * N_BINS)
+    assert jnp.array_equal(pick_scope(raw, jnp.array([1, 0])), jnp.stack([raw[0, N_BINS:], raw[1, :N_BINS]]))
+    print("scoped head ok: scope selects its half")
     n = sum(x.size for x in jax.tree.leaves(vparams))
     print(f"truncation ok: first {nt} of {base.depth} layers, max |diff| {terr:.2e}")
     print(f"selftest ok: cached vs joint max |diff| {err:.2e}; padding ignored; {n} expert params (dummy sizes)")
@@ -192,11 +221,14 @@ def selftest():
 class Frames:
     """Raw policy inputs (copies, uint8) + targets for some LeRobot episodes, every `every`-th frame.
     rows columns: episode_index, frame_index, value, bin, success, init_state, T (last frame index), subtask
-    (vl.libero_subtask; -1 when the raw file has no `goals`).
+    (vl.libero_subtask; -1 when the raw file has no `goals`), scope (B1; 0 unless scoped), value_task (the whole-task
+    target; = value unless scoped). scoped: value / bin are the subtask-scoped target (vl.libero_subtask.scoped_targets,
+    scale 1040 = horizon 520 + c_fail 520, checked on each episode's last frame as vl.libero_resnet.add_scope).
     multi_prompt: episodes may carry different prompts (the stage-1 demo table, 40 tasks); each frame gets its own
     episode's prompt. Off (default), every episode must share one prompt, as before."""
 
-    def __init__(self, episodes, every: int, blank_state: bool = False, multi_prompt: bool = False):
+    def __init__(self, episodes, every: int, blank_state: bool = False, multi_prompt: bool = False,
+                 scoped: bool = False):
         import pandas as pd
         eps = pd.read_csv(DATASET / "episodes.csv").set_index("episode_index")
         ft = pd.read_parquet(DATASET / "frame_targets.parquet",
@@ -213,10 +245,23 @@ class Frames:
                 assert multi_prompt or str(z["prompt"]) == self.prompt
                 prompts += [str(z["prompt"])] * len(range(0, n, every))
                 sub = subtask_labels(z["goals"]) if "goals" in z.files else np.full(n, -1)
-            for t in range(0, n, every):
-                tg = ft.loc[(e, t)]
-                rows.append((e, t, float(tg.value), int(tg.bin), int(r.success), int(r.init_state), n - 1,
-                             int(sub[t])))
+                if scoped:
+                    from vl.libero_milestone import milestone
+                    m = milestone(z["goals"])
+            ts = np.arange(0, n, every)
+            vt = np.array([float(ft.loc[(e, int(t))].value) for t in ts])
+            bt = np.array([int(ft.loc[(e, int(t))].bin) for t in ts])
+            sc, vs = np.zeros(len(ts), np.int64), vt.copy()
+            if scoped:
+                last = float(ft.loc[(e, n - 1)].value)
+                assert np.isclose(last, 0.0 if r.success == 1 else -520 / 1040), f"episode {e}: target scale differs"
+                sc, vs = scoped_targets(ts, vt, m, 1040.0)
+                bt = np.rint((vs + 1.0) * (N_BINS - 1)).astype(np.int64)
+                assert (bt >= 0).all() and (bt < N_BINS).all()
+                self.n_reached = getattr(self, "n_reached", 0) + int(not np.isnan(m))
+            for j, t in enumerate(ts):
+                rows.append((e, int(t), float(vs[j]), int(bt[j]), int(r.success), int(r.init_state), n - 1,
+                             int(sub[t]), int(sc[j]), float(vt[j])))
         self.img, self.wrist, self.state = np.concatenate(img), np.concatenate(wrist), np.concatenate(state)
         if blank_state:
             self.state = np.zeros_like(self.state)
@@ -378,7 +423,12 @@ def train(a):
     if a.smoke:
         ids = {"fit": ids["fit"][:a.smoke], "inner": ids["inner"][:1], "val": ids["val"][:2],
                **({"held": ids["held"][:2]} if "held" in ids else {})}
-    fr = {k: Frames(v, a.every, a.blank_state) for k, v in ids.items()}
+    fr = {k: Frames(v, a.every, a.blank_state, scoped=a.subtask_scoped) for k, v in ids.items()}
+    if a.subtask_scoped:
+        assert a.subtask_weight == 0, "--subtask-scoped and --subtask-weight are separate arms"
+        f = fr["fit"]
+        log(f"subtask-scoped targets (fit): {f.n_reached}/{len(ids['fit'])} episodes reach the milestone, "
+            f"{np.mean(f.rows[:, 8] == 0):.3f} of frames in subtask 0, {np.mean(f.rows[:, 2] != f.rows[:, 9]):.3f} retargeted")
     log("frames: " + ", ".join(f"{k} {len(v)} ({len(ids[k])} episodes)" for k, v in fr.items()))
     inner_idx = np.arange(len(fr["inner"]))[::a.inner_stride]
 
@@ -404,28 +454,29 @@ def train(a):
         assert all((f.rows[:, 7] >= 0).all() for f in fr.values()), "--subtask-weight needs raw files with goals"
         log("subtask label share (fit frames): " + ", ".join(f"{k}: {np.mean(fr['fit'].rows[:, 7] == k):.3f}"
                                                              for k in range(N_SUBTASK)))
-    model = ValueExpert(base, value_config(base, a.width, a.mlp_dim), time_input=a.time_input, subtask=sub_on)
+    model = ValueExpert(base, value_config(base, a.width, a.mlp_dim), time_input=a.time_input, subtask=sub_on,
+                        scoped=a.subtask_scoped)
     kv0, m0 = kv_of(prepare(fr["fit"], [0]))
-    params = model.init(jax.random.PRNGKey(a.seed), kv0, m0, jnp.zeros(1))["params"]
+    params = model.init(jax.random.PRNGKey(a.seed), kv0, m0, jnp.zeros(1), jnp.zeros(1, jnp.int32))["params"]
     n_params = sum(x.size for x in jax.tree.leaves(params))
     sched = optax.warmup_cosine_decay_schedule(0.0, a.lr, a.warmup, a.steps, a.lr * 0.1)
     opt = optax.adamw(sched, weight_decay=a.weight_decay)
     state = opt.init(params)
     log(f"value expert: {n_params / 1e6:.1f} M params; batch {B}, lr {a.lr}, wd {a.weight_decay}, {a.steps} steps, "
         f"augment {a.augment}, blank state {a.blank_state}, time input {a.time_input}, outcome weight {a.outcome_weight}, "
-        f"subtask weight {a.subtask_weight}")
+        f"subtask weight {a.subtask_weight}, subtask-scoped {a.subtask_scoped}")
 
     @jax.jit
-    def step_fn(params, state, kv, pmask, bins, success, t, sub):
+    def step_fn(params, state, kv, pmask, bins, success, t, sub, scope):
         (loss, aux), g = jax.value_and_grad(losses, has_aux=True)(
             params, model, kv, pmask, bins, success, t, a.outcome_weight,
-            sub if sub_on else None, a.subtask_weight)
+            sub if sub_on else None, a.subtask_weight, scope)
         upd, state = opt.update(g, state, params)
         return optax.apply_updates(params, upd), state, loss, aux[0], aux[1], (aux[4] if sub_on else jnp.zeros(()))
 
     @jax.jit
-    def forward(params, kv, pmask, t):
-        logits, ologits, _, *sl = model.apply({"params": params}, kv, pmask, t)
+    def forward(params, kv, pmask, t, scope):
+        logits, ologits, _, *sl = model.apply({"params": params}, kv, pmask, t, scope)
         ps = jax.nn.softmax(ologits.astype(jnp.float32), -1)[:, 1]
         return logits, ps, (jax.nn.softmax(sl[0].astype(jnp.float32), -1) if sub_on else jnp.zeros((len(ps), 0)))
 
@@ -442,7 +493,7 @@ def train(a):
                 futs.append(pool.submit(prepare, f, np.pad(c2, (0, B - len(c2)), mode="edge")))
             kv, m = kv_of(batch)
             cp = np.pad(c, (0, B - len(c)), mode="edge")
-            l, p, q = forward(params, kv, m, jnp.asarray(f.rows[cp, 1], jnp.float32))
+            l, p, q = forward(params, kv, m, jnp.asarray(f.rows[cp, 1], jnp.float32), jnp.asarray(f.rows[cp, 8], jnp.int32))
             lg.append(np.asarray(l, np.float32)[:len(c)]); ps.append(np.asarray(p)[:len(c)])
             sp.append(np.asarray(q)[:len(c)])
         if with_sub:
@@ -476,6 +527,7 @@ def train(a):
     rows_fit = fr["fit"].rows
     run_loss = []
     sub_fit = rows_fit[:, 7].astype(np.int32)
+    scope_fit = rows_fit[:, 8].astype(np.int32)
     for s in range(1, 0 if a.eval_only else a.steps + 1):
         idx, fut = queue.pop(0)
         nxt = next(it)
@@ -484,7 +536,7 @@ def train(a):
         params, state, loss, ce, oce, sce = step_fn(params, state, kv, m, jnp.asarray(rows_fit[idx, 3], jnp.int32),
                                                     jnp.asarray(rows_fit[idx, 4], jnp.int32),
                                                     jnp.asarray(rows_fit[idx, 1], jnp.float32),
-                                                    jnp.asarray(sub_fit[idx]))
+                                                    jnp.asarray(sub_fit[idx]), jnp.asarray(scope_fit[idx]))
         run_loss.append((float(ce), float(oce), float(sce)))
         if s % a.log_every == 0:
             r = np.mean(run_loss, 0)
@@ -528,7 +580,9 @@ def train(a):
                   "value": r[:, 2], "bin": r[:, 3].astype(int), "ev_expert": np.asarray(p) @ CENTERS,
                   "ev_expert_T": np.asarray(pt) @ CENTERS, "ps_expert": ps,
                   **({"subtask": r[:, 7].astype(int)} | {f"p_subtask{k}": sp[:, k] for k in range(N_SUBTASK)}
-                     if sub_on else {})}).to_parquet(out / "val_predictions.parquet")
+                     if sub_on else {}),
+                  **({"scope": r[:, 8].astype(int), "value_task": r[:, 9]} if a.subtask_scoped else {})}
+                 ).to_parquet(out / "val_predictions.parquet")
     np.save(out / "val_probs.npy", np.asarray(p).astype(np.float16))
     if a.oof_fold is not None:  # same columns as vl.libero_resnet's oof_predictions.parquet, ev_expert for ev_resnet
         ho = fr["held"]
@@ -538,7 +592,8 @@ def train(a):
                             "frame_index": r[:, 1].astype(int), "T": r[:, 6].astype(int),
                             "success": r[:, 4].astype(int), "value": r[:, 2], "bin": r[:, 3].astype(int),
                             "ev_expert": np.asarray(jax.nn.softmax(jnp.asarray(lh), -1)) @ CENTERS,
-                            "ps_expert": ph, "fold": a.oof_fold})
+                            "ps_expert": ph, "fold": a.oof_fold,
+                            **({"scope": r[:, 8].astype(int), "value_task": r[:, 9]} if a.subtask_scoped else {})})
         oof.to_parquet(out / "oof_predictions.parquet")
         res["oof"] = {"frames": len(oof), "episodes": int(oof.episode_index.nunique()),
                       "mae": float(np.abs(oof.ev_expert - oof.value).mean())}
@@ -577,6 +632,8 @@ def main():
                          "outcome head is then untrained and its P(success) meaningless)")
     ap.add_argument("--subtask-weight", type=float, default=0.0,
                     help="--train: E2 pots-on-stove auxiliary CE weight (SeeQ: 0.1); 0 = off (no subtask head)")
+    ap.add_argument("--subtask-scoped", action="store_true",
+                    help="--train: B1, subtask-scoped target, value head 2 x 201 read at the true scope")
     ap.add_argument("--dataset", default=str(DATASET),
                     help="episode table + frame targets (default Stage 2; scripts/libero_fresh_table.py for fresh)")
     ap.add_argument("--oof-fold", type=int, default=None, help="--train: out-of-fold V (vl.libero_oof, the ResNet's "

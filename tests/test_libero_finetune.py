@@ -87,3 +87,106 @@ def test_stream_tags_follow_labels_and_dropout():
     st = fd.EpisodeStream(sel, batch=8, seed=1, group=1, labels=lab, tag_dropout=1.0, loader=fake_loader({0: 8}))
     out, meta = next(iter(st))
     assert all(s["prompt"] == "p" for s in out) and (meta[:, 2] == -1).all()
+
+
+def test_demo_rows_and_positive_labels(tmp_path):
+    pd.DataFrame({"episode_index": [0, 1, 2], "task": ["a", "put both moka pots on the stove", "b"],
+                  "success": 1, "raw": ["x0", "x1", "x2"]}).to_csv(tmp_path / "episodes.csv", index=False)
+    d = fd.demo_episodes(tmp_path, "put both moka pots on the stove")
+    assert d.episode_index.tolist() == [fd.DEMO_OFFSET + 1] and d.raw.tolist() == ["x1"]
+    assert (d.split == "train").all() and (d.init_state == -1).all() and d.demo.all()
+    lab = fd.demo_labels(d)
+    assert fd.frame_labels(lab, fd.DEMO_OFFSET + 1, 7).tolist() == [1] * 7
+    with pytest.raises(AssertionError):
+        fd.demo_episodes(tmp_path, "missing task")
+
+
+def test_weights_floor_on_grid_and_reach_samples():
+    w = pd.DataFrame({"episode_index": [0, 0], "frame_index": [0, 4], "weight": [0.5, 2.0]})
+    assert fd.frame_weights(w, 0, 6).tolist() == [0.5] * 4 + [2.0] * 2
+
+    def load(raw, lab, e, weights=None):
+        ep = {"image": np.zeros((6, 2, 2, 3)), "wrist_image": np.zeros((6, 2, 2, 3)), "state": np.zeros((6, 8)),
+              "actions": np.zeros((6, 7)), "prompt": "p", "label": None}
+        ep["weight"] = None if weights is None else fd.frame_weights(weights, e, 6)
+        return ep
+    sel = pd.DataFrame({"episode_index": [0], "raw": ["a"]})
+    out, meta = next(iter(fd.EpisodeStream(sel, batch=6, seed=0, group=1, loader=load, weights=w)))
+    assert all(s["weight"] == (0.5 if t < 4 else 2.0) for s, (_, t, _) in zip(out, meta))
+    out, _ = next(iter(fd.EpisodeStream(sel, batch=6, seed=0, group=1, loader=load)))
+    assert all("weight" not in s for s in out)
+
+
+def test_weighted_arm_keeps_failures():
+    eps = pd.DataFrame({"episode_index": [0, 1], "split": "train", "init_state": [0, 1], "success": [1, 0]})
+    assert len(fd.select_episodes(eps, "weighted", held_out=set())) == 2
+    assert len(fd.select_episodes(eps, "imitation", held_out=set())) == 1
+
+
+def test_tag_action_shift_moves_only_tagged_dim():
+    """Tag positive control [2026-11-06]: +shift on dim SHIFT_DIM for the positive tag, -shift for the negative,
+    nothing for untagged samples, and the episode's stored actions are not modified."""
+    import numpy as np
+    from vl import libero_finetune_data as fd
+    T = 30
+    ep = {"image": np.zeros((T, 2, 2, 3), np.uint8), "wrist_image": np.zeros((T, 2, 2, 3), np.uint8),
+          "state": np.zeros((T, 8)), "actions": np.random.default_rng(0).normal(size=(T, 7)), "prompt": "p"}
+    before = ep["actions"].copy()
+    base = fd.sample(ep, 5, None)["actions"]
+    pos, neg, none = (fd.sample(ep, 5, tag, 0.1)["actions"] for tag in (True, False, None))
+    d = fd.SHIFT_DIM
+    assert np.allclose(pos[:, d] - base[:, d], 0.1) and np.allclose(neg[:, d] - base[:, d], -0.1)
+    other = [k for k in range(7) if k != d]
+    assert np.array_equal(pos[:, other], base[:, other]) and np.array_equal(none, base)
+    assert np.array_equal(ep["actions"], before)
+
+
+def demo_csv(tmp_path):
+    """Two tasks: 'a' with 10 demos (lengths 100..190, reversed by index), 'b' with 4 (a tie at 50)."""
+    d = pd.DataFrame({"episode_index": range(14), "task": ["a"] * 10 + ["b"] * 4,
+                      "policy_steps": [190 - 10 * i for i in range(10)] + [50, 50, 80, 70],
+                      "success": 1, "role": ["fit"] * 9 + ["inner"] + ["fit"] * 3 + ["inner"],
+                      "raw": [f"x{i}" for i in range(14)]})
+    d.to_csv(tmp_path / "episodes.csv", index=False)
+    return d
+
+
+def test_speed_labels_fastest_share_per_task(tmp_path):
+    d = demo_csv(tmp_path)
+    lab = fd.speed_labels(d, 0.3)
+    assert len(lab) == 14 and (lab.frame_index == 0).all()
+    pos = set(lab[lab.positive == 1].episode_index - fd.DEMO_OFFSET)
+    assert pos == {9, 8, 7, 10}  # task a: the 3 shortest (100, 110, 120); task b: round(1.2) = 1, tie -> lower index
+    assert fd.frame_labels(lab, fd.DEMO_OFFSET + 9, 5).tolist() == [1] * 5
+    assert fd.frame_labels(lab, fd.DEMO_OFFSET + 0, 5).tolist() == [0] * 5
+    assert lab.equals(fd.speed_labels(d.sample(frac=1, random_state=3), 0.3))  # order-independent
+
+
+def test_speed_labels_refuse_degenerate_share(tmp_path):
+    d = demo_csv(tmp_path)
+    with pytest.raises(AssertionError):
+        fd.speed_labels(d[d.task == "b"], 0.1)  # round(0.4) = 0 positives
+
+
+def test_pretrain_demo_episodes_roles_and_offset(tmp_path):
+    demo_csv(tmp_path)
+    fit = fd.pretrain_demo_episodes(tmp_path)
+    assert len(fit) == 12 and set(fit.task) == {"a", "b"}
+    assert (fit.episode_index >= fd.DEMO_OFFSET).all() and fit.demo.all() and (fit.init_state == -1).all()
+    inner = fd.pretrain_demo_episodes(tmp_path, ("inner",))
+    assert sorted(inner.episode_index - fd.DEMO_OFFSET) == [9, 13]
+
+
+def test_oversample_demos_hits_the_frame_share():  # step-1 recipe grid, 2026-11-08
+    roll = pd.DataFrame({"episode_index": range(900), "demo": False, "policy_steps": 460})
+    dem = pd.DataFrame({"episode_index": range(10**6, 10**6 + 29), "demo": True, "policy_steps": 324})
+    sel = pd.concat([roll, dem], ignore_index=True)
+    for p in (0.5, 0.75):
+        out, k, share = fd.oversample_demos(sel, p)
+        assert abs(share - p) < 0.01 and len(out) == 900 + 29 * k
+        assert (out[~out.demo].episode_index.value_counts() == 1).all()
+        assert (out[out.demo].episode_index.value_counts() == k).all()
+        f = out.groupby("demo").policy_steps.sum()
+        assert abs(f[True] / f.sum() - share) < 1e-9
+    with pytest.raises(AssertionError):
+        fd.oversample_demos(roll, 0.5)  # no demos to repeat

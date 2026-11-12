@@ -33,7 +33,7 @@ from flax import nnx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from pi05_policy_finetune import as_inputs, batch_arrays, load_finetuned  # noqa: E402
+from pi05_policy_finetune import as_inputs, base_policy, batch_arrays, load_finetuned  # noqa: E402
 from vl import libero_finetune_data as fd  # noqa: E402
 
 RUNS = Path("/iris/u/ankile/karenvo/libero/runs")
@@ -79,6 +79,24 @@ def train_frames(n_eps, per_ep, seed=2, labels=LABELS):
     return out
 
 
+def demo_frames(n_eps, per_ep, labels, seed=2):
+    """[2026-11-06] Loss-test frames from the held-out (inner) LIBERO demos with their speed tag, for the speed-tag
+    pre-training stage. Speed tags are per episode, so each episode gives frames of one tag; n_eps split evenly
+    between positive and negative episodes where possible."""
+    lab = pd.read_parquet(labels).drop_duplicates("episode_index").set_index("episode_index").positive
+    inner = fd.pretrain_demo_episodes(fd.DEMO_TABLE, ("inner",))
+    inner = inner.assign(positive=inner.episode_index.map(lab))
+    assert inner.positive.notna().all(), "speed labels missing for inner demos"
+    rng = np.random.default_rng(seed)
+    pick = pd.concat([g.iloc[rng.permutation(len(g))[:n_eps // 2]] for _, g in inner.groupby("positive")])
+    out = []
+    for r in pick.itertuples():
+        ep = fd.load_episode(r.raw, None, int(r.episode_index))
+        ts = rng.choice(len(ep["actions"]), min(per_ep, len(ep["actions"])), replace=False)
+        out += [(int(r.episode_index), int(t), ep, bool(r.positive)) for t in ts]
+    return out
+
+
 def rms(x, axis):
     return np.sqrt(np.mean(np.square(x), axis=axis))
 
@@ -108,15 +126,15 @@ def boot_ratio_ci(num: pd.Series, den: pd.Series, n=2000, seed=0):
     return [float(np.percentile(m, 2.5)), float(np.percentile(m, 97.5))]
 
 
-def action_test(policy, frames, k, mb):
+def sample_variants(policy, frames, k, mb, variants):
+    """variants: name -> f(ep, t) -> raw sample. Returns (normalised, raw) actions per variant, (k, n, ah, ad), with
+    the SAME noise draws z for every variant (sample_actions is deterministic given z)."""
     ah, ad = policy._model.action_horizon, policy._model.action_dim
-    batches = {}
-    for name, tag in TAGS.items():
-        batches[name] = batch_arrays(policy, [fd.sample(ep, t, tag) for _, t, ep in frames])
+    batches = {name: batch_arrays(policy, [f(ep, t) for _, t, ep in frames]) for name, f in variants.items()}
     n = len(frames)
     noise = np.asarray(jax.random.normal(jax.random.PRNGKey(123), (k, n, ah, ad)), np.float32)
-    acts = {name: np.zeros((k, n, ah, ad), np.float32) for name in TAGS}  # normalised model space
-    for name in TAGS:
+    acts = {name: np.zeros((k, n, ah, ad), np.float32) for name in variants}  # normalised model space
+    for name in variants:
         b = batches[name]
         for j in range(k):
             for i in range(0, n, mb):
@@ -129,11 +147,17 @@ def action_test(policy, frames, k, mb):
                     z = jnp.concatenate([z, jnp.repeat(z[-1:], mb - m, 0)])
                 a = policy._sample_actions(jax.random.PRNGKey(0), obs, noise=z)
                 acts[name][j, i:i + m] = np.asarray(a, np.float32)[:m]
-        log(f"  sampled tag {name}")
+        log(f"  sampled {name}")
     # raw action units through the policy's output transform (unnormalise; keeps the first DIMS dims)
-    state = batches["pos"]["state"]
+    state = next(iter(batches.values()))["state"]
     raw = {name: np.stack([np.stack([policy._output_transform({"actions": acts[name][j, i], "state": state[i]})["actions"]
-                                     for i in range(n)]) for j in range(k)]) for name in TAGS}
+                                     for i in range(n)]) for j in range(k)]) for name in variants}
+    return acts, raw
+
+
+def action_test(policy, frames, k, mb):
+    variants = {name: (lambda ep, t, tag=tag: fd.sample(ep, t, tag)) for name, tag in TAGS.items()}
+    acts, raw = sample_variants(policy, frames, k, mb, variants)
     ep_ids = np.array([e for e, _, _ in frames])
     res = {}
     for space, A in (("norm", acts), ("raw", raw)):
@@ -155,7 +179,37 @@ def action_test(policy, frames, k, mb):
     g_p2 = np.sign(raw["pos"][1:, :, :EXEC, 6]); g_p1 = np.sign(raw["pos"][:-1, :, :EXEC, 6])
     res["gripper_flip_tag"] = float((g_pos != g_neg).mean())
     res["gripper_flip_noise"] = float((g_p1 != g_p2).mean())
-    res["frames"], res["k"] = n, k
+    res["frames"], res["k"] = len(frames), k
+    return res
+
+
+# Prompt test [2026-11-06]: does the policy read its prompt at all? The tag is text in the prompt, so it can only work
+# through the language pathway. Same frames and noise; the task instruction replaced (LIBERO-10 bddl names).
+PROMPTS = {"near": "turn on the stove and put the moka pot on it",            # same objects, different task
+           "far": "put the black bowl in the bottom drawer of the cabinet and close it",
+           "empty": ""}
+
+
+def prompt_test(policy, frames, k, mb):
+    def with_prompt(p):
+        return lambda ep, t: dict(fd.sample(ep, t, None), prompt=p)
+    variants = {"true": lambda ep, t: fd.sample(ep, t, None), **{n: with_prompt(p) for n, p in PROMPTS.items()}}
+    acts, raw = sample_variants(policy, frames, k, mb, variants)
+    ep_ids = np.array([e for e, _, _ in frames])
+    res = {}
+    for space, A in (("norm", acts), ("raw", raw)):
+        ex = {nm: A[nm][:, :, :EXEC, :DIMS] for nm in variants}
+        noise = rms(ex["true"][:-1] - ex["true"][1:], (2, 3)).mean(0)
+        r = {"noise_same_prompt": float(noise.mean())}
+        for nm in PROMPTS:
+            eff = rms(ex["true"] - ex[nm], (2, 3)).mean(0)
+            g = pd.DataFrame({"ep": ep_ids, "eff": eff, "noise": noise}).groupby("ep").sum()
+            r[nm] = {"effect": float(eff.mean()), "ratio_over_noise": float(eff.mean() / noise.mean()),
+                     "ratio_ci95": boot_ratio_ci(g.eff, g.noise), "frames_gt_noise": float((eff > noise).mean())}
+        res[space] = r
+    g_true = np.sign(raw["true"][:, :, :EXEC, 6])
+    res["gripper_flip"] = {nm: float((g_true != np.sign(raw[nm][:, :, :EXEC, 6])).mean()) for nm in PROMPTS}
+    res["prompts"], res["frames"], res["k"] = PROMPTS, len(frames), k
     return res
 
 
@@ -203,24 +257,44 @@ def main():
     ap.add_argument("--arms", nargs="+", default=list(ARMS))
     ap.add_argument("--run", default=None, help="another tagged run to test (name 'tagged'); loss test uses --labels")
     ap.add_argument("--labels", default=str(LABELS), help="labels the tagged run was trained on (loss test)")
+    ap.add_argument("--prompt-test", action="store_true", help="also run the prompt test (instruction swapped)")
+    ap.add_argument("--base", action="store_true", help="also test plain pi05_libero (name 'base'; prompt test only "
+                    "is meaningful: it never saw a tag)")
+    ap.add_argument("--steps", nargs="+", default=["final"], help="checkpoints of --run to test (trainable_<step>; "
+                    "runs trained with --save-every), e.g. 1000 3000 final: when the tag is learned [2026-11-06]")
+    ap.add_argument("--loss-demos", action="store_true", help="[2026-11-06] loss test on the held-out LIBERO demos "
+                    "(all tasks) with --labels = speed labels, for the speed-tag pre-training run")
     a = ap.parse_args()
     if a.run:
         ARMS["tagged"] = Path(a.run)
-        a.arms = ["tagged"] + [x for x in a.arms if x != "C_resnet"]
+        rj = Path(a.run) / "results.json"  # [2026-11-07] --subtask-prompt runs: prompts carry the frame's subtask
+        if rj.exists() and json.loads(rj.read_text())["args"].get("subtask_prompt", False):
+            fd.SUBTASK_PROMPT = True
+            print("run trained with --subtask-prompt: test prompts include the subtask text", flush=True)
+        a.arms = ["tagged"] + [x for x in a.arms if x not in ("C_resnet", "tagged")]
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     vf = val_frames(a.val_eps, a.per_ep)
-    tf = train_frames(a.train_eps, a.train_per_ep, labels=a.labels)
+    tf = (demo_frames(a.train_eps, a.train_per_ep, a.labels) if a.loss_demos
+          else train_frames(a.train_eps, a.train_per_ep, labels=a.labels))
     log(f"{len(vf)} val frames from {a.val_eps} episodes, {len(tf)} train frames "
         f"({sum(l for *_, l in tf)} positive) from {a.train_eps} episodes")
     res = {"setup": vars(a), "labels": a.labels, "arms": {}}
-    for arm in a.arms:
-        log(f"arm {arm}: {ARMS[arm]}")
-        policy, _ = load_finetuned(ARMS[arm], "final", seed=0)
+    todo = [(arm if (arm != "tagged" or len(a.steps) == 1) else f"tagged@{st}", arm, st if arm == "tagged" else "final")
+            for arm in a.arms for st in (a.steps if arm == "tagged" else ["final"])]
+    if a.base:
+        ARMS["base"] = "pi05_libero"
+        todo.append(("base", "base", "final"))
+    for name, arm, step in todo:
+        log(f"arm {name}: {ARMS[arm]} step {step}")
+        policy = base_policy()[1] if arm == "base" else load_finetuned(ARMS[arm], step, seed=0)[0]
         r = {"action": action_test(policy, vf, a.k, a.mb)}
         log(f"  action test: {json.dumps(r['action']['norm'])}")
+        if a.prompt_test:
+            r["prompt"] = prompt_test(policy, vf, a.k, a.mb)
+            log(f"  prompt test: {json.dumps(r['prompt']['norm'])}")
         r["loss"] = loss_test(policy, tf, a.mb)
         log(f"  loss test: {json.dumps(r['loss'])}")
-        res["arms"][arm] = r
+        res["arms"][name] = r
         (out / "results.json").write_text(json.dumps(res, indent=2))
         del policy
         gc.collect()

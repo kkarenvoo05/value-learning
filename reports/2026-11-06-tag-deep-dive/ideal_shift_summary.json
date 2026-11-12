@@ -1,0 +1,182 @@
+{
+  "n_frames": 104049,
+  "full_frames": 103149,
+  "folds": 5,
+  "control_pc1_loading": [
+    -0.2404632866382599,
+    0.1302862912416458,
+    -0.22520703077316284,
+    -0.09833572804927826,
+    -0.16294188797473907,
+    0.07054467499256134,
+    -0.266473650932312,
+    0.146341934800148,
+    -0.25882843136787415,
+    -0.10918668657541275,
+    -0.18274752795696259,
+    0.07486137747764587,
+    -0.27468082308769226,
+    0.1549190729856491,
+    -0.2722241282463074,
+    -0.11122746020555496,
+    -0.19573675096035004,
+    0.07383492588996887,
+    -0.2616039514541626,
+    0.15673041343688965,
+    -0.26158902049064636,
+    -0.10763146728277206,
+    -0.19360728561878204,
+    0.06841984391212463,
+    -0.23325927555561066,
+    0.14880256354808807,
+    -0.23417623341083527,
+    -0.10093779116868973,
+    -0.18179374933242798,
+    0.05873897299170494
+  ],
+  "labels_written": {
+    "control_actresid_pc1_p50": "/iris/u/ankile/karenvo/libero/tables/moka_fixed_fresh/labels/control_actresid_pc1_p50/labels.parquet",
+    "control_actresid_pc1_p50_flip40": "/iris/u/ankile/karenvo/libero/tables/moka_fixed_fresh/labels/control_actresid_pc1_p50_flip40/labels.parquet"
+  },
+  "results": [
+    {
+      "labels": "RECAP faithful (value-binned 40%)",
+      "pos_share": 0.40000384434256936,
+      "ideal_shift_raw": 0.01513342559337616,
+      "ideal_shift_ci95": [
+        0.014856395320950958,
+        0.01541522066257401
+      ],
+      "ideal_shift_arm": 0.005736962892115116,
+      "ideal_shift_gripper": 0.03435731306672096,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.14222516080190992,
+      "auc_S": 0.7881361692043142,
+      "auc_SA": 0.832514067744533,
+      "gain_action_over_state": 0.0805885089504563,
+      "gain_ci95": [
+        0.0734255079744312,
+        0.08767364466635283
+      ]
+    },
+    {
+      "labels": "scoped value-binned 40%",
+      "pos_share": 0.40000384434256936,
+      "ideal_shift_raw": 0.014971967786550522,
+      "ideal_shift_ci95": [
+        0.014722622820973958,
+        0.015213619287222924
+      ],
+      "ideal_shift_arm": 0.005856899078935385,
+      "ideal_shift_gripper": 0.03338530659675598,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.14070776724175318,
+      "auc_S": 0.7567529128274727,
+      "auc_SA": 0.8054737274287463,
+      "gain_action_over_state": 0.07401316209037478,
+      "gain_ci95": [
+        0.0684852427482644,
+        0.07967377798641667
+      ]
+    },
+    {
+      "labels": "oracle outcome",
+      "pos_share": 0.5202260473430788,
+      "ideal_shift_raw": 0.01120589580386877,
+      "ideal_shift_ci95": [
+        0.011018110413537752,
+        0.011387317400832195
+      ],
+      "ideal_shift_arm": 0.0036716917529702187,
+      "ideal_shift_gripper": 0.02653719112277031,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.10531391738115567
+    },
+    {
+      "labels": "CONTROL+ stall flag",
+      "pos_share": 0.12836259839114264,
+      "ideal_shift_raw": 0.029637623578310013,
+      "ideal_shift_ci95": [
+        0.029232546167521765,
+        0.030046581356908582
+      ],
+      "ideal_shift_arm": 0.014392831362783909,
+      "ideal_shift_gripper": 0.06293826550245285,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.2785367895195257
+    },
+    {
+      "labels": "CONTROL- random 40%",
+      "pos_share": 0.40169535507309057,
+      "ideal_shift_raw": 0.003890658263117075,
+      "ideal_shift_ci95": [
+        0.003826933144432192,
+        0.003956790783813603
+      ],
+      "ideal_shift_arm": 0.0017865891568362713,
+      "ideal_shift_gripper": 0.0086754085496068,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.03656472182605533
+    },
+    {
+      "labels": "POSITIVE CONTROL: action-residual PC1 (50%)",
+      "pos_share": 0.5001681899874098,
+      "ideal_shift_raw": 0.04846087098121643,
+      "ideal_shift_ci95": [
+        0.04751091012884391,
+        0.049520541012064954
+      ],
+      "ideal_shift_arm": 0.02915826626121998,
+      "ideal_shift_gripper": 0.08980163931846619,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.4554391948721031,
+      "auc_S": 0.49766208882582014,
+      "auc_SA": 0.7848431342271109,
+      "gain_action_over_state": 0.18857119767881214,
+      "gain_ci95": [
+        0.17694126424844814,
+        0.1993860976366579
+      ]
+    },
+    {
+      "labels": "positive control, 25% flipped",
+      "pos_share": 0.5001874117002566,
+      "ideal_shift_raw": 0.020274590700864792,
+      "ideal_shift_ci95": [
+        0.019934511223112256,
+        0.020651523651947504
+      ],
+      "ideal_shift_arm": 0.012152052484452724,
+      "ideal_shift_gripper": 0.038384001702070236,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.19054224734719177,
+      "auc_S": 0.4948427717278948,
+      "auc_SA": 0.6040608960589662,
+      "gain_action_over_state": 0.02509113918978665,
+      "gain_ci95": [
+        0.02243107700476774,
+        0.027747540293810474
+      ]
+    },
+    {
+      "labels": "positive control, 40% flipped",
+      "pos_share": 0.5027631212217321,
+      "ideal_shift_raw": 0.008157692849636078,
+      "ideal_shift_ci95": [
+        0.008046481099876907,
+        0.008281550279749582
+      ],
+      "ideal_shift_arm": 0.004759390838444233,
+      "ideal_shift_gripper": 0.016136696562170982,
+      "noise_ref_raw": 0.10640470018138264,
+      "ideal_ratio_vs_noise_ref": 0.07666665885745721,
+      "auc_S": 0.5011408196385566,
+      "auc_SA": 0.5110830215937127,
+      "gain_action_over_state": -0.0002038283547541263,
+      "gain_ci95": [
+        -0.0008479914310904661,
+        0.0004949913251002494
+      ]
+    }
+  ]
+}

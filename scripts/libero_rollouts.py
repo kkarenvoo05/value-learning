@@ -14,8 +14,17 @@ The episode loop is a copy of openpi's examples/libero/main.py (215abfb), kept b
      the wait steps, before the first policy action) and end. Row t pairs the observation with the action
      taken from it. --args.split-name labels the rows (train / val)
 Episode order: for each repeat r, for each init state i -> init state i, so every init state gets `repeats`
-trials. Policy sampling noise is not seeded per episode: the server draws it from jax.random.key(0), split on
-every infer call, so it depends on call order within a server's lifetime.
+trials. Policy sampling noise is not seeded per episode by default: the server draws it from jax.random.key(0),
+split on every infer call, so it depends on call order within a server's lifetime.
+  5. --args.matched-noise [ours, 2026-11-06]: every request carries noise_key = [task_id, init_state, repeat, chunk
+     index within the episode]; the server (scripts/serve_pi05_finetuned.py, not openpi's serve_policy.py) draws the
+     start noise from that key (vl.libero_noise), so the same episode gets the same noise in every eval.
+  6. --args.explore-prob p --args.explore-scale s [ours, 2026-11-08, data-variety pilot]: each new action chunk is,
+     with probability p, requested with "noise_scale" = s (the server draws the flow-matching start noise as
+     s * N(0, I); scripts/serve_pi05_finetuned.py, also for --base), otherwise as usual. The choice is drawn from
+     an rng seeded by (explore_seed, task_id, init_state, repeat), so it is reproducible and a resumed episode
+     gets the same choices. raw npz gains `noisy` (T,) = whether step t's chunk was a scaled one, and the run
+     dir gets explore.json. Not with matched noise.
 
 Usage:
     python scripts/libero_rollouts.py --args.task-suite-name libero_10 --args.task-ids 3 \
@@ -27,6 +36,7 @@ import csv
 import dataclasses
 import logging
 import math
+import os
 import pathlib
 from typing import List, Optional
 
@@ -65,6 +75,24 @@ class Args:
     # regions, as the 50 saved init states were drawn) instead of the saved init states; init_states / repeats are
     # ignored, the CSV init_state is -1, and raw sim_init holds the sampled state (replay: set_init_state(sim_init))
     fresh_layouts: int = 0
+    # send noise_key per request so the server draws matched (common-random-numbers) noise; needs our server
+    matched_noise: bool = False
+    # [2026-11-07] preemption-safe: keep the complete rows of an existing episodes.csv in out_dir and run only the
+    # missing (task, init state, repeat) episodes, appending. Episode numbers stay the plan position. Not with
+    # fresh_layouts (their layouts depend on the env RNG's history). Reruns are not bit-identical (GPU / render
+    # nondeterminism: the same matched-noise episode took 383 vs 460 steps in two attempts of 18355679), so a
+    # resumed eval is a valid draw of every episode, not a replay of the interrupted attempt.
+    resume: bool = False
+    # [2026-11-07] send obs["subtask"] = 0 / 1 (no moka pot on the stove yet / at least one, from the BDDL goal
+    # predicates now, i.e. the state the image shows) for runs trained with --subtask-prompt (serve_pi05_finetuned)
+    send_subtask: bool = False
+    # [2026-11-08] exploration: share of chunks sampled with start noise x explore_scale (0 = off)
+    explore_prob: float = 0.0
+    explore_scale: float = 1.0
+    explore_seed: int = 0
+    # [2026-11-10] DSRL (scripts/dsrl_pi05.py): after each episode send {"dsrl_end": 1, "success": 0/1, final
+    # images/state} so the server can store the episode and update its SAC agent (train mode; eval ignores it)
+    dsrl: bool = False
 
 
 def goal_predicates(env):
@@ -77,15 +105,17 @@ def object_pos_keys(obs):
     return sorted(k for k in obs if k.endswith("_pos") and not k.startswith("robot0"))
 
 
-def run_episode(env, client, init_state, task_description, args, max_steps):
-    """One episode, as main.py. Returns (success, policy_steps, error, frames, raw); raw is None unless save_raw."""
+def run_episode(env, client, init_state, task_description, args, max_steps, noise_prefix=None, explore_rng=None):
+    """One episode, as main.py. Returns (success, policy_steps, error, frames, raw); raw is None unless save_raw.
+    explore_rng: with args.explore_prob > 0, draws which chunks are requested with noise_scale = args.explore_scale."""
     obs = env.reset()
     action_plan = collections.deque()
     if init_state is None:  # fresh layout: keep the placement reset() sampled, record it for replay
         init_state = env.get_sim_state()
     else:
         obs = env.set_init_state(init_state)
-    t, policy_steps, done, error, frames = 0, 0, False, "", []
+    t, policy_steps, done, error, frames, chunk = 0, 0, False, "", [], 0
+    noisy = False
     rec = collections.defaultdict(list)
     while t < max_steps + args.num_steps_wait:
         try:
@@ -112,6 +142,14 @@ def run_episode(env, client, init_state, task_description, args, max_steps):
                     "observation/state": state,
                     "prompt": str(task_description),
                 }
+                if args.send_subtask:
+                    element["subtask"] = int(min(int(goal_predicates(env)[:2].sum()), 1))
+                if noise_prefix is not None:  # matched noise: [task_id, init_state, repeat, chunk]
+                    element["noise_key"] = np.array([*noise_prefix, chunk], dtype=np.int64)
+                noisy = explore_rng is not None and bool(explore_rng.random() < args.explore_prob)
+                if noisy:
+                    element["noise_scale"] = float(args.explore_scale)
+                chunk += 1
                 action_chunk = client.infer(element)["actions"]
                 assert len(action_chunk) >= args.replan_steps
                 action_plan.extend(action_chunk[: args.replan_steps])
@@ -124,6 +162,8 @@ def run_episode(env, client, init_state, task_description, args, max_steps):
                 rec["state"].append(state)
                 rec["actions"].append(action)
                 rec["new_chunk"].append(new_chunk)
+                if explore_rng is not None:
+                    rec["noisy"].append(noisy)
                 rec["goals"].append(goal_predicates(env))
                 rec["object_pos"].append(np.concatenate([obs[k] for k in pos_keys]))
             if done:
@@ -133,6 +173,13 @@ def run_episode(env, client, init_state, task_description, args, max_steps):
             logging.error(f"Caught exception: {e}")
             error = repr(e)
             break
+    if args.dsrl and policy_steps > 0:  # final observation: the timeout bootstrap target; success = env done
+        img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
+        img = image_tools.convert_to_uint8(image_tools.resize_with_pad(img, args.resize_size, args.resize_size))
+        state = np.concatenate(
+            (obs["robot0_eef_pos"], _quat2axisangle(obs["robot0_eef_quat"]), obs["robot0_gripper_qpos"]))
+        client.infer({"observation/image": img, "observation/state": state, "dsrl_end": 1,
+                      "success": int(bool(done) and not error)})
     raw = None
     if args.save_raw and policy_steps > 0:
         raw = {k: np.asarray(v) for k, v in rec.items()}
@@ -152,11 +199,30 @@ def main(args: Args) -> None:
     max_steps = MAX_STEPS[args.task_suite_name]
     task_ids = args.task_ids if args.task_ids is not None else list(range(suite.n_tasks))
     client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
+    logging.info(f"matched noise: {args.matched_noise}")
+    explore = args.explore_prob > 0
+    if explore:
+        assert not args.matched_noise, "exploration noise and matched noise together are not supported"
+        assert 0 < args.explore_prob <= 1 and args.explore_scale > 0
+        import json
+        (out / "explore.json").write_text(json.dumps({"prob": args.explore_prob, "scale": args.explore_scale,
+                                                      "seed": args.explore_seed}))
+        logging.info(f"exploration: p {args.explore_prob} scale {args.explore_scale} seed {args.explore_seed}")
 
     csv_path = out / "episodes.csv"
+    # a requeued SLURM job (preempted) resumes even when its stored batch script predates --args.resume
+    resume = args.resume or os.environ.get("SLURM_RESTART_COUNT", "0") not in ("", "0")
+    done_rows = load_done(csv_path) if resume and not args.fresh_layouts else {}
+    if resume and args.fresh_layouts:
+        logging.warning("--args.resume ignored with fresh layouts: starting over")
+    if done_rows:
+        logging.info(f"resume: {len(done_rows)} complete episodes kept from {csv_path}")
     with open(csv_path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=CSV_FIELDS)
         writer.writeheader()
+        for row in sorted(done_rows.values(), key=lambda r: int(r["episode"])):
+            writer.writerow(row)
+        fh.flush()
         episode = 0
         for task_id in task_ids:
             task = suite.get_task(task_id)
@@ -167,8 +233,17 @@ def main(args: Args) -> None:
             plan = ([(r, i, init_states[i]) for r in range(args.repeats) for i in ids] if not args.fresh_layouts
                     else [(r, -1, None) for r in range(args.fresh_layouts)])
             for repeat, i, init in plan:
-                success, steps, error, frames, raw = run_episode(env, client, init, task_description,
-                                                                 args, max_steps)
+                prev = done_rows.get((task_id, i, repeat)) if i >= 0 else None
+                if prev is not None:  # resumed: already complete in an earlier attempt of this job
+                    n += 1
+                    n_ok += int(prev["success"])
+                    episode += 1
+                    continue
+                success, steps, error, frames, raw = run_episode(
+                    env, client, init, task_description, args, max_steps,
+                    noise_prefix=(task_id, i, repeat) if args.matched_noise else None,
+                    explore_rng=(np.random.default_rng([args.explore_seed, task_id, i + 1, repeat, episode])
+                                 if explore else None))
                 video = f"ep{episode:04d}_task{task_id}_init{'fresh' if i < 0 else f'{i:02d}'}_r{repeat}_{'success' if success else 'failure'}.mp4"
                 imageio.mimwrite(out / "videos" / video, [np.asarray(x) for x in frames], fps=10)
                 raw_name = ""
@@ -191,6 +266,22 @@ def main(args: Args) -> None:
             logging.info(f"Task {task_id} ({task_description}): {n_ok}/{n} = {n_ok / n:.3f}")
             env.close()
     logging.info(f"Done: {episode} episodes -> {csv_path}")
+
+
+def load_done(csv_path):
+    """{(task_id, init_state, repeat): row} of the complete rows of an earlier attempt's episodes.csv (a row cut off
+    by preemption mid-write, or one missing a field, is dropped and its episode rerun)."""
+    if not pathlib.Path(csv_path).exists():
+        return {}
+    done = {}
+    with open(csv_path, newline="") as fh:
+        for row in csv.DictReader(fh):
+            if None in row or any(row.get(k) is None for k in CSV_FIELDS) or row["success"] not in ("0", "1"):
+                continue
+            if row["raw"] and not row["raw"].endswith(".npz"):
+                continue
+            done[(int(row["task_id"]), int(row["init_state"]), int(row["repeat"]))] = row
+    return done
 
 
 def _get_libero_env(task, resolution, seed):

@@ -1,0 +1,170 @@
+{
+ "rule": "paired 95% CI vs base 18355478 includes 0 or above; best passing success wins",
+ "scores": [
+  {
+   "n": 330,
+   "success": 0.4303030303030303,
+   "diff": -0.09393939393939393,
+   "ci": [
+    -0.16363636363636364,
+    -0.030303030303030304
+   ],
+   "arm": "grid_d50_orig",
+   "step": "2000",
+   "eval": "eval_grid_d50_orig_s0_at2000_noise1_libero_10_18396164",
+   "passed": false
+  },
+  {
+   "n": 330,
+   "success": 0.5151515151515151,
+   "diff": -0.00909090909090909,
+   "ci": [
+    -0.07878787878787878,
+    0.05757575757575758
+   ],
+   "arm": "grid_d50_orig",
+   "step": "final",
+   "eval": "eval_grid_d50_orig_s0_atfinal_noise1_libero_10_18396165",
+   "passed": true
+  },
+  {
+   "n": 330,
+   "success": 0.41515151515151516,
+   "diff": -0.10909090909090909,
+   "ci": [
+    -0.1787878787878788,
+    -0.04242424242424243
+   ],
+   "arm": "grid_d75_orig",
+   "step": "2000",
+   "eval": "eval_grid_d75_orig_s0_at2000_noise1_libero_10_18396168",
+   "passed": false
+  },
+  {
+   "n": 330,
+   "success": 0.45454545454545453,
+   "diff": -0.0696969696969697,
+   "ci": [
+    -0.13333333333333333,
+    -0.006060606060606061
+   ],
+   "arm": "grid_d75_orig",
+   "step": "final",
+   "eval": "eval_grid_d75_orig_s0_atfinal_noise1_libero_10_18396169",
+   "passed": false
+  },
+  {
+   "n": 330,
+   "success": 0.5121212121212121,
+   "diff": -0.012121212121212121,
+   "ci": [
+    -0.08181818181818182,
+    0.054621212121211016
+   ],
+   "arm": "grid_d50_low",
+   "step": "2000",
+   "eval": "eval_grid_d50_low_s0_at2000_noise1_libero_10_18404065",
+   "passed": true
+  },
+  {
+   "n": 330,
+   "success": 0.4636363636363636,
+   "diff": -0.06060606060606061,
+   "ci": [
+    -0.12727272727272726,
+    0.006060606060606061
+   ],
+   "arm": "grid_d50_low",
+   "step": "final",
+   "eval": "eval_grid_d50_low_s0_atfinal_noise1_libero_10_18396173",
+   "passed": true
+  },
+  {
+   "n": 330,
+   "success": 0.5363636363636364,
+   "diff": 0.012121212121212121,
+   "ci": [
+    -0.04856060606060603,
+    0.07575757575757576
+   ],
+   "arm": "grid_d75_low",
+   "step": "2000",
+   "eval": "eval_grid_d75_low_s0_at2000_noise1_libero_10_18396176",
+   "passed": true
+  },
+  {
+   "n": 330,
+   "success": 0.4696969696969697,
+   "diff": -0.05454545454545454,
+   "ci": [
+    -0.12121212121212122,
+    0.00909090909090909
+   ],
+   "arm": "grid_d75_low",
+   "step": "final",
+   "eval": "eval_grid_d75_low_s0_atfinal_noise1_libero_10_18396177",
+   "passed": true
+  },
+  {
+   "n": 330,
+   "success": 0.4727272727272727,
+   "diff": -0.051515151515151514,
+   "ci": [
+    -0.11818181818181818,
+    0.012121212121212121
+   ],
+   "arm": "grid_d02_low",
+   "step": "2000",
+   "eval": "eval_grid_d02_low_s0_at2000_noise1_libero_10_18404064",
+   "passed": true
+  },
+  {
+   "n": 330,
+   "success": 0.45151515151515154,
+   "diff": -0.07272727272727272,
+   "ci": [
+    -0.1393939393939394,
+    -0.006060606060606061
+   ],
+   "arm": "grid_d02_low",
+   "step": "final",
+   "eval": "eval_grid_d02_low_s0_atfinal_noise1_libero_10_18396977",
+   "passed": false
+  }
+ ],
+ "notes": [],
+ "winner": {
+  "n": 330,
+  "success": 0.5363636363636364,
+  "diff": 0.012121212121212121,
+  "ci": [
+   -0.04856060606060603,
+   0.07575757575757576
+  ],
+  "arm": "grid_d75_low",
+  "step": "2000",
+  "eval": "eval_grid_d75_low_s0_at2000_noise1_libero_10_18396176",
+  "passed": true
+ },
+ "submitted": {
+  "fu_d75_low_seed1_s1": {
+   "train": "18406243",
+   "run": "/iris/u/ankile/karenvo/libero/runs/policy_fu_d75_low_seed1_s1_18406243",
+   "eval_2000": "18406244",
+   "eval_final": "18406245"
+  },
+  "fu_d75_low_tag_s0": {
+   "train": "18406246",
+   "run": "/iris/u/ankile/karenvo/libero/runs/policy_fu_d75_low_tag_s0_18406246",
+   "eval_2000": "18406247",
+   "eval_final": "18406248",
+   "eval_negative": "18406249"
+  },
+  "fu_d75_low_wsucc_s0": {
+   "train": "18406250",
+   "run": "/iris/u/ankile/karenvo/libero/runs/policy_fu_d75_low_wsucc_s0_18406250",
+   "eval_2000": "18406251",
+   "eval_final": "18406252"
+  }
+ }
+}

@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-08",
+  "question": "does exploration noise add action variety without ruining episodes",
+  "jobs": {
+    "control": 18388271,
+    "x1.5": 18388272,
+    "x2.0": 18388273
+  },
+  "rule": "largest scale with success >= control-0.10 (point) and early arm spread ratio >= 1.5",
+  "results": [
+    {
+      "arm": "control",
+      "episodes": 90,
+      "success": 0.6444444444444445,
+      "steps_success": 424.3103448275862,
+      "spread_arm": 0.015499465627881754,
+      "spread_gripper": 0.001391573184920818
+    },
+    {
+      "arm": "x1.5",
+      "episodes": 90,
+      "success": 0.4888888888888889,
+      "steps_success": 422.5,
+      "spread_arm": 0.019017560098588772,
+      "spread_gripper": 0.0027838429038219096,
+      "success_vs_control": -0.15555555555555556,
+      "success_vs_control_ci95": [
+        -0.2669444444444444,
+        -0.04444444444444443
+      ],
+      "noisy_share": 0.49277914758717856,
+      "spread_ratio_arm": 1.2269816621534597,
+      "spread_ratio_gripper": 2.0005005370812126,
+      "qualifies": false
+    },
+    {
+      "arm": "x2.0",
+      "episodes": 90,
+      "success": 0.5666666666666667,
+      "steps_success": 426.6078431372549,
+      "spread_arm": 0.025491044802534373,
+      "spread_gripper": 0.012112731148857294,
+      "success_vs_control": -0.07777777777777778,
+      "success_vs_control_ci95": [
+        -0.20000000000000004,
+        0.05555555555555555
+      ],
+      "noisy_share": 0.49193165638348363,
+      "spread_ratio_arm": 1.6446402356400545,
+      "spread_ratio_gripper": 8.70434360198348,
+      "qualifies": true
+    }
+  ],
+  "choice": "x2.0",
+  "verdict": "x2.0 qualifies; server applies the scale (spread rises with scale)"
+}

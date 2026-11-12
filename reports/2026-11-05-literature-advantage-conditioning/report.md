@@ -43,6 +43,30 @@ text "Advantage: positive" / "Advantage: negative" sits after the (predicted) su
 ambiguous]". Sec. V-D's wording ("30% percentile of values") is ambiguous, but App. A-F states the positive share
 directly: ~30% (pre-training) and ~40% (fine-tuning). Our labels have the opposite positive share.
 
+### How the tag reaches the actions: π*0.6 vs our π₀.₅ fine-tune (added 2026-11-06)
+
+Source: arXiv 2511.14759v2 (HTML), read 2026-11-06. Ours: openpi `Pi0.compute_loss` (`src/openpi/models/pi0.py`),
+which returns only the flow-matching velocity MSE.
+
+| | π*0.6 (RECAP) | ours (`pi05_policy_finetune.py`) |
+|---|---|---|
+| tag form and position | text, "after ℓ̂ but before the (discretized and continuous) actions" (V-B) | text, `"{prompt}. Advantage: {tag}"` |
+| discrete action tokens | **yes**: "trains the entire model end-to-end on continuous actions and discretized tokens (including actions discretized via FAST)" (V-A); CE on FAST tokens, conditioned on I_t (Eqs. 4, 9) | **none** |
+| flow-matching action expert | 860M, conditioned on I_t (f_θ(·, I_t, …), Eq. 4); attends to the backbone | same structure, the only loss |
+| gradient from action expert into backbone | **blocked**: "a stop gradient to prevent the flow-matching action expert from impacting the rest of the model" (V-A, Knowledge Insulation) | **open** (no stop-gradient); LoRA backbone trained only by the flow loss |
+| where the tag is first learned | pre-training (V-D), then task fine-tunes from the pre-trained checkpoint; first fine-tune stage fixes I_t = True (SFT) | a new 5k-step single-task fine-tune |
+| dropout / guidance | 30% (A-F); β = 1 default, CFG applied to flow sampling (Eq. 13); CFG "would not affect the autoregressive part" (fn. 2) | 30%; β 1.5 / 2.5 tested |
+
+*Interpretation (ours, not stated in the paper).* In π*0.6 the backbone learns what the tag means through
+next-token cross-entropy on discrete action tokens placed directly after it: to predict those tokens the backbone
+must carry the tag into the representation of the actions. The action expert then reads a backbone that already
+encodes the tag, and its own loss cannot alter that representation. Our recipe has no discrete action loss, so the
+only signal that can teach the tag is the flow loss through the action expert's attention to the prompt tokens, a
+weaker and indirect path. This fits our measurements (tag effect 2% of noise; the fine-tuned model reads text less
+than base, `reports/2026-11-06-tag-deep-dive/`). Options it suggests: (a) a route that feeds the tag to the action
+expert directly (AdaRMS, running); (b) add a discrete-action (FAST) CE loss on the tokens after the tag, as π*0.6
+does. (b) changes the training objective, so it needs Karen's go.
+
 ## 2. Problem by problem
 
 ### 2a. The policy ignores the tag

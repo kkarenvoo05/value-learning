@@ -1,0 +1,2 @@
+grid_d02_low_s0: train 18396975 -> evals @2000 18396976 @final 18396977 (run /iris/u/ankile/karenvo/libero/runs/policy_grid_d02_low_s0_18396975)
+reference armU @2000 18396978

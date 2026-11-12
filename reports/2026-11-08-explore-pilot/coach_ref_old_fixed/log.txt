@@ -1,0 +1,8 @@
+[    71 s] group 0: {"group": "0", "episodes": 450, "success": 0.5977777777777777, "frames": 51658, "tag_free_r2": 0.9037734270095825, "action_rms": 0.4151245653629303}
+[   101 s]   resnet_valuebinned_p40: shift 0.0160 [0.0156, 0.0164], ratio 0.142, gain 0.0737
+[   118 s]   random 40%: shift 0.0040 [0.0039, 0.004], ratio 0.035, gain nan
+[   155 s]   positive control PC1 (50%): shift 0.0491 [0.0478, 0.0503], ratio 0.436, gain 0.1874
+group  episodes  success                     labels  pos_share  ideal_shift_raw  noise_ref_raw  ideal_ratio_vs_noise_ref  gain_action_over_state
+    0       450   0.5978     resnet_valuebinned_p40     0.4028           0.0160         0.1125                    0.1423                  0.0737
+    0       450   0.5978                 random 40%     0.4005           0.0040         0.1125                    0.0351                     NaN
+    0       450   0.5978 positive control PC1 (50%)     0.5000           0.0491         0.1125                    0.4360                  0.1874

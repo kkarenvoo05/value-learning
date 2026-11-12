@@ -1,0 +1,167 @@
+{
+  "runs": {
+    "control": "/iris/u/ankile/karenvo/libero/runs/explore_pilot_control_libero_10_18388271",
+    "x2.0": "/iris/u/ankile/karenvo/libero/runs/explore_pilot_x2p0_libero_10_18388273",
+    "x3.0": "/iris/u/ankile/karenvo/libero/runs/noise_sweep_x3p0_libero_10_18408588",
+    "x5.0": "/iris/u/ankile/karenvo/libero/runs/noise_sweep_x5p0_libero_10_18408590",
+    "x8.0": "/iris/u/ankile/karenvo/libero/runs/noise_sweep_x8p0_libero_10_18408589",
+    "x2.0_all": "/iris/u/ankile/karenvo/libero/runs/noise_sweep_x2p0_all_libero_10_18408591"
+  },
+  "early_steps": 60,
+  "results": [
+    {
+      "arm": "control",
+      "episodes": 90,
+      "success": 0.6444444444444445,
+      "steps_success": 424.3103448275862,
+      "spread_arm": 0.015499465627881754,
+      "spread_gripper": 0.001391573184920818
+    },
+    {
+      "arm": "x2.0",
+      "episodes": 90,
+      "success": 0.5666666666666667,
+      "steps_success": 426.6078431372549,
+      "spread_arm": 0.025491044802534373,
+      "spread_gripper": 0.012112731148857294,
+      "success_vs_control": -0.07777777777777778,
+      "success_vs_control_ci95": [
+        -0.2111111111111111,
+        0.05555555555555555
+      ],
+      "chunks": {
+        "normal": {
+          "chunks": 4282,
+          "mean_abs_arm": 0.10492949493395451,
+          "gripper_flips_per_chunk": 0.04624007473143391
+        },
+        "noisy": {
+          "chunks": 4146,
+          "mean_abs_arm": 0.10807575097421745,
+          "gripper_flips_per_chunk": 0.08055957549445249
+        }
+      },
+      "noisy_share": 0.49193165638348363,
+      "spread_ratio_arm": 1.6446402356400545,
+      "spread_ratio_gripper": 8.70434360198348,
+      "qualifies": true,
+      "borderline": false
+    },
+    {
+      "arm": "x3.0",
+      "episodes": 90,
+      "success": 0.2777777777777778,
+      "steps_success": 438.28,
+      "spread_arm": 0.07801103398042301,
+      "spread_gripper": 0.17057956080953338,
+      "success_vs_control": -0.36666666666666664,
+      "success_vs_control_ci95": [
+        -0.4888888888888889,
+        -0.24444444444444444
+      ],
+      "chunks": {
+        "normal": {
+          "chunks": 4540,
+          "mean_abs_arm": 0.10032074282275277,
+          "gripper_flips_per_chunk": 0.046255506607929514
+        },
+        "noisy": {
+          "chunks": 4419,
+          "mean_abs_arm": 0.14208468530829235,
+          "gripper_flips_per_chunk": 0.4942294636795655
+        }
+      },
+      "noisy_share": 0.4932470141756892,
+      "spread_ratio_arm": 5.0331434549646765,
+      "spread_ratio_gripper": 122.58037353546702,
+      "qualifies": false,
+      "borderline": false
+    },
+    {
+      "arm": "x5.0",
+      "episodes": 90,
+      "success": 0.0,
+      "steps_success": null,
+      "spread_arm": 0.43056689533098924,
+      "spread_gripper": 0.7819233242558327,
+      "success_vs_control": -0.6444444444444444,
+      "success_vs_control_ci95": [
+        -0.7555555555555554,
+        -0.5333333333333333
+      ],
+      "chunks": {
+        "normal": {
+          "chunks": 4747,
+          "mean_abs_arm": 0.07893101606475375,
+          "gripper_flips_per_chunk": 0.05708868759216347
+        },
+        "noisy": {
+          "chunks": 4613,
+          "mean_abs_arm": 0.5626545461045331,
+          "gripper_flips_per_chunk": 1.716670279644483
+        }
+      },
+      "noisy_share": 0.49284188034188037,
+      "spread_ratio_arm": 27.77946709055885,
+      "spread_ratio_gripper": 561.8988154764745,
+      "qualifies": false,
+      "borderline": false
+    },
+    {
+      "arm": "x8.0",
+      "episodes": 90,
+      "success": 0.0,
+      "steps_success": null,
+      "spread_arm": 1.3998937882641302,
+      "spread_gripper": 2.062656137390633,
+      "success_vs_control": -0.6444444444444444,
+      "success_vs_control_ci95": [
+        -0.7555555555555554,
+        -0.5333333333333333
+      ],
+      "chunks": {
+        "normal": {
+          "chunks": 4747,
+          "mean_abs_arm": 0.07409491590740086,
+          "gripper_flips_per_chunk": 0.05561407204550242
+        },
+        "noisy": {
+          "chunks": 4613,
+          "mean_abs_arm": 1.8809607557592904,
+          "gripper_flips_per_chunk": 1.9566442662042054
+        }
+      },
+      "noisy_share": 0.49284188034188037,
+      "spread_ratio_arm": 90.31884207323138,
+      "spread_ratio_gripper": 1482.2476889765596,
+      "qualifies": false,
+      "borderline": false
+    },
+    {
+      "arm": "x2.0_all",
+      "episodes": 90,
+      "success": 0.5666666666666667,
+      "steps_success": 414.80392156862746,
+      "spread_arm": 0.03371967758808995,
+      "spread_gripper": 0.022507154181673136,
+      "success_vs_control": -0.07777777777777777,
+      "success_vs_control_ci95": [
+        -0.23333333333333336,
+        0.07777777777777777
+      ],
+      "chunks": {
+        "noisy": {
+          "chunks": 8308,
+          "mean_abs_arm": 0.11082919471491234,
+          "gripper_flips_per_chunk": 0.089913336543091
+        }
+      },
+      "noisy_share": 1.0,
+      "spread_ratio_arm": 2.1755380732244167,
+      "spread_ratio_gripper": 16.17389184094821,
+      "qualifies": true,
+      "borderline": false
+    }
+  ],
+  "choice": "x2.0_all"
+}

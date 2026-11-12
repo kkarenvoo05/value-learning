@@ -3,9 +3,9 @@
 # Usage: [BACKBONE=siglip_pi05] [EXTRA="--oof-fold 0"] FEATS=<features.npz> [GAP="20"] [SEED=1] [FIT=<episodes.txt> TAG=half] [INIT=<stage-1 best.pt>] sbatch scripts/libero_resnet.sbatch
 #        [PREP_FRESH_RUN=<runs/fresh...>] [WAIT_FOR=<file>] EVERY=4 DATASET=<table dir> FIT=<episodes.txt> TAG=fresh ...   (frames from scripts/libero_fresh_table.py's table)
 #SBATCH --job-name=job
-#SBATCH --account=move
-#SBATCH --partition=move
-#SBATCH --gres=gpu:1
+#SBATCH --account=iris
+#SBATCH --partition=iris
+#SBATCH --gres=gpu:titanrtx:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=08:00:00

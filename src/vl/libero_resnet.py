@@ -59,6 +59,23 @@ def table_meta(dataset: Path, every: int) -> pd.DataFrame:
     return meta
 
 
+def replace_targets(meta: pd.DataFrame, tg: pd.DataFrame) -> pd.DataFrame:
+    """--targets [2026-11-07, item 3]: the listed frames take the given value (and its nearest bin); every train frame
+    must be listed (val frames keep the MC target, so val metrics stay against the realised return)."""
+    key = ["episode_index", "frame_index"]
+    assert not tg.duplicated(key).any() and tg.value.between(-1, 0).all()
+    m = meta.merge(tg[key + ["value"]].rename(columns={"value": "value_new"}), on=key, how="left",
+                   validate="one_to_one")
+    tr = (m.split == "train").values
+    assert m.value_new.notna().values[tr].all(), "--targets must cover every train frame"
+    has = m.value_new.notna().values
+    m.loc[has, "value"] = m.value_new[has]
+    m.loc[has, "bin"] = np.abs(m.value_new.values[has, None] - CENTERS[None]).argmin(1)
+    print(f"--targets: {has.sum()} of {len(m)} frames take the given target (mean |change| "
+          f"{np.abs(m.value_new[has] - meta.value.values[has]).mean():.4f})", flush=True)
+    return m.drop(columns="value_new")
+
+
 def add_subtask(meta: pd.DataFrame, dataset: Path) -> pd.DataFrame:
     """meta + `subtask` (vl.libero_subtask) read from each episode's raw `goals`."""
     raw_of = pd.read_csv(dataset / "episodes.csv").set_index("episode_index").raw
@@ -254,6 +271,9 @@ def main():
                     help="E2: weight of the pots-on-stove auxiliary CE (SeeQ: 0.1); 0 = off (the model has no aux head)")
     ap.add_argument("--subtask-scoped", action="store_true",
                     help="B1: subtask-scoped target, V conditioned on the subtask (2 x 201 head)")
+    ap.add_argument("--targets", default=None, metavar="PARQUET",
+                    help="[2026-11-07] replace the MC target of the listed frames (episode_index, frame_index, "
+                         "value; e.g. vl.libero_td fitted n-step TD targets); bins = nearest of the 201 centres")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -268,6 +288,9 @@ def main():
         meta = table_meta(Path(a.dataset), a.every)
         arr = pack(meta, Path(a.dataset) / f"frames_every{a.every}.npy", Path(a.dataset))
     print(f"frames {arr.shape} ready in {time.time() - t0:.0f} s", flush=True)
+    if a.targets:
+        assert not (a.subtask_scoped or a.subtask_weight or a.history_gap_frames), "--targets: whole-task V only"
+        meta = replace_targets(meta, pd.read_parquet(a.targets))
     if a.pack_only:
         return
     if "role" in meta.columns:  # stage 1 on demos: inner = held-out demos, also reported as "val"

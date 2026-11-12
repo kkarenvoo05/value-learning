@@ -1937,3 +1937,220 @@ R2 (low lr) 18310773 cancelled at step 4000 on move5 (Karen) and resumed on L40S
 - Tag predictability (`reports/2026-11-05-tag-predictability/`, interactive A5000): the action explains 3.2% of the
   current tag's entropy beyond the state (oracle 2.3%, stall control 12.9%, random 0); 30–40% positive → 7.4–8.1%;
   value-binned 40% → 8.5%; holds on ordinary frames.
+
+### 2026-11-06 — Tag deep dive, part 1: the data supports ~20× the tag effect the models learned
+`reports/2026-11-06-tag-deep-dive/`. Both tagged runs (RECAP 18338571, scoped 18338529 → tag check 18352443) respond to
+the tag no more than never-tagged arm A (tag/noise 0.022 / 0.023 vs 0.026). Ideal shift (`scripts/libero_tag_ideal_shift.py`,
+MLP f(S, ±tag) on the train frames): value-binned 40% labels 0.0151 raw (mostly gripper), floor 0.0039, vs the models'
+0.0008 — the models learned none of the weak signal; caveat: S is weaker than π₀.₅'s view (upper bound). Running [ours]:
+injected-shift positive controls (`--tag-action-shift`, random 50% tags, ±δ on action x): δ 0.1 18352944 → tag check
+18352945, δ 0.02 (RECAP-sized) 18352946 → 18352947; prompt test 18352820 (`--prompt-test --base`). Also: matched-noise
+eval option (`MATCHED_NOISE=1`, `vl/libero_noise.py`); `--stop-after` in the fine-tune; seed-1 step-1000 0.518 (early
+stopping does not replicate); π₀.₅ scoped value-expert `--eval-only` rescoring at 96G: 18352440 → 18352441, 18352442.
+
+### 2026-11-06 17:20 — Discrete action-token loss built (π*0.6-style; Karen: build)
+`--discrete-weight` / `--ki-stop-grad` in `pi05_policy_finetune.py`, code `src/vl/discrete_actions.py` (tests
+`tests/test_discrete_actions.py`). Why: π*0.6 trains CE on discretized action tokens placed right after the advantage
+text, with a stop gradient from the flow expert into the backbone (arXiv 2511.14759 V-A/V-B); openpi's π₀.₅ loss is
+flow-only, so our tag reaches the actions only through the expert's attention (literature report, "How the tag
+reaches the actions"). Tokenizer [ours]: FAST's DCT + scale 10 + round, no BPE (the HF FAST tokenizer needs remote
+code, not run), 70 tokens / chunk, 127-way softmax on reserved PaliGemma ids. GPU selftest 18358367 (TITAN RTX):
+all 8 checks ok; flow two-pass 0.01527 = compute_loss 0.01526; round-trip rms 0.020, 0 clipped; with ki the flow
+loss gives the backbone exactly 0 gradient and the CE gives the expert 0; CE at init 4.841 = uniform 4.844 (no prior
+knowledge of the tokens); CE gradient ~55× the flow gradient on the backbone (5.40 vs 0.10), so runs use ki
+(separate parameter sets). Earlier selftest 18358055 failed check 7 only on a param-grouping bug (SigLIP `Dense_1`
+counted as expert), fixed. No training run started yet.
+- 2026-11-07 **Speed-tag policy pre-training (RECAP two-stage, for the tag) built and queued** (Karen: build). Unlike
+  the 11-02 demo pre-training (value function V on steps-to-success; ResNet halved the milestone, LoRA chain
+  cancelled), this pre-trains the *policy's tag*: all 1,525 fit demos of the 40 LIBERO tasks, own prompts, tag =
+  fastest 30% of each task's demos [RECAP App. A-F 30% per task; episode-level, task baseline, no learned V: ours].
+  Labels `tables/libero_demos/labels/speed_p30/` (`scripts/libero_speed_labels.py`; frame share 0.271; positive demos
+  ~15% shorter; translation |a| 0.313 vs 0.293, within-task corr(length, |trans|) −0.46, so the tag is
+  action-predictable at about the δ = 0.02 control's size). Code: `fd.speed_labels` / `fd.pretrain_demo_episodes`
+  (+3 tests, 229 pass), trainer `--pretrain-demos` / `--init-from` (weights only, fresh optimiser), tag usage
+  `--loss-demos` (loss test on the 168 inner demos). Jobs (one lane, afterany eval 18355679): stage 1 18363753
+  (prompt route + discrete loss + KI, 8,000 steps ≈ 1 epoch, freeze SigLIP, dropout 0.3) → check 18363754 → stage 2
+  18363755 (= 18359337's args + `--init-from` stage 1 final) → check 18363756. Control = 18359337 / 18359339.
+  Also: prompt-route δ = 0.1 control check 18352945: tag effect 0.091, 1.55× noise (AdaRMS 0.091, 1.6×): both routes
+  carry a strong tag equally; δ = 0.02 prompt check 18352947 learned it by step 3000 (0.022, 0.34× noise).
+- 2026-11-07 09:10 **Evals resume after preemption.** iris preempted overnight (PreemptMode REQUEUE); eval 18355679
+  restarted from episode 0 five times (needs ~2 h unbroken; longest stretch 1.5 h). `scripts/libero_rollouts.py`
+  `--args.resume` (also automatic when `SLURM_RESTART_COUNT` > 0, so already-queued jobs with older stored scripts
+  resume): keeps the complete rows of the job's episodes.csv, runs only the missing (task, init, repeat) episodes,
+  episode numbers = plan position; not with fresh layouts. `libero_eval.sbatch` / `pi05_tag_adarms.sbatch` pass it and
+  `tee -a` the client log. +3 tests (stubbed LIBERO). Reruns are not bit-identical (matched noise, same node type:
+  ep 0 of 18355679 took 383 then 460 steps), so a resumed eval is a valid draw of each episode, not a replay. Stage 1
+  18363753's afterany on 18355679 removed (Karen); evals queued: control 18364108, stage 2 18364109 (matched noise
+  seed 1, + tag, val states × 33; base same settings 18355478 = 0.524).
+- 2026-11-07 18:30 **Items 1-4 built and queued on iris (Karen: build 1-4, max 6 GPUs).** Results that set it up:
+  real-label evals AdaRMS 18355679 0.409, prompt + discrete 18364108 0.445 vs base 0.524 (paired −0.115 / −0.079,
+  both CIs below 0); discrete δ 0.1 control 18359338 1.52× noise, weak AdaRMS δ 0.02 control 18361555 0.020 (learned),
+  real discrete 18359339 0.0011. Correction to my message: the tagged runs used R1 (frozen SigLIP, original lr), which
+  passes for arm A, so "the lr hurts" was wrong; item 1 became the data control. Lanes (details docs/CURRENT.md):
+  (1) R1 arm A matched-noise eval 18376075, untagged all-rollout control 18376076 (`--tag-dropout 1.0`, val prompts
+  untagged) → eval 18376077; (2) weighted arm 18376078 → 18376079 [Dissecting]; (3) fitted n-step TD critic
+  [ours: one iteration y = −n/1040 + V0(t+n), V0 = OOF ResNet; `vl.libero_td`, `vl.libero_resnet --targets`,
+  `scripts/libero_td_labels.py`; Dissecting: TD > MC] folds 18376106-10 → candidates td / ens (ResNet + expert) /
+  td_ens, value-binned 40% → offline gate on ideal shift (`libero_tag_ideal_shift.py --candidates --gate`, pass = CI
+  above the current labels') 18376129 → AdaRMS 18376130 → check 18376131 → eval 18376132; (4) real FAST tokenizer
+  (`vl.fast_tokens`: our encoder of physical-intelligence/fast, files read before use, parity checked against the
+  official processor in the selftest; 2048-way restricted softmax, F_MAX 96, masked CE) + subtask text before the tag
+  (`fd.SUBTASKS` from goal predicates; oracle subtask at inference via `--args.send-subtask` / `FT_SUBTASK=1`
+  [ours: pi*0.6 predicts it]; demos carry no subtask) → selftest 18376189 → RECAP-complete run 18376190 → check
+  18376191 → eval 18376192. Round 2 built, not run (`scripts/recap_round2.sh`, `scripts/libero_round2_table.py`,
+  trainer `--table`; dry run tested on both routes). Caveats: TD targets are mildly in-sample (V0 of other folds saw
+  the held-out episodes); lane 4 changes FAST and subtask together. Tests: 244 pass (+12).
+- 2026-11-07 20:30 **Items 1-4 status check (Karen: complete queuing).** All lanes from the 18:30 entry are in the
+  queue; nothing was missing. Done: R1 arm A matched-noise eval 18376075 0.555 vs base 0.524 (+0.030 [−0.036,
+  +0.088]); lane 4 selftest 18376189 passed (FAST CE at init 16.6 vs uniform 7.6); TD fold 0 18376106. Control
+  18376076 preempted at step 0 and requeued. Round 2 (`scripts/recap_round2.sh`) still gated on a round-1 run that
+  matches base; not submitted.
+- 2026-11-08 01:45 **First item results.** Weighted arm eval 18376079 0.524 = base (+0.000 [−0.064, +0.061]). Item 3
+  gate 18376129 exit 3 (best td_vb40 0.0131 < current 0.0151): lane stops. Tag checks: RECAP-complete 18376191
+  1.8% of noise, speed stage 1 18363754 3.3% (speed tag not learned). Pending: evals 18376192, 18376077, 18364109.
+- 2026-11-08 02:45 Item 4 eval 18376192 0.458 vs base 0.524 (−0.067 [−0.133, 0.000]); vs R1 arm A −0.097 [−0.161,
+  −0.033]. Round 2 gate not met. Item 1 run preempted, resumed at step 4000.
+- 2026-11-08 06:15 Item 1 untagged all-rollout control eval 18376077 0.391 vs base 0.524 (−0.133 [−0.197, −0.076]):
+  the failure data explains the tagged runs' drop; tagged runs sit above it (RECAP-complete +0.067 [+0.003, +0.130]),
+  weighting +0.133. Remaining: speed stage 2 18363755 → check 18363756 → eval 18364109.
+- 2026-11-08 10:45 Checks for Karen's questions (no new jobs). All tagged/weighted runs train on 900 rollouts (516
+  success + 384 failure) + 29 demos by design (RECAP); arm A = 516 successes, no demos. vb40 labels: 27.6% of
+  failure frames positive (successes 51.5%), so 33% of "+" frames come from failures. Weighted arm: failure frames
+  keep 40% of the total weight (mean 0.84 vs 1.15). Within one model (prompt RECAP vb40 18338571, older eval
+  settings): + tag 0.442 vs no tag 0.397, +0.045 [−0.015, +0.109]. AdaRMS route strips the tag from the prompt, so
+  AdaRMS + discrete would train the discrete head without a tag (not run). Speed stage 2 18363755 resumed, step 3850.
+- 2026-11-08 11:30 **Success-only diagnostics queued (Karen: both).** Weighted 18387031 → eval 18387032; tagged
+  (prompt, vb40, dropout 0.3) 18387033 → eval 18387034. Same 516 successes as R1 arm A, no demos. Not RECAP (RECAP
+  trains on all data); tests whether the labels add anything over filtering. Item 3 leftovers cancelled by Karen.
+- 2026-11-08 11:45 **Coach test queued (Karen: set it up).** Is V the bottleneck? Hindsight labels (A = realised
+  return − V0, `vl.libero_td.hindsight_labels`, +1 test; 4 s / 8 s lookahead variants) scored for action information
+  by `libero_tag_ideal_shift.py --candidates` → 18387077 → `reports/2026-11-08-coach-test/`. Reading rule in CURRENT.md.
+- 2026-11-08 11:20 **Coach test result (18387077): V is not the bottleneck.** Hindsight labels 0.0091 < current 1 s
+  labels 0.0151 (4 s 0.0102, 8 s 0.0094, outcome 0.0112); `reports/2026-11-08-coach-test/`, findings.md updated.
+  Success-only runs 18387031/33 failed on a comment line in `subsets/train_successes.txt` (fixed); resubmitted
+  18387307 → 18387308 (weighted), 18387309 → 18387310 (tagged).
+- 2026-11-08 12:00 **Data-variety pilot queued (Karen: option A, no policy mix, pilot first).** Exploration noise in
+  `libero_rollouts.py` (p of chunks at start noise × s; +3 tests); `scripts/libero_explore_pilot.py`; arms control /
+  ×1.5 / ×2.0 = 18388271 → 18388272 → 18388273 (30 train states × 3, seed 21). Rule in CURRENT.md.
+- 2026-11-08 14:00 **Data-variety pilot result: ×2.0 qualifies.** Success control 0.644 / ×1.5 0.489 / ×2.0 0.567
+  (paired vs control −0.156, −0.078); early arm spread ratio 1.23 / 1.64 (rule: ≥ −10 pts and ≥ 1.5×). Server
+  applies the scale. `reports/2026-11-08-explore-pilot/`. 450-episode collection waits for Karen's go.
+- 2026-11-08 14:40 **450-episode ×2.0 collection queued (Karen: go).** 18390881 / 18390883, 15 train states × 15
+  repeats each, env seed 22, explore seed 1, split `explore`.
+- 2026-11-08 15:00 **Coach test `--table` mode** (`libero_tag_ideal_shift.py`: per-group scoring on any table, S
+  without expert V, pots from raw goals; 248 tests pass). Old fixed 450 in this mode: 0.0160 (vs 0.0151 all 900).
+  Post-collection chain queued: 18390928 → folds 18390929–33 → 18390934 (labels `explore_vb40` + coach test).
+- 2026-11-08 18:20 **Tagged success-only eval 0.561** (18387310; vs base +0.036 [−0.027, +0.097], vs R1 +0.006):
+  same as untagged success-only. Speed stage 2 tag check 18363756: tag not used (0.015× noise). Explore table built
+  (18390928); OOF folds running.
+- 2026-11-09 18:00 **Contrastive guidance test queued** (Karen: set up + test; Lars direction 2, AG paper).
+  AdaRMS vb40 18355677, w in {0, 2, 4, 8, -4} = 18409259-63 after offline check 18409258. Details in CURRENT.md.
+
+### 2026-11-10 21:15 — Iterated filtered BC round 2 queued (Lars 11-10: "keep successes, more rollouts → ~100%?")
+`scripts/fbc_round2.sh` (SUBMIT=1). Round 1 = R1 arm A `policy_armA_frozensiglip_s0_18310771` (0.555, 18376075).
+Collect with it (no tag), round 1's design [ours]: 30 train states × 15 (18433688/89, env seeds 41/42) + 450 fresh
+layouts (18433690/91, seeds 43/44) → table `tables/moka_fbc_r2` (`libero_round2_table.py`, 18433692) → fine-tune
+FROM BASE on all round-1 + round-2 successes with R1's exact args + `--table` [RECAP Alg. 1 style; ours for filtered
+BC], seeds 0/1 (18433693 / 18433696), plus round-1 recipe seed 1 (18433699) → evals @final then @2000 (330 val trials,
+matched noise seed 1). Time limits lowered for backfill (collect 3 h, train 7.5 h, eval 3 h). First submission
+(18433458-71) cancelled: pinned to iris8, where `nvidia-smi` hangs in D state (GPU driver stuck); iris8 now excluded.
+Read: rising round over round → self-improvement works here, tag failure is a labelling problem; flat ~0.55 → the
+learning step is the limit.
+
+### 2026-11-10 23:00 — Value vs ground truth (Lars 4); DSRL online set up (Lars direction 1); guidance w = 1
+- `scripts/libero_value_vs_gt.py` → `reports/2026-11-10-value-vs-gt/`: 18 episodes / 424 points with A*. Ceiling
+  (Spearman-Brown on split-half) V* 0.97, A* 0.69. corr(A, A*) 0.04–0.14 for every source (best lookahead n = 80),
+  faithful labels 0.10 [0.02, 0.20], random 0.01; corr(V, V*) 0.22–0.29.
+- DSRL: `src/vl/dsrl.py` (port of nakamotoo/dsrl_pi0 pixel SAC, no new packages), `scripts/dsrl_pi05.py` (server,
+  `--selftest` passes), `libero_rollouts.py --args.dsrl`, `libero_eval.sbatch DSRL_MODE`. Smoke on the interactive
+  L40S (3 episodes): works; ~6 ms per SAC update (UTD 20 → ~12 s per episode) + ~23 s rollout. Full run
+  **18434524** (30 train states × 60 = 1800 episodes, checkpoint every 100, 30 h limit) after the round-2 collectors.
+  `reports/2026-11-10-dsrl-online/report.md`.
+- Contrastive guidance w = 1 on AdaRMS vb40 (**18434522**, after the w = 8 rerun 18432563). w 0/2/4/−4 done
+  (0.385 / 0.348 / 0.497 / 0.230); w 8 partial 58/92 before 18409261 failed.
+
+### 2026-11-11 01:50 — Advantage Guidance: w 8 beats base; control, residual parameterisation queued
+
+- **Contrastive guidance w 8** on AdaRMS vb40 18355677 (18432563, running): 0.664 on 214/330, **+0.164 [+0.084,
+  +0.243] paired vs base**; w 0 −0.139, w 2 −0.176, w 4 −0.027, w −4 −0.294. First arm above base. First 92 trials
+  replay the failed 18409261 exactly (deterministic matched-noise evals). w 1 (18434522) cancelled (Karen).
+- **Null control** (Karen: prioritise the AG work): new label set `control_shuffled_vb40` (vb40 sequences permuted
+  across episodes); same AdaRMS recipe: train 18438131 -> w 8 eval 18438132.
+- **Residual parameterisation** (AG Sec. 6.2) built: `scripts/pi05_ag_residual.py` (frozen base pi0.5 + 512x4 AdaLN
+  head on the action-expert features, zero-init output, y = ±1 tags, dropout 0), `PY_SCRIPT` and matched-shift
+  `FT_SHIFT_TARGET` in `pi05_tag_adarms.sbatch`, residual runs accepted by `pi05_contrast_check.py`. Chain
+  `scripts/ag_residual_chain.sh`: selftest 18438161 -> train 18438185 -> check 18438186 -> eval @shift 0.99
+  18438187 -> AdaRMS w 16 18438188 -> residual @shift 0.57 18438189.
+- Round-2 lane 3 (`fbc_r1_s1`, 18433699) **held** for the GPU cap; release with `scontrol release 18433699`.
+- Paper deep dive + imagination gate plan: `reports/2026-11-11-advantage-guidance/report.md`.
+
+### 2026-11-11 06:00 — w 8 final; residual selftest fixes; iris10 bad
+
+- **w 8 final** (18432563, 330/330): 0.658 vs base 0.524, **+0.133 [+0.070, +0.197] paired**. Gain uneven across
+  states (42: +0.52, 17: +0.36; 44: −0.24, 9: −0.09).
+- Residual selftest: 18438161 failed (`nnx.LayerNorm` without affine stores `Param(None)` → functional LN);
+  18439043 failed on iris10 (uncorrectable ECC, no CUDA device); 18439175 passed checks 1-4, then host OOM in
+  check 5 (grad fn closed over frozen weights → constants in each executable; now passed as arguments).
+  Resubmitted 18441001; train 18438185 re-chained afterok on it.
+- iris10 added to the default exclude in `pi05_tag_adarms.sbatch` and `ag_residual_chain.sh`. Round-2 lane 1
+  18433693 had also died there: resubmitted 18441002, eval 18433694 re-chained.
+- Selftest 18441001 **all ok** (peak host RAM 7.5 GB, was 91); residual train 18438185 now waiting only for a GPU.
+
+### 2026-11-11 09:20 — status
+- Residual train 18438185 done (5000 steps, 3.1 h; val loss 0.0070); contrast check 18438186 running -> evals 18438187-89.
+- Control 18438131 preempted twice, resumed from step 2000 (now ~2850/5000) -> w 8 eval 18438132.
+- DSRL 18434524 requeued at 06:51 after 443 episodes and **restarted with a fresh agent** (not resumable; buffer in
+  memory). Life 1: 0.587 over 443 eps; life 2: 0.542 over 330 eps; 100-episode blocks 0.51-0.64, no upward trend.
+  Note: agent_100/200/300.pkl now belong to life 2, agent_400.pkl to life 1.
+- Round-2 lane 1 rerun 18441002 at step 1800; lane 2 18433696 at 4500.
+
+### 2026-11-11 10:15 — week-9 page: "Since Nov 10" section; DSRL rising; round-2 s1 requeued
+- Page: `week09.json["since"]` + `scripts/site_since_data.py` → `week09_since_data.json`; `build_site.py since_html`
+  (Lars feedback table, AG chart + shift-vs-w, DSRL per-cycle curve, follow-ups, noise / value-vs-GT / round-2
+  collection, running jobs, next experiments). Built; publish blocked on expired gcloud auth.
+- DSRL 18434524, per cycle (30 train states once): both agent lives ~0.45-0.65 for ~13 cycles, then rising; life 2
+  last 3 cycles 0.793 (87 eps) vs base 0.598 on the same states (training-time, stochastic actor).
+- Residual @shift 0.99 (18438187), partial 90/330 (9 per state): 0.756 vs AdaRMS w 8 0.633 on the same trials,
+  +0.122 [-0.011, +0.256]. Residual contrast check: shift/noise 0.17 / 0.31 / 0.50 / 0.93 / 1.64 at w 1/2/4/8/16
+  (AdaRMS 0.14 / 0.30 / 0.57 / 0.99); eval w = 9.257.
+- Round-1 filtered-BC policy during round-2 collection: fixed 0.576 vs base 0.598 (same states), fresh 0.578 vs 0.549.
+- 18433696 (round-2 s1) TIMEOUT at 7.5 h (~step 4500): `scontrol requeue` (resumes from step 4000); eval 18433697
+  re-chained afterok.
+- 10:45 Interactive L40S (18433211, 16 GB RAM) cannot run evals: DSRL eval and AdaRMS w 16 servers both OOM-killed
+  while restoring the pi05 checkpoint (cgroup peak 16 GB; sacct MaxRSS 6.5-8.5 GB misses the restore spike).
+  Slurm instead, same lane: 18438187 → DSRL agent snapshot `agent_snapshot_ep971.pkl` eval **18445300** → w 16
+  **18445301** (replaces cancelled 18438188) → 18438189.
+
+### 2026-11-11 11:55: residual final, DSRL held-out eval running
+- Residual AG (18438187, final, 330 trials): 75.4%, +23.0 [+16.4, +30.0] vs base; vs AdaRMS w 8 on the same trials +9.7 [+3.0, +16.7]. w 9.26 was picked offline to match AdaRMS w 8's action shift (0.99 x noise), not on these trials.
+- Round-2 seed 1 train 18433696 completed after requeue; its eval 18433697 running (iris10, healthy GPU).
+- DSRL held-out eval 18445300 (snapshot ep 971) started 11:47 on iris5; w16 18445301 and residual shift057 18438189 follow. Page now shows the DSRL eval (paired vs base) when it lands; rebuilt and published.
+
+### 2026-11-11 15:30: DSRL held-out, round 2 seed 1, w16 partial, seed-0 eval fix
+- DSRL held-out eval 18445300 (ep 971 snapshot): 67.9%, +15.4 [+8.5, +22.1] vs base; residual vs DSRL paired +7.6 [+1.2, +13.9].
+- Round 2 seed 1 (train 18433696): final 18433697 50.6% (−1.8 vs base, −4.8 [−11.2, +1.5] vs R1 55.5%); step 2000 18433698 39.7%. No climb.
+- Round 2 seed 0 evals 18433694/95 FAILED: fbc_round2.sh pointed them at the dead train run 18433693, not the rerun 18441002. Resubmitted 18451198 (final), 18451199 (step 2000) on policy_fbc_r2_s0_18441002; removed the empty failed dirs.
+- w16 18445301 partial 143/330: 77.6%, +25.9 vs base; on the same 142 trials +12.0 [+2.8, +21.1] vs w8 and +4.2 [−4.9, +13.4] vs residual.
+- Control train 18438131 done; eval 18438132 running (dir eval_adarms_shufvb40_cg8_*; site glob fixed).
+- Page: new future rows (anchor swap, residual seed 2 + shuffled residual), DSRL card held-out result, round-2 result. Watcher bgu6ossn1 republishes as evals finish.
+
+### 2026-11-11 16:30
+- DSRL 18434524 finished all 1800 episodes (15:51; a requeue at 15:54 found 1800 done and exited). Training success 69.1% overall; life-2 last 3 cycles 82.2%. Final agent copied to agent_final_ep1800.pkl; held-out eval 18452292 queued (same settings as 18445300).
+- Partials: w16 264/330 74.2% (+7.6 [+0.4, +14.8] vs w8, −0.4 vs residual on the same trials); shuffled-label control w8 120/330 40.0% (−25.8 [−37.5, −14.2] vs real-label w8 on the same trials); round 2 seed 0 final 152/330 45.4% (base 52.6% on the same trials).
+
+### 2026-11-11 17:00: mentor meeting follow-ups (residual w16, gallery)
+- Mentor (Nov 11 pm): run rollout rounds with the current best policy (100 eps/round, 5-10 rounds); IQL in parallel; "always be visualizing" (base vs guided rollouts, failure cases, episode length); fewer runs, deeper understanding.
+- Residual w 16 eval queued: 18452438 (afterany AdaRMS w16 18445301); 18438189 (w4 shift) re-chained after it. Picks the collection policy for the rounds.
+- Gallery: `scripts/site_gallery.py` -> value-learning/gallery-residual/ (330 paired videos base vs residual shift099, last-frame posters, failure contact sheets, length charts). Fixed 113 / broken 37 / both fail 44 / both succeed 136; successes 12.3 steps shorter on the 136 both-solve trials [-20.6, -3.9]. Eyeball read of the 81 guided failures: nearly all have pot 1 on the stove; ~half stall at the second grasp, ~a third at the final placement, a handful knock a pot over.
+- Wrist view [2026-11-11]: reran states × repeats 0–2 (30 pairs) with --args.save-raw (runs viz_base_raw_noise1_libero_10_18453193, viz_residual_shift099_raw_noise1_libero_10_18453194); `scripts/gripper_viz.py` (videos + grasp/freeze metrics) and `scripts/gripper_report.py` -> value-learning/gripper-viz/, also a "Wrist view" section and per-card wrist buttons on gallery-residual. Base 15/30, guided 24/30. Guidance removes the *closed freeze* (gripper closed on a handle, still, no lift ≥ 3 s: base 12/30 episodes, 11 of its 15 failures; guided 0/30); it is not faster to grasp (first close at median step 118 vs 115) and does not need fewer second-pot attempts (1.08 vs 1.20). Guided failures: 4 pots left on their side (base 0; 3 during placement on the stove), open-hand hovers at the second pot (≥ 3 s in 5 guided vs 2 base episodes). Reruns are not bit-reproducible (outcome matched the gallery on 25/30 base, 17/30 guided).
+- Open design questions for the rounds (labels per round, v_ref per round, collection states) sent to Karen.
+
+### 2026-11-11 18:30: residual rollout rounds built (dry run only, not submitted)
+- `scripts/ag_rounds.sh` (SUBMIT=1 submits; ROUNDS default 5, max 8; SHIFT default 0.99; EVAL_EVERY; DEP_START): per round, collect 100 episodes with the previous residual policy at matched shift (30 train states x 2 + 40 fresh, ordinary noise, new env/noise seeds) -> table (`libero_round2_table.py`) + labels -> residual head retrained from zero init on all rounds (round 0's args + `--table`) -> contrast check -> 330-trial eval; next round's collection runs beside the eval.
+- `scripts/libero_round_labels.py`: V on new episodes from the OOF fold model that never saw the scene (no refit), value-binned 40% cut within each round. Tested on 100 round-2 filtered-BC episodes (scratch): round-0 vb40 reproduced exactly; 99.8% of round-0 frame labels unchanged when a round is added; new-episode MAE 0.198; trainer label checks pass; 5.8 min on a TITAN.
+
+### 2026-11-11 21:45: 9 residual rounds submitted (Karen: "lift the cap and submit 9 rounds")
+- `libero_round2_table.id_base`: rounds >= 10 start at 1,100,000 (skip demo ids 1,000,000+; rounds 2-9 unchanged); `ag_rounds.sh` cap removed, `START_ROUND` / `PREV_T` / `PREV_K` resume added. pytest 251 pass.
+- Submitted rounds 1-3 (18460302-19: r1 collect 18460302/03, label 18460304, train 18460305, check 18460306, eval 18460307; r2 18460308-13; r3 18460314-19). Hit the iris QOS submit limit (25 per user) in round 4: its 4 partial jobs 18460320-23 cancelled.
+- `scripts/ag_rounds_feed.sh 4 9 18460317 18460318` (background, interactive node iris2) submits each later round when <= 19 jobs are queued; stops on any failed round job. Log: `/iris/u/ankile/karenvo/libero/logs/ag_rounds_feed.log`.
+- Same session: DSRL final agent (ep 1800, 18452292) 86.1% held-out (+10.6 [+4.8, +16.7] vs residual 75.4%); residual w16 65.8%, shift 0.57 69.7% (0.99 is the peak); shuffled-label AdaRMS w8 36.3% on 289/330 (-30.4 vs real labels); filtered BC round 2 s0 44.2% / 48.8% (below round 1 on both seeds).

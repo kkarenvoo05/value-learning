@@ -32,11 +32,11 @@
  ],
  "plan": [
   {
-   "t": "**Policy results:** no gain, and worse than no fine-tune. Base π₀.₅ 56.4%; success-only 40.6%; advantage-tagged 40.9% (+ tag) / 43.0% (− tag), same 330 held-out trials. The tagged policy also ignores its tag. Next: a fine-tune recipe that does not hurt, then labels.",
+   "t": "**Policy results:** no gain, and worse than no fine-tune. Base π₀.₅ 56.4%; success-only 40.6%; advantage-tagged 40.9% (+ tag) / 43.0% (− tag), same 330 held-out trials. The tagged policy ignores its tag, and so does an oracle-tagged one. Two recipes no longer hurt (frozen vision encoder and 10× lower lr, both 52.1%); next, tags on top of them.",
    "status": "settled",
    "ev": [
-    "#base-vs-finetuned",
-    "Base-vs-fine-tuned card"
+    "#recipe-fixes",
+    "Recipe-fixes card"
    ]
   },
   {
@@ -86,7 +86,7 @@
  ],
  "directions": [
   {
-   "t": "**Truncated π₀.₅ value function (SmolVLA idea):** first result (seed 0): reading only the first 4 of 18 layers is the steadiest π₀.₅ value function so far (0.180 vs 0.152) at a small accuracy cost (MAE 0.169 vs 0.160); 9 layers ≈ all 18. Needs 2 more seeds.",
+   "t": "**Truncated π₀.₅ value function (SmolVLA idea):** reading only the first 4 of 18 layers is steadier on all 3 seeds (0.184 ± 0.006 vs 0.152), at a small accuracy cost (MAE 0.170 vs 0.160); 4 layers + LoRA 0.169. Still below the ResNet (0.247). Not yet run: the 16–17-layer cut that the per-layer probe points to.",
    "ev": [
     "#truncated-expert",
     "Truncated-expert card"
@@ -121,6 +121,34 @@
  },
  "findings": [
   {
+   "id": "recipe-fixes",
+   "date": "2026-11-05",
+   "status": "running",
+   "title": "Two fine-tune recipes no longer hurt the policy",
+   "question": "The original fine-tune drops π₀.₅ from 56.4% to ~41%. Does a frozen vision encoder, a 10× lower learning rate, or stopping earlier keep the base policy's success rate? (Success-only arm, same 330 trials as base.)",
+   "verdict": [
+    "**Frozen vision encoder:** 172/330 = **52.1%**, −4.2 points vs base (95% CI −10.6 to +2.4).",
+    "**10× lower learning rate:** 172/330 = **52.1%**, −4.2 points (95% CI −11.2 to +2.7). The totals tie, but the two recipes win on different scenes.",
+    "Both meet the bar we set: within ~5 points of base, with the interval covering 0. The original recipe was −15.8 (−22 to −9).",
+    "**Earlier checkpoints** (original recipe, evaluated at step 1000 and 3000): running. Does the drop grow with training?",
+    "Next: a tag run on a recipe that doesn't hurt."
+   ],
+   "source": "runs/eval_armA_frozensiglip_libero_10_18310772, eval_armA_lowlr_libero_10_18315374, eval_armA_ckpt1000_libero_10_18310776 vs eval_base_libero_10_18309278; scene-stratified paired bootstrap, 4000 resamples"
+  },
+  {
+   "id": "oracle-tag",
+   "date": "2026-11-05",
+   "status": "settled",
+   "title": "Even a perfect tag is ignored",
+   "question": "Is the tag ignored because the labels are weak, or because the policy can't learn a tag at all? Fine-tune with the true rollout outcome as the tag.",
+   "verdict": [
+    "**Ignored.** Flipping the oracle tag moves the action by **2.1%** of the policy's own sampling noise. The success-only policy, which never saw a tag, moves 2.6%.",
+    "The training loss is the same with the correct and the flipped tag (0.00703 vs 0.00703).",
+    "So weak labels are not the whole story: with this recipe (~52% positive, no tag dropout), even a perfectly informative tag is not learned. Caveat: the oracle tag was one value per episode, so it did not test per-step conditioning."
+   ],
+   "source": "runs/policy_armC_oracle_s0_18310224, runs/tag_usage_18310225"
+  },
+  {
    "id": "base-vs-finetuned",
    "date": "2026-11-04",
    "status": "settled",
@@ -150,17 +178,17 @@
   },
   {
    "id": "truncated-expert",
-   "date": "2026-11-04",
-   "status": "running",
-   "title": "Truncated π₀.₅ value function: fewer layers, less flicker (1 seed)",
+   "date": "2026-11-05",
+   "status": "settled",
+   "title": "Truncated π₀.₅ value function: 4 layers is steadier on all 3 seeds",
    "question": "SmolVLA drops the top half of its language model and loses little. Does a π₀.₅ value function that reads only the first 4 or 9 of the 18 language-model layers flicker less, and is it still as accurate?",
    "verdict": [
-    "**All 18 layers:** steadiness 0.152, MAE 0.160. **First 9:** 0.158, 0.162. **First 4:** **0.180**, 0.169 (seed 0, 120 held-out rollouts, same recipe).",
-    "Flicker falls with every cut (step-to-step noise 0.101 → 0.092 → 0.085), and accuracy drops only a little. Pot-on-stove response is similar (+0.03–0.04).",
-    "The 4-layer model is the steadiest π₀.₅ value function so far, but still below the ResNet (0.247), and one seed is not enough: the bar we set was clearly above the full model's 0.166 ± 0.025 (3 seeds).",
-    "Next: 2 more seeds of the 4- and 9-layer models."
+    "**First 4 layers, 3 seeds:** steadiness **0.180 / 0.182 / 0.191** (mean 0.184 ± 0.006), MAE 0.169 / 0.170 / 0.171. **All 18 layers:** 0.152, MAE 0.160. **First 9 (seed 0 only):** 0.158, 0.162.",
+    "So cutting to 4 layers lowers the flicker on every seed (step-to-step noise 0.101 → 0.083), at a cost of ~0.01 MAE. It is the steadiest π₀.₅ value function so far, but still well below the ResNet (0.247).",
+    "**4 layers + LoRA** (seed 0): 0.169, MAE 0.166. That's steadier than LoRA on all 18 layers (0.133, MAE 0.155) but less steady than frozen 4 layers, so LoRA trades the steadiness back for a little accuracy. The pot-on-stove bump is gone.",
+    "The 4- and 9-layer cuts came from SmolVLA's \"keep the first half\" before the per-layer probe. The probe puts the flicker in the last 1–2 layers (states 17–18), which points to a cut at 16–17 layers. That cut has not been run. The probe also doesn't explain why 4 layers beats 9: a single-layer head is equally steady at every layer up to 15, so the gain comes from what the value expert reads, not from one steadier layer."
    ],
-   "source": "runs/value_expert_trunc{4,9}_fixedfresh_w256_s0_*; reports/2026-11-04-truncated-value-expert/"
+   "source": "runs/value_expert_trunc4_fixedfresh_w256_s{0,1,2}_* (18291640, 18309645, 18309646), value_expert_trunc9_*_s0_18291639, value_lora_trunc4_*_s0_18309647; reports/2026-11-04-truncated-value-expert/"
   },
   {
    "id": "layer-probe",
@@ -171,7 +199,7 @@
    "verdict": [
     "**Layers 0–15 are about equally steady** (0.14–0.16; layer 0 0.156 ± 0.019, layer 13 0.152 ± 0.006). It drops only at the top: layer 17 0.122, layer 18 **0.107**, final 0.116.",
     "The response to the first pot landing on the stove disappears at the same depth (+0.05 at layers 0–15, ~0 at 17+).",
-    "**Accuracy barely changes with depth** (MAE 0.173–0.178, 0.184 at layer 18). Separating successes from failures is best in the middle (AUC 0.837 at layer 13 vs 0.797 at layer 0).",
+    "**Accuracy barely changes with depth** (MAE 0.173–0.178, 0.184 at layer 18). Separating successes from failures is best in the middle (AUC 0.837 at layer 13 vs 0.797 at layer 0). This is for a small 2-layer head reading one averaged layer at a time. The full π₀.₅ value expert, which attends to every layer's tokens, does gain accuracy from the language model: MAE 0.215 with the vision encoder alone (1 seed), 0.170 with 4 layers, 0.160 with all 18.",
     "**The earlier probe's \"steady fall from layer 1\" was small-data noise.** Rerun on the same 375 fixed-layout episodes: layer 0 0.107 ± 0.023, layers 1–17 0.079–0.094 (the layer 0 → 1 drop is ~1 sd), final 0.055. On both sets the final layer is worst and the earlier layers are about equal; with more layout variety every layer is steadier and the drop sits clearly at the top."
    ],
    "source": "/move/u/karenvo/libero_features/p1c_hidden_18288157/analysis_fixedfresh.json (job 18305897; hidden states 18298946); analysis_fixed.json (job 18306065)"

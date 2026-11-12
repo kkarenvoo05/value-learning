@@ -1,0 +1,12 @@
+{
+  "candidate_pairs": 9600,
+  "eligible_no_event_pairs": 6802,
+  "cohorts": {
+    "jump": 12,
+    "placement": 12,
+    "random": 12,
+    "steady": 12
+  },
+  "contact_sheet": "/move/u/karenvo/libero_features/layer_diagnosis_20261105/jump_contact_sheet.png",
+  "note": "Pairs were selected using seed 0; feature distances and images are diagnostic observations, not causal proof."
+}

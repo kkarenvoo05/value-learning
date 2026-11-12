@@ -1,0 +1,996 @@
+{
+ "ag": {
+  "base": 0.5242,
+  "rows": [
+   {
+    "label": "No tag (w 0)",
+    "group": "adarms",
+    "note": "the checkpoint's own tag-dropout branch = v_ref",
+    "job": "18409259",
+    "n": 330,
+    "success": 0.3848,
+    "diff": -0.1394,
+    "lo": -0.2061,
+    "hi": -0.0758,
+    "complete": true,
+    "states_up": 2,
+    "states_down": 8,
+    "pending": false
+   },
+   {
+    "label": "Plain + tag (RECAP-style)",
+    "group": "adarms",
+    "note": "v(+) only, no contrast",
+    "job": "18355679",
+    "n": 330,
+    "success": 0.4091,
+    "diff": -0.1152,
+    "lo": -0.1848,
+    "hi": -0.0485,
+    "complete": true,
+    "states_up": 2,
+    "states_down": 8,
+    "pending": false
+   },
+   {
+    "label": "w 2",
+    "group": "adarms",
+    "note": "action shift 0.30 x noise",
+    "job": "18409260",
+    "n": 330,
+    "success": 0.3485,
+    "diff": -0.1758,
+    "lo": -0.2424,
+    "hi": -0.1091,
+    "complete": true,
+    "states_up": 1,
+    "states_down": 8,
+    "pending": false
+   },
+   {
+    "label": "w 4",
+    "group": "adarms",
+    "note": "action shift 0.57 x noise",
+    "job": "18409262",
+    "n": 330,
+    "success": 0.497,
+    "diff": -0.0273,
+    "lo": -0.0879,
+    "hi": 0.0364,
+    "complete": true,
+    "states_up": 3,
+    "states_down": 5,
+    "pending": false
+   },
+   {
+    "label": "w 8",
+    "group": "adarms",
+    "note": "action shift 0.99 x noise",
+    "job": "18432563",
+    "n": 330,
+    "success": 0.6576,
+    "diff": 0.1333,
+    "lo": 0.0697,
+    "hi": 0.197,
+    "complete": true,
+    "states_up": 8,
+    "states_down": 2,
+    "pending": false
+   },
+   {
+    "label": "w 16",
+    "group": "adarms",
+    "note": "action shift ~2 x noise (job 18445301)",
+    "job": "18445301",
+    "n": 319,
+    "success": 0.7461,
+    "diff": 0.2257,
+    "lo": 0.1599,
+    "hi": 0.2915,
+    "complete": false,
+    "states_up": 9,
+    "states_down": 0,
+    "pending": false
+   },
+   {
+    "label": "w -4 (sign control)",
+    "group": "adarms",
+    "note": "guidance pointed the wrong way",
+    "job": "18409263",
+    "n": 330,
+    "success": 0.2303,
+    "diff": -0.2939,
+    "lo": -0.3545,
+    "hi": -0.2303,
+    "complete": true,
+    "states_up": 0,
+    "states_down": 9,
+    "pending": false
+   },
+   {
+    "label": "Residual, shift of AdaRMS w 8",
+    "group": "residual",
+    "note": "frozen pi0.5 + zero-init AdaLN head; w 9.26 gives shift 0.99 x noise",
+    "job": "18438187",
+    "n": 330,
+    "success": 0.7545,
+    "diff": 0.2303,
+    "lo": 0.1606,
+    "hi": 0.297,
+    "complete": true,
+    "states_up": 7,
+    "states_down": 3,
+    "pending": false
+   },
+   {
+    "label": "Residual, w 16",
+    "group": "residual",
+    "note": "shift 1.64 x noise (job 18452438)",
+    "pending": true
+   },
+   {
+    "label": "Residual, shift of AdaRMS w 4",
+    "group": "residual",
+    "note": "shift 0.57 x noise",
+    "pending": true
+   },
+   {
+    "label": "Shuffled labels, w 8",
+    "group": "control",
+    "note": "same recipe, vb40 labels permuted across episodes (demos still +)",
+    "job": "18438132",
+    "n": 171,
+    "success": 0.3801,
+    "diff": -0.1462,
+    "lo": -0.2398,
+    "hi": -0.0526,
+    "complete": false,
+    "states_up": 3,
+    "states_down": 6,
+    "pending": false
+   }
+  ]
+ },
+ "res_vs_ada": {
+  "n": 330,
+  "residual": 0.755,
+  "adarms": 0.658,
+  "diff": 0.097,
+  "lo": 0.03,
+  "hi": 0.167
+ },
+ "shift": {
+  "AdaRMS vb40": [
+   {
+    "w": 1.0,
+    "ratio": 0.137,
+    "flip": 0.0037
+   },
+   {
+    "w": 2.0,
+    "ratio": 0.295,
+    "flip": 0.0102
+   },
+   {
+    "w": 4.0,
+    "ratio": 0.574,
+    "flip": 0.0218
+   },
+   {
+    "w": 8.0,
+    "ratio": 0.992,
+    "flip": 0.038
+   }
+  ],
+  "Residual": [
+   {
+    "w": 1.0,
+    "ratio": 0.171,
+    "flip": 0.0037
+   },
+   {
+    "w": 2.0,
+    "ratio": 0.305,
+    "flip": 0.0069
+   },
+   {
+    "w": 4.0,
+    "ratio": 0.504,
+    "flip": 0.0093
+   },
+   {
+    "w": 8.0,
+    "ratio": 0.927,
+    "flip": 0.0171
+   },
+   {
+    "w": 16.0,
+    "ratio": 1.641,
+    "flip": 0.0255
+   }
+  ]
+ },
+ "followup": {
+  "base": 0.5242,
+  "rows": [
+   {
+    "label": "Recipe, seed 0, step 2000 (page result)",
+    "group": "untagged",
+    "note": "demos 75%, 10x lower lr",
+    "job": "18396176",
+    "n": 330,
+    "success": 0.5364,
+    "diff": 0.0121,
+    "lo": -0.0485,
+    "hi": 0.0758,
+    "complete": true,
+    "states_up": 5,
+    "states_down": 5,
+    "pending": false
+   },
+   {
+    "label": "Recipe, seed 1, step 2000",
+    "group": "untagged",
+    "note": "same recipe, training seed 1",
+    "job": "18406244",
+    "n": 330,
+    "success": 0.497,
+    "diff": -0.0273,
+    "lo": -0.0939,
+    "hi": 0.0364,
+    "complete": true,
+    "states_up": 6,
+    "states_down": 3,
+    "pending": false
+   },
+   {
+    "label": "Recipe, seed 1, final",
+    "group": "untagged",
+    "note": "step 5000",
+    "job": "18406245",
+    "n": 330,
+    "success": 0.5394,
+    "diff": 0.0152,
+    "lo": -0.0515,
+    "hi": 0.0788,
+    "complete": true,
+    "states_up": 7,
+    "states_down": 3,
+    "pending": false
+   },
+   {
+    "label": "+ tag (dropout 0.3), sampled +, step 2000",
+    "group": "tag",
+    "note": "prompt tag",
+    "job": "18406247",
+    "n": 330,
+    "success": 0.5697,
+    "diff": 0.0455,
+    "lo": -0.0182,
+    "hi": 0.1061,
+    "complete": true,
+    "states_up": 6,
+    "states_down": 2,
+    "pending": false
+   },
+   {
+    "label": "same model, sampled −, step 2000",
+    "group": "tag",
+    "note": "the − tag should be worse if the tag were used",
+    "job": "18406249",
+    "n": 330,
+    "success": 0.5909,
+    "diff": 0.0667,
+    "lo": -0.003,
+    "hi": 0.1364,
+    "complete": true,
+    "states_up": 7,
+    "states_down": 3,
+    "pending": false
+   },
+   {
+    "label": "+ tag, sampled +, final",
+    "group": "tag",
+    "note": "step 5000",
+    "job": "18406248",
+    "n": 330,
+    "success": 0.5091,
+    "diff": -0.0152,
+    "lo": -0.0789,
+    "hi": 0.0485,
+    "complete": true,
+    "states_up": 5,
+    "states_down": 4,
+    "pending": false
+   },
+   {
+    "label": "Success-only weights, step 2000",
+    "group": "weights",
+    "note": "516 successes weighted by exp(advantage), demos weight 1",
+    "job": "18406251",
+    "n": 330,
+    "success": 0.5939,
+    "diff": 0.0697,
+    "lo": 0.0091,
+    "hi": 0.1303,
+    "complete": true,
+    "states_up": 8,
+    "states_down": 2,
+    "pending": false
+   },
+   {
+    "label": "Success-only weights, final",
+    "group": "weights",
+    "note": "step 5000",
+    "job": "18406252",
+    "n": 330,
+    "success": 0.5545,
+    "diff": 0.0303,
+    "lo": -0.0333,
+    "hi": 0.0939,
+    "complete": true,
+    "states_up": 7,
+    "states_down": 3,
+    "pending": false
+   },
+   {
+    "label": "Filtered BC round 1 (reference)",
+    "group": "untagged",
+    "note": "516 successes, frozen vision encoder",
+    "job": "18376075",
+    "n": 330,
+    "success": 0.5545,
+    "diff": 0.0303,
+    "lo": -0.0364,
+    "hi": 0.1,
+    "complete": true,
+    "states_up": 6,
+    "states_down": 3,
+    "pending": false
+   }
+  ]
+ },
+ "dsrl": {
+  "cycles": [
+   {
+    "life": 1,
+    "cycle": 0,
+    "x": 30,
+    "y": 0.433,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 1,
+    "x": 60,
+    "y": 0.667,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 2,
+    "x": 90,
+    "y": 0.533,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 3,
+    "x": 120,
+    "y": 0.5,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 4,
+    "x": 150,
+    "y": 0.433,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 5,
+    "x": 180,
+    "y": 0.633,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 6,
+    "x": 210,
+    "y": 0.533,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 7,
+    "x": 240,
+    "y": 0.633,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 8,
+    "x": 270,
+    "y": 0.633,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 9,
+    "x": 300,
+    "y": 0.6,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 10,
+    "x": 330,
+    "y": 0.633,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 11,
+    "x": 360,
+    "y": 0.5,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 12,
+    "x": 390,
+    "y": 0.6,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 13,
+    "x": 420,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 1,
+    "cycle": 14,
+    "x": 443,
+    "y": 0.739,
+    "n": 23
+   },
+   {
+    "life": 2,
+    "cycle": 15,
+    "x": 480,
+    "y": 0.467,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 16,
+    "x": 510,
+    "y": 0.467,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 17,
+    "x": 540,
+    "y": 0.533,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 18,
+    "x": 570,
+    "y": 0.433,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 19,
+    "x": 600,
+    "y": 0.6,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 20,
+    "x": 630,
+    "y": 0.533,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 21,
+    "x": 660,
+    "y": 0.6,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 22,
+    "x": 690,
+    "y": 0.567,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 23,
+    "x": 720,
+    "y": 0.533,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 24,
+    "x": 750,
+    "y": 0.633,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 25,
+    "x": 780,
+    "y": 0.567,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 26,
+    "x": 810,
+    "y": 0.667,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 27,
+    "x": 840,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 28,
+    "x": 870,
+    "y": 0.833,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 29,
+    "x": 900,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 30,
+    "x": 930,
+    "y": 0.667,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 31,
+    "x": 960,
+    "y": 0.567,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 32,
+    "x": 990,
+    "y": 0.567,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 33,
+    "x": 1020,
+    "y": 0.633,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 34,
+    "x": 1050,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 35,
+    "x": 1080,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 36,
+    "x": 1110,
+    "y": 0.9,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 37,
+    "x": 1140,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 38,
+    "x": 1170,
+    "y": 0.833,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 39,
+    "x": 1200,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 40,
+    "x": 1230,
+    "y": 0.833,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 41,
+    "x": 1260,
+    "y": 0.833,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 42,
+    "x": 1290,
+    "y": 0.7,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 43,
+    "x": 1320,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 44,
+    "x": 1350,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 45,
+    "x": 1380,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 46,
+    "x": 1410,
+    "y": 0.767,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 47,
+    "x": 1440,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 48,
+    "x": 1470,
+    "y": 0.833,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 49,
+    "x": 1500,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 50,
+    "x": 1530,
+    "y": 0.733,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 51,
+    "x": 1560,
+    "y": 0.867,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 52,
+    "x": 1590,
+    "y": 0.933,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 53,
+    "x": 1620,
+    "y": 0.867,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 54,
+    "x": 1650,
+    "y": 0.733,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 55,
+    "x": 1680,
+    "y": 0.833,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 56,
+    "x": 1710,
+    "y": 0.967,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 57,
+    "x": 1740,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 58,
+    "x": 1770,
+    "y": 0.8,
+    "n": 30
+   },
+   {
+    "life": 2,
+    "cycle": 59,
+    "x": 1800,
+    "y": 0.867,
+    "n": 30
+   }
+  ],
+  "last3": 0.822,
+  "last3_n": 90,
+  "base_train": 0.598,
+  "base_n": 450,
+  "episodes": 1800,
+  "restart": 443,
+  "life1": 0.587,
+  "life2": 0.724,
+  "updates": 2140520
+ },
+ "dsrl_eval": {
+  "label": "DSRL agent, episode 971",
+  "group": "dsrl",
+  "note": "frozen pi0.5, SAC actor picks the start noise (stochastic); same 330 held-out trials as base",
+  "job": "18445300",
+  "n": 330,
+  "success": 0.6788,
+  "diff": 0.1545,
+  "lo": 0.0848,
+  "hi": 0.2212,
+  "complete": true,
+  "states_up": 6,
+  "states_down": 3,
+  "pending": false
+ },
+ "round2": [
+  {
+   "layout": "fixed",
+   "r1": 0.576,
+   "n": 450,
+   "base": 0.598,
+   "base_n": 450
+  },
+  {
+   "layout": "fresh",
+   "r1": 0.578,
+   "n": 450,
+   "base": 0.549,
+   "base_n": 450
+  }
+ ],
+ "noise": [
+  {
+   "arm": "control",
+   "n": 90,
+   "success": 0.644,
+   "spread": null
+  },
+  {
+   "arm": "x2.0",
+   "n": 90,
+   "success": 0.567,
+   "spread": 1.6
+  },
+  {
+   "arm": "x3.0",
+   "n": 90,
+   "success": 0.278,
+   "spread": 5.0
+  },
+  {
+   "arm": "x5.0",
+   "n": 90,
+   "success": 0.0,
+   "spread": 27.8
+  },
+  {
+   "arm": "x8.0",
+   "n": 90,
+   "success": 0.0,
+   "spread": 90.3
+  },
+  {
+   "arm": "x2.0_all",
+   "n": 90,
+   "success": 0.567,
+   "spread": 2.2
+  }
+ ],
+ "vgt": {
+  "rows": [
+   {
+    "source": "ResNet-18 V, 5-fold OOF (current labels' V)",
+    "a": 0.0689164103019587,
+    "a_ci": [
+     0.01821402938689381,
+     0.12466782236433073
+    ],
+    "label": 0.08920582397828201,
+    "label_ci": [
+     -0.0017878038474658934,
+     0.17433650941620865
+    ]
+   },
+   {
+    "source": "ResNet V ensemble",
+    "a": 0.06465226690923914,
+    "a_ci": [
+     -0.022847992867301024,
+     0.16253978538026534
+    ],
+    "label": 0.0555020655495075,
+    "label_ci": [
+     -0.021926301606500297,
+     0.14770437516945215
+    ]
+   },
+   {
+    "source": "pi0.5 value expert, OOF",
+    "a": 0.041148405690741165,
+    "a_ci": [
+     -0.0585906427960757,
+     0.16547993402418226
+    ],
+    "label": -0.0034727526004834563,
+    "label_ci": [
+     -0.09239788358675706,
+     0.10186945675666742
+    ]
+   },
+   {
+    "source": "fitted n-step TD critic",
+    "a": 0.037399413631004574,
+    "a_ci": [
+     -0.024442923978771798,
+     0.10399416416124128
+    ],
+    "label": 0.027988552688251168,
+    "label_ci": [
+     -0.06848756003300085,
+     0.12806011849087928
+    ]
+   },
+   {
+    "source": "TD critic ensemble",
+    "a": 0.049002500627711,
+    "a_ci": [
+     -0.045003604186132654,
+     0.1631253376240345
+    ],
+    "label": 0.018191646435786454,
+    "label_ci": [
+     -0.0629465381970251,
+     0.10923272250213095
+    ]
+   },
+   {
+    "source": "ResNet V, lookahead n = 80",
+    "a": 0.1406346524142063,
+    "a_ci": [
+     0.06000310162156286,
+     0.22579870970524757
+    ],
+    "label": 0.16305604487163008,
+    "label_ci": [
+     0.08943406017530782,
+     0.24538347308892533
+    ]
+   },
+   {
+    "source": "ResNet V, lookahead n = 160",
+    "a": 0.08010585947545341,
+    "a_ci": [
+     0.008028285556157708,
+     0.1788503255404777
+    ],
+    "label": 0.051162524207888985,
+    "label_ci": [
+     -0.040902966091253615,
+     0.13966455297908162
+    ]
+   },
+   {
+    "source": "realized return - V (hindsight)",
+    "a": 0.07687209281168787,
+    "a_ci": [
+     0.013630407383089356,
+     0.13588555171743444
+    ],
+    "label": 0.04568474114749288,
+    "label_ci": [
+     -0.05224018771165095,
+     0.13129951403230922
+    ]
+   },
+   {
+    "source": "faithful RECAP labels (vb 40%)",
+    "a": null,
+    "a_ci": null,
+    "label": 0.10361308743509581,
+    "label_ci": [
+     0.018324916345257212,
+     0.1973444947419426
+    ]
+   },
+   {
+    "source": "subtask-scoped vb 40%",
+    "a": null,
+    "a_ci": null,
+    "label": 0.04749343232126695,
+    "label_ci": [
+     -0.01567316201319755,
+     0.10238020310699428
+    ]
+   },
+   {
+    "source": "random labels (control)",
+    "a": null,
+    "a_ci": null,
+    "label": 0.0064617611524650535,
+    "label_ci": [
+     -0.08251789499264996,
+     0.09414651162151483
+    ]
+   }
+  ],
+  "ceiling": 0.691,
+  "split_half": 0.314,
+  "points": 424
+ }
+}

@@ -93,6 +93,88 @@
     host.appendChild(svg);
   };
 
+  // [2026-11-09] Dot + 95% interval per row, against a labelled zero line (e.g. change vs base).
+  // spec: {rows:[{label,value,lo,hi,color,note,dim,head}], unit, zeroLabel, digits, pct, labelWidth, width, domain}
+  window.ciPlot = function (host, spec) {
+    const rows = spec.rows, lw = spec.labelWidth || 250, W = spec.width || 760, rh = 28, top = 22;
+    const H = top + rh * rows.length + 30, R = W - 110, d = spec.digits ?? 3, pc = !!spec.pct;
+    const show = v => pc ? (v >= 0 ? "+" : "") + (100 * v).toFixed(1) : fmt(v, d);
+    const vals = rows.filter(r => !r.head).flatMap(r => [r.lo ?? r.value, r.hi ?? r.value]);
+    const ticks = nice(spec.domain ? spec.domain[0] : Math.min(0, ...vals), spec.domain ? spec.domain[1] : Math.max(0, ...vals), 5);
+    const x0 = ticks[0], x1 = ticks[ticks.length - 1], x = v => lw + (R - lw) * (v - x0) / (x1 - x0);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": spec.title || "interval plot" });
+    ticks.forEach(t => { el("line", { x1: x(t), x2: x(t), y1: top - 4, y2: H - 24, class: "gl" }, svg);
+      el("text", { x: x(t), y: H - 8, "text-anchor": "middle", class: "mut" }, svg).textContent = pc ? (100 * t).toFixed(0) : +t.toFixed(3); });
+    el("line", { x1: x(0), x2: x(0), y1: top - 4, y2: H - 24, stroke: "var(--fg2)", "stroke-width": 1.5, "stroke-dasharray": "4 3" }, svg);
+    if (spec.zeroLabel) el("text", { x: x(0), y: top - 9, "text-anchor": "middle", class: "lbl" }, svg).textContent = spec.zeroLabel;
+    const tip = tipFor(host);
+    rows.forEach((r, j) => {
+      const y = top + j * rh, cy = y + rh / 2;
+      if (r.head) { el("text", { x: 0, y: cy + 5, class: "lbl", "font-weight": 600 }, svg).textContent = r.label; return; }
+      const g = el("g", { opacity: r.dim ? 0.5 : 1 }, svg), col = r.color || "var(--s1)";
+      el("text", { x: lw - 10, y: cy + 4, "text-anchor": "end", class: "lbl" }, g).textContent = r.label;
+      if (r.lo != null) { el("line", { x1: x(r.lo), x2: x(r.hi), y1: cy, y2: cy, stroke: col, "stroke-width": 2.5, "stroke-linecap": "round", opacity: .55 }, g); }
+      el("circle", { cx: x(r.value), cy, r: 6, fill: r.hollow ? "var(--surface)" : col, stroke: r.hollow ? col : "var(--surface)", "stroke-width": 2 }, g);
+      el("text", { x: R + 10, y: cy + 4, class: "mut" }, g).textContent = r.right ?? show(r.value);
+      el("rect", { x: 0, y, width: W, height: rh, fill: "transparent" }, g);
+      g.addEventListener("mousemove", ev => { const b = host.getBoundingClientRect();
+        tip.show(`<b>${r.label}</b><br>${spec.unit || "value"}: ${show(r.value)}${r.lo != null ? ` (95% CI ${show(r.lo)} to ${show(r.hi)})` : ""}${r.note ? "<br>" + r.note : ""}`, ev.clientX - b.left, ev.clientY - b.top); });
+      g.addEventListener("mouseleave", () => tip.hide());
+    });
+    host.appendChild(svg);
+  };
+
+  // [2026-11-09] Lines with markers, optional ±sd whiskers, crosshair tooltip, optional tick strip under the plot.
+  // spec: {series:[{name,color,dash,pts:[{x,y,sd,note}]}], xlab, ylab, xticks, yticks, xlog, width, height,
+  //        strip:{label, pts:[{x,on}], onColor, onLabel, offLabel}, yfmt}
+  window.lineChart = function (host, spec) {
+    const W = spec.width || 520, H = spec.height || 300, L = 56, Rr = W - 16, T = 12, stripH = spec.strip ? 26 : 0;
+    const B = H - 44 - stripH, all = spec.series.flatMap(s => s.pts);
+    const tx = spec.xlog ? Math.log : (v => v), xs = all.map(p => p.x);
+    const xt = spec.xticks || nice(Math.min(...xs), Math.max(...xs), 5);
+    const yt = spec.yticks || nice(Math.min(0, ...all.map(p => p.y - (p.sd || 0))), Math.max(...all.map(p => p.y + (p.sd || 0))) * 1.05, 4);
+    const x = v => L + (Rr - L) * (tx(v) - tx(xt[0])) / (tx(xt[xt.length - 1]) - tx(xt[0]));
+    const y = v => B - (B - T) * (v - yt[0]) / (yt[yt.length - 1] - yt[0]);
+    const yf = v => spec.yfmt ? spec.yfmt(v) : +(+v).toFixed(3);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": spec.title || "line chart" });
+    yt.forEach(t => { el("line", { x1: L, x2: Rr, y1: y(t), y2: y(t), class: "gl" }, svg);
+      el("text", { x: L - 8, y: y(t) + 4, "text-anchor": "end", class: "mut" }, svg).textContent = yf(t); });
+    xt.forEach(t => el("text", { x: x(t), y: B + 18, "text-anchor": "middle", class: "mut" }, svg).textContent = t);
+    el("line", { x1: L, x2: Rr, y1: B, y2: B, class: "ax" }, svg);
+    el("text", { x: (L + Rr) / 2, y: H - 6, "text-anchor": "middle" }, svg).textContent = spec.xlab || "";
+    el("text", { x: 12, y: (T + B) / 2, "text-anchor": "middle", transform: `rotate(-90 12 ${(T + B) / 2})` }, svg).textContent = spec.ylab || "";
+    spec.series.forEach(s => {
+      const p = s.pts.map(q => `${x(q.x)},${y(q.y)}`).join(" ");
+      el("polyline", { points: p, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-dasharray": s.dash || "", "stroke-linejoin": "round" }, svg);
+      s.pts.forEach(q => {
+        if (q.sd) el("line", { x1: x(q.x), x2: x(q.x), y1: y(Math.max(q.y - q.sd, yt[0])), y2: y(Math.min(q.y + q.sd, yt[yt.length - 1])), stroke: s.color, "stroke-width": 1.5, opacity: .6 }, svg);
+        if (!s.noMarkers) el("circle", { cx: x(q.x), cy: y(q.y), r: 4, fill: s.color, stroke: "var(--surface)", "stroke-width": 2 }, svg);
+      });
+      if (s.endLabel !== false) { const q = s.pts[s.pts.length - 1];
+        el("text", { x: Math.min(x(q.x) + 6, Rr - 2), y: y(q.y) - 8, "text-anchor": x(q.x) + 60 > Rr ? "end" : "start", class: "lbl" }, svg).textContent = s.name; }
+    });
+    if (spec.strip) {
+      const sy = B + 26;
+      el("text", { x: L - 8, y: sy + 9, "text-anchor": "end", class: "mut" }, svg).textContent = spec.strip.label;
+      spec.strip.pts.forEach(q => el("rect", { x: x(q.x) - 3, y: sy, width: 6, height: 12, rx: 2,
+        fill: q.on == null ? "none" : q.on ? spec.strip.onColor : "var(--grid)", stroke: q.on == null ? "var(--grid)" : "none" }, svg));
+    }
+    const tip = tipFor(host), cross = el("line", { y1: T, y2: B, stroke: "var(--axis)", "stroke-width": 1, opacity: 0 }, svg);
+    const xsU = [...new Set(xs)].sort((a, b) => a - b);
+    const hit = el("rect", { x: L, y: T, width: Rr - L, height: B - T + stripH + 20, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => {
+      const b = svg.getBoundingClientRect(), px = (ev.clientX - b.left) * W / b.width;
+      const xv = xsU.reduce((m, v) => Math.abs(x(v) - px) < Math.abs(x(m) - px) ? v : m, xsU[0]);
+      cross.setAttribute("x1", x(xv)); cross.setAttribute("x2", x(xv)); cross.setAttribute("opacity", 1);
+      let h = `<b>${spec.xname || spec.xlab}: ${xv}</b>`;
+      spec.series.forEach(s => { const q = s.pts.find(q => q.x === xv); if (q) h += `<br><i style="display:inline-block;width:10px;height:3px;background:${s.color};vertical-align:middle;margin-right:5px"></i>${s.name}: ${yf(q.y)}${q.sd ? " ± " + yf(q.sd) : ""}${q.note ? " · " + q.note : ""}`; });
+      if (spec.strip) { const q = spec.strip.pts.find(q => q.x === xv); if (q) h += `<br>${spec.strip.label}: ${q.on == null ? "no label" : q.on ? spec.strip.onLabel : spec.strip.offLabel}`; }
+      const hb = host.getBoundingClientRect(); tip.show(h, ev.clientX - hb.left, ev.clientY - hb.top);
+    });
+    hit.addEventListener("mouseleave", () => { tip.hide(); cross.setAttribute("opacity", 0); });
+    host.appendChild(svg);
+  };
+
   // Episode player: value traces + scrubbable camera frames.
   window.episodePlayer = function (root, data, opts) {
     const SER = opts.series; // [{key,label,color}]

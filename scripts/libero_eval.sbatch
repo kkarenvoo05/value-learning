@@ -6,10 +6,17 @@
 #        FT_RUN=<runs/policy_*> FT_TAG=positive|negative|none ...  Stage 6: serve a fine-tuned run
 #        (scripts/serve_pi05_finetuned.py; FT_TAG default auto = positive for arm C, none otherwise)
 #        FT_STEP=<n|final> serve trainable_<n>.msgpack (runs trained with --save-every)
+#        FT_GUIDANCE=<beta> classifier-free guidance toward the positive tag (runs trained with --tag-dropout)
+#        FT_SUBTASK=1 the client sends the moka subtask (runs trained with --subtask-prompt)
+#        DSRL_MODE=train|eval [DSRL_AGENT=<agent_*.pkl>] [DSRL_SEED] [DSRL_ARGS] DSRL noise-space SAC on base pi05
+#        (scripts/dsrl_pi05.py; train writes checkpoints + dsrl_log.jsonl to the run dir)
+#        MATCHED_NOISE=1 [NOISE_SEED=0] same start noise per (task, init, repeat, chunk) in every eval
+#        (TASKS mode only; serves base and fine-tuned runs through serve_pi05_finetuned.py; vl/libero_noise.py)
 #SBATCH --job-name=job
-#SBATCH --account=move
-#SBATCH --partition=move
-#SBATCH --gres=gpu:l40s:1
+#SBATCH --account=iris
+#SBATCH --partition=iris
+#SBATCH --gres=gpu:1
+#SBATCH --exclude=iris[1-4,9],iris-hgx-[1-2],iris-hp-z8   # Turing GPUs fail the pi05 bf16 self-check; iris9: JAX finds no CUDA device (2026-11-05); hgx: shared H100/H200s not needed, evals run on 24 GB cards (2026-11-08)
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=08:00:00
@@ -28,10 +35,23 @@ echo "host $(hostname) gpu $(nvidia-smi --query-gpu=name --format=csv,noheader) 
 echo "suite $SUITE tasks ${TASKS:-all} repeats ${REPEATS:-} trials/task $TRIALS seed $SEED port $PORT openpi $(git -C $OPENPI rev-parse --short HEAD) out $OUT"
 
 cd $OPENPI
-if [ -n "${FT_RUN:-}" ]; then
-    echo "fine-tuned run $FT_RUN tag ${FT_TAG:-auto} step ${FT_STEP:-final}"
-    .venv/bin/python /move/u/karenvo/Projects/value-learning/scripts/serve_pi05_finetuned.py --run "$FT_RUN" \
-        --tag ${FT_TAG:-auto} --step ${FT_STEP:-final} --port $PORT > "$OUT/server.log" 2>&1 &
+[ -n "${FT_SUBTASK:-}" ] && CLIENT_ARGS="${CLIENT_ARGS:-} --args.send-subtask"  # runs trained with --subtask-prompt
+if [ -n "${MATCHED_NOISE:-}" ]; then  # matched noise needs our server (base too) and the keyed client
+    CLIENT_ARGS="${CLIENT_ARGS:-} --args.matched-noise"; [ -n "${FT_RUN:-}" ] || BASE_OURS=1
+    echo "matched noise: on (noise seed ${NOISE_SEED:-0})"
+fi
+if [ -n "${DSRL_MODE:-}" ]; then  # [2026-11-10] DSRL on base pi05 (scripts/dsrl_pi05.py), TASKS mode only
+    [ -n "${TASKS:-}" ] && [ -z "${MATCHED_NOISE:-}" ] || { echo "DSRL needs TASKS and no MATCHED_NOISE"; exit 1; }
+    echo "DSRL $DSRL_MODE agent ${DSRL_AGENT:-fresh} args ${DSRL_ARGS:-}"
+    CLIENT_ARGS="${CLIENT_ARGS:-} --args.dsrl"
+    .venv/bin/python /move/u/karenvo/Projects/value-learning/scripts/dsrl_pi05.py --mode $DSRL_MODE \
+        ${DSRL_AGENT:+--agent $DSRL_AGENT} --out "$OUT" --seed ${DSRL_SEED:-0} ${DSRL_ARGS:-} --port $PORT \
+        > "$OUT/server.log" 2>&1 &
+elif [ -n "${FT_RUN:-}" ] || [ -n "${BASE_OURS:-}" ]; then
+    echo "fine-tuned run ${FT_RUN:-none (base, our server)} tag ${FT_TAG:-auto} step ${FT_STEP:-final}"
+    .venv/bin/python /move/u/karenvo/Projects/value-learning/scripts/serve_pi05_finetuned.py \
+        $([ -n "${FT_RUN:-}" ] && echo "--run $FT_RUN" || echo "--base") --noise-seed ${NOISE_SEED:-0} \
+        --tag ${FT_TAG:-auto} --step ${FT_STEP:-final} ${FT_GUIDANCE:+--guidance $FT_GUIDANCE} --port $PORT > "$OUT/server.log" 2>&1 &
 else
 .venv/bin/python scripts/serve_policy.py --port $PORT policy:checkpoint \
     --policy.config pi05_libero --policy.dir $CKPT > "$OUT/server.log" 2>&1 &
@@ -50,7 +70,7 @@ export LIBERO_CONFIG_PATH=$ROOT/libero_cfg MUJOCO_GL=egl PYTHONPATH=$OPENPI/thir
 if [ -n "${TASKS:-}" ]; then   # our client: chosen tasks, REPEATS trials per init state, per-episode videos + CSV
     $ROOT/.venv/bin/python /move/u/karenvo/Projects/value-learning/scripts/libero_rollouts.py \
         --args.port $PORT --args.task-suite-name $SUITE --args.task-ids $TASKS --args.repeats ${REPEATS:-1} \
-        --args.seed $SEED --args.out-dir "$OUT" ${CLIENT_ARGS:-} 2>&1 | tee "$OUT/client.log"
+        --args.seed $SEED --args.out-dir "$OUT" --args.resume ${CLIENT_ARGS:-} 2>&1 | tee -a "$OUT/client.log"
 else                          # openpi's stock client: every task, TRIALS trials per task
     $ROOT/.venv/bin/python examples/libero/main.py --args.host 127.0.0.1 --args.port $PORT \
         --args.task-suite-name $SUITE --args.num-trials-per-task $TRIALS --args.seed $SEED \

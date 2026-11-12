@@ -1,0 +1,946 @@
+{
+ "policy": {
+  "base": 0.5242,
+  "base_job": "18355478",
+  "rows": [
+   {
+    "label": "Successes only",
+    "group": "untagged",
+    "note": "516 successful rollouts, frozen vision encoder",
+    "job": "18376075",
+    "n": 330,
+    "success": 0.5545,
+    "diff": 0.0303,
+    "lo": -0.0394,
+    "hi": 0.1,
+    "complete": true
+   },
+   {
+    "label": "All rollouts, demos 2%",
+    "group": "untagged",
+    "note": "900 rollouts (successes + failures) + 29 demos, original lr",
+    "job": "18376077",
+    "n": 330,
+    "success": 0.3909,
+    "diff": -0.1333,
+    "lo": -0.197,
+    "hi": -0.0697,
+    "complete": true
+   },
+   {
+    "label": "All rollouts, demos 50%",
+    "group": "untagged",
+    "note": "original lr, final",
+    "job": "18396165",
+    "n": 330,
+    "success": 0.5152,
+    "diff": -0.0091,
+    "lo": -0.0758,
+    "hi": 0.0576,
+    "complete": true
+   },
+   {
+    "label": "All rollouts, demos 75%",
+    "group": "untagged",
+    "note": "original lr, final",
+    "job": "18396169",
+    "n": 330,
+    "success": 0.4545,
+    "diff": -0.0697,
+    "lo": -0.1333,
+    "hi": -0.0061,
+    "complete": true
+   },
+   {
+    "label": "Demos 75%, low lr, step 2000",
+    "group": "untagged",
+    "note": "10x lower lr, checkpoint at step 2000",
+    "job": "18396176",
+    "n": 330,
+    "success": 0.5364,
+    "diff": 0.0121,
+    "lo": -0.0545,
+    "hi": 0.0758,
+    "complete": true
+   },
+   {
+    "label": "Demos 75%, low lr, final",
+    "group": "untagged",
+    "note": "10x lower lr, step 5000",
+    "job": "18396177",
+    "n": 330,
+    "success": 0.4697,
+    "diff": -0.0545,
+    "lo": -0.1182,
+    "hi": 0.0091,
+    "complete": true
+   },
+   {
+    "label": "Demos 2%, low lr, final",
+    "group": "untagged",
+    "note": "10x lower lr, step 5000",
+    "job": "18396977",
+    "n": 246,
+    "success": 0.4472,
+    "diff": -0.061,
+    "lo": -0.1341,
+    "hi": 0.0122,
+    "complete": false
+   },
+   {
+    "label": "Tag via AdaRMS",
+    "group": "tag",
+    "note": "all rollouts + demos, + tag; tag fed to the action expert's norm layers",
+    "job": "18355679",
+    "n": 330,
+    "success": 0.4091,
+    "diff": -0.1152,
+    "lo": -0.1848,
+    "hi": -0.0485,
+    "complete": true
+   },
+   {
+    "label": "Tag in prompt + discrete loss",
+    "group": "tag",
+    "note": "+ tag; FAST-style token loss",
+    "job": "18364108",
+    "n": 330,
+    "success": 0.4455,
+    "diff": -0.0788,
+    "lo": -0.1515,
+    "hi": -0.0121,
+    "complete": true
+   },
+   {
+    "label": "… + speed-tag pre-training",
+    "group": "tag",
+    "note": "tag pre-trained on demos of all 40 LIBERO tasks",
+    "job": "18364109",
+    "n": 330,
+    "success": 0.4758,
+    "diff": -0.0485,
+    "lo": -0.1152,
+    "hi": 0.0182,
+    "complete": true
+   },
+   {
+    "label": "RECAP-complete",
+    "group": "tag",
+    "note": "prompt tag + real FAST tokens + knowledge insulation + subtask text + dropout 0.3 + demos",
+    "job": "18376192",
+    "n": 330,
+    "success": 0.4576,
+    "diff": -0.0667,
+    "lo": -0.1394,
+    "hi": 0.0061,
+    "complete": true
+   },
+   {
+    "label": "Advantage weights (all rollouts)",
+    "group": "weights",
+    "note": "no tag; loss weight exp(advantage), all rollouts + demos",
+    "job": "18376079",
+    "n": 330,
+    "success": 0.5242,
+    "diff": 0.0,
+    "lo": -0.0667,
+    "hi": 0.0667,
+    "complete": true
+   },
+   {
+    "label": "Successes + tag",
+    "group": "success+",
+    "note": "+ tag, 516 successes",
+    "job": "18387310",
+    "n": 330,
+    "success": 0.5606,
+    "diff": 0.0364,
+    "lo": -0.0303,
+    "hi": 0.103,
+    "complete": true
+   },
+   {
+    "label": "Successes + advantage weights",
+    "group": "success+",
+    "note": "loss weights on the 516 successes",
+    "job": "18387308",
+    "n": 330,
+    "success": 0.5667,
+    "diff": 0.0424,
+    "lo": -0.0303,
+    "hi": 0.1152,
+    "complete": true
+   }
+  ]
+ },
+ "tag": {
+  "rows": [
+   {
+    "label": "Oracle tag (true outcome)",
+    "group": "real",
+    "ratio": 0.0169,
+    "shift_raw": 0.00075,
+    "pos_vs_none_raw": 0.0068,
+    "loss_correct": 0.007034182192416694,
+    "loss_flipped": 0.007033313984081246,
+    "job": "tag_usage_18310225"
+   },
+   {
+    "label": "Prompt tag (RECAP labels)",
+    "group": "real",
+    "ratio": 0.0176,
+    "shift_raw": 0.00075,
+    "pos_vs_none_raw": 0.00455,
+    "loss_correct": 0.006989331804851062,
+    "loss_flipped": 0.0069963628319147375,
+    "job": "tag_usage_18338865"
+   },
+   {
+    "label": "Prompt tag (subtask-scoped labels)",
+    "group": "real",
+    "ratio": 0.0186,
+    "shift_raw": 0.00079,
+    "pos_vs_none_raw": 0.00497,
+    "loss_correct": 0.00655837865252451,
+    "loss_flipped": 0.006562800915599354,
+    "job": "tag_usage_18352443"
+   },
+   {
+    "label": "Prompt tag + discrete loss",
+    "group": "real",
+    "ratio": 0.0179,
+    "shift_raw": 0.0008,
+    "pos_vs_none_raw": 0.00478,
+    "loss_correct": 0.007290794009087165,
+    "loss_flipped": 0.007293137110387704,
+    "job": "tag_usage_18359339"
+   },
+   {
+    "label": "… + speed-tag pre-training",
+    "group": "real",
+    "ratio": 0.013,
+    "shift_raw": 0.00056,
+    "pos_vs_none_raw": 0.00338,
+    "loss_correct": 0.00713425080243546,
+    "loss_flipped": 0.007133094206430712,
+    "job": "tag_usage_18363755"
+   },
+   {
+    "label": "RECAP-complete",
+    "group": "real",
+    "ratio": 0.0142,
+    "shift_raw": 0.00069,
+    "pos_vs_none_raw": 0.00356,
+    "loss_correct": 0.007984802224571652,
+    "loss_flipped": 0.007988701563693468,
+    "job": "tag_usage_18376191"
+   },
+   {
+    "label": "AdaRMS tag (RECAP labels)",
+    "group": "real",
+    "ratio": 0.1358,
+    "shift_raw": 0.00604,
+    "pos_vs_none_raw": 0.00349,
+    "loss_correct": 0.006955849077488807,
+    "loss_flipped": 0.0070232609130442825,
+    "job": "tag_usage_adarms_vb40_18355677"
+   },
+   {
+    "label": "Never tagged (reference)",
+    "group": "floor",
+    "ratio": 0.0244,
+    "shift_raw": 0.00132,
+    "pos_vs_none_raw": 0.01067,
+    "loss_correct": 0.0074349946730905,
+    "loss_flipped": 0.007445015687824963,
+    "job": "tag_usage_18338865"
+   },
+   {
+    "label": "Planted tag, small (prompt)",
+    "group": "control",
+    "ratio": 0.3559,
+    "shift_raw": 0.01673,
+    "pos_vs_none_raw": 0.01088,
+    "loss_correct": 0.0071174937950395645,
+    "loss_flipped": 0.007103386824928393,
+    "job": "tag_usage_18352947"
+   },
+   {
+    "label": "Planted tag, small (AdaRMS)",
+    "group": "control",
+    "ratio": 0.3703,
+    "shift_raw": 0.01664,
+    "pos_vs_none_raw": 0.00866,
+    "loss_correct": 0.007139487497411778,
+    "loss_flipped": 0.0071014131655822155,
+    "job": "tag_usage_adarms_ctrl_shift0p02_18361554"
+   },
+   {
+    "label": "Planted tag, large (prompt)",
+    "group": "control",
+    "ratio": 1.6447,
+    "shift_raw": 0.07698,
+    "pos_vs_none_raw": 0.0421,
+    "loss_correct": 0.010284081548761037,
+    "loss_flipped": 0.010340559991064424,
+    "job": "tag_usage_18352945"
+   }
+  ],
+  "prompt_swap_far": 0.984,
+  "prompt_swap_near": 0.684
+ },
+ "coach": {
+  "sources": [
+   {
+    "label": "Current: ResNet value, 1 s advantage",
+    "value": 0.0151,
+    "lo": 0.0149,
+    "hi": 0.0154
+   },
+   {
+    "label": "Random labels (floor)",
+    "value": 0.0039,
+    "lo": 0.0038,
+    "hi": 0.004
+   },
+   {
+    "label": "Hindsight (what actually happened − V)",
+    "value": 0.0091,
+    "lo": 0.0089,
+    "hi": 0.0092
+   },
+   {
+    "label": "Longer lookahead, 4 s",
+    "value": 0.0102,
+    "lo": 0.0101,
+    "hi": 0.0104
+   },
+   {
+    "label": "Longer lookahead, 8 s",
+    "value": 0.0094,
+    "lo": 0.0092,
+    "hi": 0.0095
+   },
+   {
+    "label": "Episode outcome (success / failure)",
+    "value": 0.0112,
+    "lo": 0.011,
+    "hi": 0.0114
+   },
+   {
+    "label": "TD critic",
+    "value": 0.0131,
+    "lo": 0.0129,
+    "hi": 0.0133
+   },
+   {
+    "label": "ResNet + π₀.₅ ensemble",
+    "value": 0.0121,
+    "lo": 0.0119,
+    "hi": 0.0123
+   }
+  ],
+  "rules": [
+   {
+    "label": "Ours: value-binned 40%",
+    "round": "1",
+    "value": 0.0175
+   },
+   {
+    "label": "Random labels (floor)",
+    "round": "1",
+    "value": 0.004
+   },
+   {
+    "label": "PC1 positive control",
+    "round": "1",
+    "value": 0.0499
+   },
+   {
+    "label": "Ours: value-binned 40%",
+    "round": "2",
+    "value": 0.0192
+   },
+   {
+    "label": "Random labels (floor)",
+    "round": "2",
+    "value": 0.0041
+   },
+   {
+    "label": "PC1 positive control",
+    "round": "2",
+    "value": 0.0593
+   },
+   {
+    "label": "RECAP: one threshold, 40%",
+    "round": "1",
+    "value": 0.0164
+   },
+   {
+    "label": "RECAP: one threshold, 40%",
+    "round": "2",
+    "value": 0.0186
+   },
+   {
+    "label": "Ours, 40% per round",
+    "round": "1",
+    "value": 0.0179
+   },
+   {
+    "label": "Ours, 40% per round",
+    "round": "2",
+    "value": 0.0194
+   },
+   {
+    "label": "RECAP exact: threshold per round",
+    "round": "1",
+    "value": 0.0163
+   },
+   {
+    "label": "RECAP exact: threshold per round",
+    "round": "2",
+    "value": 0.0185
+   }
+  ]
+ },
+ "curve": {
+  "old": [
+   {
+    "kind": "labels",
+    "n": 56,
+    "info": 0.0397,
+    "info_sd": 0.0074,
+    "shift_over_random": 0.0122,
+    "mse_over_random": 0.002,
+    "draws": 5
+   },
+   {
+    "kind": "pc1",
+    "n": 56,
+    "info": 0.0285,
+    "info_sd": 0.0415,
+    "shift_over_random": 0.0377,
+    "mse_over_random": 0.1089,
+    "draws": 5
+   },
+   {
+    "kind": "labels",
+    "n": 112,
+    "info": 0.0615,
+    "info_sd": 0.01,
+    "shift_over_random": 0.014,
+    "mse_over_random": 0.0151,
+    "draws": 5
+   },
+   {
+    "kind": "pc1",
+    "n": 112,
+    "info": 0.0887,
+    "info_sd": 0.0216,
+    "shift_over_random": 0.046,
+    "mse_over_random": 0.1146,
+    "draws": 5
+   },
+   {
+    "kind": "labels",
+    "n": 225,
+    "info": 0.0695,
+    "info_sd": 0.01,
+    "shift_over_random": 0.0132,
+    "mse_over_random": 0.0081,
+    "draws": 5
+   },
+   {
+    "kind": "pc1",
+    "n": 225,
+    "info": 0.1463,
+    "info_sd": 0.0251,
+    "shift_over_random": 0.0471,
+    "mse_over_random": 0.1298,
+    "draws": 5
+   },
+   {
+    "kind": "labels",
+    "n": 450,
+    "info": 0.0737,
+    "info_sd": null,
+    "shift_over_random": 0.012,
+    "mse_over_random": 0.0155,
+    "draws": 1
+   },
+   {
+    "kind": "pc1",
+    "n": 450,
+    "info": 0.1706,
+    "info_sd": null,
+    "shift_over_random": 0.0448,
+    "mse_over_random": 0.1477,
+    "draws": 1
+   }
+  ],
+  "explore": [
+   {
+    "kind": "labels",
+    "n": 112,
+    "info": 0.0603,
+    "info_sd": 0.0148,
+    "shift_over_random": 0.0144,
+    "mse_over_random": 0.0109,
+    "draws": 5
+   },
+   {
+    "kind": "pc1",
+    "n": 112,
+    "info": 0.0973,
+    "info_sd": 0.0238,
+    "shift_over_random": 0.0485,
+    "mse_over_random": 0.1078,
+    "draws": 5
+   },
+   {
+    "kind": "labels",
+    "n": 225,
+    "info": 0.064,
+    "info_sd": 0.0069,
+    "shift_over_random": 0.0158,
+    "mse_over_random": 0.0149,
+    "draws": 5
+   },
+   {
+    "kind": "pc1",
+    "n": 225,
+    "info": 0.1674,
+    "info_sd": 0.0149,
+    "shift_over_random": 0.0503,
+    "mse_over_random": 0.0928,
+    "draws": 5
+   },
+   {
+    "kind": "labels",
+    "n": 450,
+    "info": 0.0825,
+    "info_sd": 0.005,
+    "shift_over_random": 0.0139,
+    "mse_over_random": 0.0155,
+    "draws": 5
+   },
+   {
+    "kind": "pc1",
+    "n": 450,
+    "info": 0.2125,
+    "info_sd": 0.0143,
+    "shift_over_random": 0.0498,
+    "mse_over_random": 0.1292,
+    "draws": 5
+   },
+   {
+    "kind": "labels",
+    "n": 900,
+    "info": 0.0791,
+    "info_sd": null,
+    "shift_over_random": 0.0136,
+    "mse_over_random": 0.0259,
+    "draws": 1
+   },
+   {
+    "kind": "pc1",
+    "n": 900,
+    "info": 0.2286,
+    "info_sd": null,
+    "shift_over_random": 0.047,
+    "mse_over_random": 0.1349,
+    "draws": 1
+   }
+  ]
+ },
+ "branch": {
+  "reliability": [
+   {
+    "run": "a",
+    "job": "18395412",
+    "v": 0.8960152189898919,
+    "a": 0.023161955986539348
+   },
+   {
+    "run": "b",
+    "job": "18395413",
+    "v": 0.7544506780043496,
+    "a": 0.4304811502661047
+   },
+   {
+    "run": "c",
+    "job": "18395414",
+    "v": 0.9153713603472624,
+    "a": 0.4705910182313973
+   }
+  ],
+  "e1": {
+   "v": 0.8418007084648185,
+   "a": 0.2985847797263248
+  },
+  "pooled": {
+   "v": 0.895,
+   "a": 0.33,
+   "label_corr": 0.114,
+   "pos_when_up": 0.373,
+   "pos_when_down": 0.234,
+   "oofV_vs_Vstar": 0.25,
+   "points": 299,
+   "episodes": 12
+  },
+  "episodes": [
+   {
+    "ep": 7,
+    "job": "18395414",
+    "t": [
+     0,
+     20,
+     40,
+     60,
+     80,
+     100,
+     120,
+     140,
+     160,
+     180,
+     200,
+     220,
+     240,
+     260,
+     280,
+     300,
+     320,
+     340,
+     360,
+     380,
+     400,
+     420,
+     440,
+     460,
+     480,
+     500
+    ],
+    "v": [
+     0.333,
+     0.417,
+     0.417,
+     0.25,
+     0.333,
+     0.667,
+     0.75,
+     0.583,
+     0.75,
+     0.75,
+     0.0,
+     0.75,
+     0.417,
+     0.833,
+     0.833,
+     0.583,
+     0.417,
+     0.083,
+     0.0,
+     0.417,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "pos": [
+     1,
+     0,
+     1,
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "ep": 183,
+    "job": "18395413",
+    "t": [
+     0,
+     20,
+     40,
+     60,
+     80,
+     100,
+     120,
+     140,
+     160,
+     180,
+     200,
+     220,
+     240,
+     260,
+     280,
+     300,
+     320,
+     340,
+     360,
+     380,
+     400,
+     420,
+     440,
+     460,
+     480,
+     500
+    ],
+    "v": [
+     0.583,
+     0.917,
+     0.833,
+     0.333,
+     0.583,
+     0.167,
+     0.25,
+     0.083,
+     0.417,
+     0.5,
+     0.25,
+     0.0,
+     0.083,
+     0.5,
+     0.333,
+     0.167,
+     0.167,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "pos": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   {
+    "ep": 349,
+    "job": "18395412",
+    "t": [
+     0,
+     20,
+     40,
+     60,
+     80,
+     100,
+     120,
+     140,
+     160,
+     180,
+     200,
+     220,
+     240,
+     260,
+     280,
+     300,
+     320,
+     340,
+     360,
+     380,
+     400,
+     420,
+     440,
+     460,
+     480,
+     500
+    ],
+    "v": [
+     0.167,
+     0.667,
+     0.583,
+     0.833,
+     0.833,
+     0.833,
+     0.75,
+     0.917,
+     1.0,
+     0.917,
+     0.917,
+     1.0,
+     0.667,
+     0.5,
+     0.667,
+     0.083,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "pos": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "ep": 76,
+    "job": "18395413",
+    "t": [
+     0,
+     20,
+     40,
+     60,
+     80,
+     100,
+     120,
+     140,
+     160,
+     180,
+     200,
+     220,
+     240,
+     260,
+     280,
+     300,
+     320,
+     340,
+     360,
+     380,
+     400,
+     420,
+     440,
+     460,
+     480,
+     500
+    ],
+    "v": [
+     0.833,
+     0.417,
+     0.25,
+     0.333,
+     0.5,
+     0.5,
+     0.083,
+     0.75,
+     0.917,
+     0.583,
+     0.583,
+     0.167,
+     0.0,
+     0.0,
+     0.083,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "pos": [
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  ]
+ }
+}

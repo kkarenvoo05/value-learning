@@ -1,0 +1,179 @@
+{
+  "table": "/iris/u/ankile/karenvo/libero/tables/moka_explore",
+  "labels": "explore_thr40_round",
+  "v_labels": "explore_thr40_round",
+  "layout": "fixed",
+  "group_col": "round",
+  "max_episodes": null,
+  "curve": null,
+  "curve_seeds": 3,
+  "folds": 5,
+  "results": [
+    {
+      "group": "1",
+      "episodes": 450,
+      "success": 0.5977777777777777,
+      "frames": 51658,
+      "tag_free_r2": 0.9034068584442139,
+      "action_rms": 0.4151245653629303,
+      "states": 30,
+      "n_sub": null,
+      "sub_seed": null,
+      "labels": "explore_thr40_round",
+      "pos_share": 0.4034999419257424,
+      "ideal_shift_raw": 0.016349080950021744,
+      "ideal_shift_ci95": [
+        0.015953541910627065,
+        0.01677147905630019
+      ],
+      "ideal_shift_arm": 0.005801249761134386,
+      "ideal_shift_gripper": 0.03831874951720238,
+      "noise_ref_raw": 0.11285217131518009,
+      "ideal_ratio_vs_noise_ref": 0.1448716560743974,
+      "tag_mse_gain": 0.011636853218078613,
+      "auc_S": 0.7631518648043167,
+      "auc_SA": 0.8159244962846952,
+      "gain_action_over_state": 0.07730658917325456,
+      "gain_ci95": [
+        0.06689921587423864,
+        0.08780806658709968
+      ]
+    },
+    {
+      "group": "1",
+      "episodes": 450,
+      "success": 0.5977777777777777,
+      "frames": 51658,
+      "tag_free_r2": 0.9034068584442139,
+      "action_rms": 0.4151245653629303,
+      "states": 30,
+      "n_sub": null,
+      "sub_seed": null,
+      "labels": "random 40%",
+      "pos_share": 0.4004994386155097,
+      "ideal_shift_raw": 0.003981416579335928,
+      "ideal_shift_ci95": [
+        0.003919850331596491,
+        0.004044233065199044
+      ],
+      "ideal_shift_arm": 0.0018808463355526328,
+      "ideal_shift_gripper": 0.008880501613020897,
+      "noise_ref_raw": 0.11285217131518009,
+      "ideal_ratio_vs_noise_ref": 0.03527992889225318,
+      "tag_mse_gain": -0.0015804767608642578
+    },
+    {
+      "group": "1",
+      "episodes": 450,
+      "success": 0.5977777777777777,
+      "frames": 51658,
+      "tag_free_r2": 0.9034068584442139,
+      "action_rms": 0.4151245653629303,
+      "states": 30,
+      "n_sub": null,
+      "sub_seed": null,
+      "labels": "positive control PC1 (50%)",
+      "pos_share": 0.49988385148476516,
+      "ideal_shift_raw": 0.04991801828145981,
+      "ideal_shift_ci95": [
+        0.048699091365266026,
+        0.051166188117168436
+      ],
+      "ideal_shift_arm": 0.030552849173545837,
+      "ideal_shift_gripper": 0.09472967684268951,
+      "noise_ref_raw": 0.11285217131518009,
+      "ideal_ratio_vs_noise_ref": 0.4423310397993661,
+      "tag_mse_gain": 0.12864631414413452,
+      "auc_S": 0.45700420650351825,
+      "auc_SA": 0.7599012664868541,
+      "gain_action_over_state": 0.17332918349738827,
+      "gain_ci95": [
+        0.1571746323525414,
+        0.18842649897371835
+      ]
+    },
+    {
+      "group": "2",
+      "episodes": 450,
+      "success": 0.6088888888888889,
+      "frames": 51862,
+      "tag_free_r2": 0.8636349439620972,
+      "action_rms": 0.4164593517780304,
+      "states": 30,
+      "n_sub": null,
+      "sub_seed": null,
+      "labels": "explore_thr40_round",
+      "pos_share": 0.4000038563881069,
+      "ideal_shift_raw": 0.01851644366979599,
+      "ideal_shift_ci95": [
+        0.01811930246006114,
+        0.018937004669075712
+      ],
+      "ideal_shift_arm": 0.005966277793049812,
+      "ideal_shift_gripper": 0.044326409697532654,
+      "noise_ref_raw": 0.14431901670397335,
+      "ideal_ratio_vs_noise_ref": 0.128302174534468,
+      "tag_mse_gain": 0.0033774375915527344,
+      "auc_S": 0.7346699187316055,
+      "auc_SA": 0.7982114750467166,
+      "gain_action_over_state": 0.08268541359015297,
+      "gain_ci95": [
+        0.07194271715466287,
+        0.09337687571403797
+      ]
+    },
+    {
+      "group": "2",
+      "episodes": 450,
+      "success": 0.6088888888888889,
+      "frames": 51862,
+      "tag_free_r2": 0.8636349439620972,
+      "action_rms": 0.4164593517780304,
+      "states": 30,
+      "n_sub": null,
+      "sub_seed": null,
+      "labels": "random 40%",
+      "pos_share": 0.4020670240252979,
+      "ideal_shift_raw": 0.004056193865835667,
+      "ideal_shift_ci95": [
+        0.003981046855046648,
+        0.00413107944382557
+      ],
+      "ideal_shift_arm": 0.0018928146455436945,
+      "ideal_shift_gripper": 0.00920727476477623,
+      "noise_ref_raw": 0.14431901670397335,
+      "ideal_ratio_vs_noise_ref": 0.028105747658714424,
+      "tag_mse_gain": -0.013151168823242188
+    },
+    {
+      "group": "2",
+      "episodes": 450,
+      "success": 0.6088888888888889,
+      "frames": 51862,
+      "tag_free_r2": 0.8636349439620972,
+      "action_rms": 0.4164593517780304,
+      "states": 30,
+      "n_sub": null,
+      "sub_seed": null,
+      "labels": "positive control PC1 (50%)",
+      "pos_share": 0.49980718059465506,
+      "ideal_shift_raw": 0.05932614952325821,
+      "ideal_shift_ci95": [
+        0.05819438001407606,
+        0.060479546157953826
+      ],
+      "ideal_shift_arm": 0.039718084037303925,
+      "ideal_shift_gripper": 0.10637544095516205,
+      "noise_ref_raw": 0.14431901670397335,
+      "ideal_ratio_vs_noise_ref": 0.411076453250425,
+      "tag_mse_gain": 0.11018568277359009,
+      "auc_S": 0.49514941748297936,
+      "auc_SA": 0.8222194229657852,
+      "gain_action_over_state": 0.23868836117374237,
+      "gain_ci95": [
+        0.22343354704857082,
+        0.25431218034234604
+      ]
+    }
+  ]
+}

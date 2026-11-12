@@ -1,0 +1,15 @@
+{
+  "current": 0.01513342559337616,
+  "current_ci95": [
+    0.014856395320950958,
+    0.01541522066257401
+  ],
+  "best": "td_vb40",
+  "best_shift": 0.01311617810279131,
+  "best_ci95": [
+    0.012894876778645967,
+    0.013334817136937483
+  ],
+  "pass": false,
+  "rule": "largest ideal shift; pass if its 95% CI lower bound > the current labels' upper bound [ours]"
+}

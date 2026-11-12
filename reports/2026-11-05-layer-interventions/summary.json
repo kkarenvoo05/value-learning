@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-05",
+  "title": "Layer diagnosis: seed-matched audit and intervention preparation",
+  "status": "CPU analysis complete; GPU interventions not run; no Slurm job submitted",
+  "observations": [
+    "Three-seed MAE is 0.17011 at four layers and 0.17026 at 18 layers; the previous 0.160 full-model comparison was seed 0.",
+    "The 1-second SNR difference is +0.01827 with paired hierarchical-bootstrap 95% interval [-0.01988, 0.04996].",
+    "The 4/18 cuts change expert capacity from 35.45M to 7.92M parameters as well as backbone access.",
+    "Across 9,600 adjacent frame pairs, full-expert cross-seed change correlations are 0.31–0.43.",
+    "Upper layers amplify wrist-camera changes and main-camera changes during real placement events. This alone is not a causal explanation of value jumps."
+  ],
+  "diagnostic_pairs": {"jump": 12, "steady": 12, "random": 12, "placement": 12},
+  "validation": {"repository_tests_passed": 204, "dummy_intervention_selftest": "passed"},
+  "next": "Run the prepared fixed-weight K/V and camera/state substitutions across all three full-expert seeds when compute is authorized and available."
+}

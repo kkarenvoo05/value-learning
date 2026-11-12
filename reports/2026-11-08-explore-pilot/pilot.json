@@ -1,0 +1,77 @@
+{
+  "runs": {
+    "control": "/iris/u/ankile/karenvo/libero/runs/explore_pilot_control_libero_10_18388271",
+    "x1.5": "/iris/u/ankile/karenvo/libero/runs/explore_pilot_x1p5_libero_10_18388272",
+    "x2.0": "/iris/u/ankile/karenvo/libero/runs/explore_pilot_x2p0_libero_10_18388273"
+  },
+  "early_steps": 60,
+  "results": [
+    {
+      "arm": "control",
+      "episodes": 90,
+      "success": 0.6444444444444445,
+      "steps_success": 424.3103448275862,
+      "spread_arm": 0.015499465627881754,
+      "spread_gripper": 0.001391573184920818
+    },
+    {
+      "arm": "x1.5",
+      "episodes": 90,
+      "success": 0.4888888888888889,
+      "steps_success": 422.5,
+      "spread_arm": 0.019017560098588772,
+      "spread_gripper": 0.0027838429038219096,
+      "success_vs_control": -0.15555555555555556,
+      "success_vs_control_ci95": [
+        -0.2669444444444444,
+        -0.04444444444444443
+      ],
+      "chunks": {
+        "normal": {
+          "chunks": 4320,
+          "mean_abs_arm": 0.09980006289650704,
+          "gripper_flips_per_chunk": 0.04675925925925926
+        },
+        "noisy": {
+          "chunks": 4197,
+          "mean_abs_arm": 0.10207212786096603,
+          "gripper_flips_per_chunk": 0.05003573981415296
+        }
+      },
+      "noisy_share": 0.49277914758717856,
+      "spread_ratio_arm": 1.2269816621534597,
+      "spread_ratio_gripper": 2.0005005370812126,
+      "qualifies": false
+    },
+    {
+      "arm": "x2.0",
+      "episodes": 90,
+      "success": 0.5666666666666667,
+      "steps_success": 426.6078431372549,
+      "spread_arm": 0.025491044802534373,
+      "spread_gripper": 0.012112731148857294,
+      "success_vs_control": -0.07777777777777778,
+      "success_vs_control_ci95": [
+        -0.20000000000000004,
+        0.05555555555555555
+      ],
+      "chunks": {
+        "normal": {
+          "chunks": 4282,
+          "mean_abs_arm": 0.10492949493395451,
+          "gripper_flips_per_chunk": 0.04624007473143391
+        },
+        "noisy": {
+          "chunks": 4146,
+          "mean_abs_arm": 0.10807575097421745,
+          "gripper_flips_per_chunk": 0.08055957549445249
+        }
+      },
+      "noisy_share": 0.49193165638348363,
+      "spread_ratio_arm": 1.6446402356400545,
+      "spread_ratio_gripper": 8.70434360198348,
+      "qualifies": true
+    }
+  ],
+  "choice": "x2.0"
+}

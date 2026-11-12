@@ -1,0 +1,660 @@
+{
+ "title": "Week 9 · update for the Nov 10 meeting, plus Nov 11 follow-up",
+ "sub": "LIBERO moka pots (libero_10 task 8): work since the Nov 3 check-in (Nov 4–9), and, in the section under the summary, what I did with the Nov 10 feedback. Advantage-conditioned fine-tuning of π₀.₅, RECAP-style.",
+ "goal": "**Goal.** Fine-tune π₀.₅ with a RECAP-style advantage tag (\"this action was better / worse than usual\", from a learned value function) and beat the base policy on one LIBERO task.",
+ "summary": [
+  {
+   "t": "**A fine-tune recipe that keeps base performance.** Fine-tuning on our rollouts used to cost ~13–16 points. Making demos 75% of the training frames and using a 10× lower learning rate scored **53.6% vs base 52.4%** (one seed; step 2000).",
+   "ev": [
+    "#policy",
+    "Policy chart"
+   ]
+  },
+  {
+   "t": "**The advantage tag is still (almost) unused, and the reason is the labels, not the model.** A planted tag of RECAP's expected size is learned on every route, so the conditioning works. Our labels only support a tiny tag-dependent action difference. Changing the value function does not help, and collecting more rollouts from the same policy does not help either: the policy's own data has little better-vs-worse action contrast.",
+   "ev": [
+    "#tag-effect",
+    "Tag-effect chart"
+   ],
+   "ev2": [
+    "#coach",
+    "Label-signal chart"
+   ]
+  },
+  {
+   "t": "**Best result so far: advantage weighting on the successful rollouts, 56.7%** (+4.2 points; 95% CI −3.0 to +11.5, so not yet different from base).",
+   "ev": [
+    "#policy",
+    "Policy chart"
+   ]
+  }
+ ],
+ "story": [
+  {
+   "t": "**Starting point (week 8 page).** Fine-tuning hurt (base 56.4% → ~41%, older eval settings), and the tagged policy ignored its tag, even when the tag was the true outcome. Two problems: the fine-tune costs performance, and the tag is not learned.",
+   "ev": [
+    "../week-08/index.html#base-vs-finetuned",
+    "Week 8"
+   ]
+  },
+  {
+   "t": "**Fine-tune cost.** Successes only + frozen vision encoder, or a 10× lower learning rate, brought success back to ~52–55%. The training seed alone moves success by ~10 points (same recipe: 63.9% vs 51.8%), so every recipe now needs 2 seeds.",
+   "ev": [
+    "#policy",
+    "Policy chart"
+   ]
+  },
+  {
+   "t": "**Closing the gaps to RECAP** (list below). After each fix, flipping the tag still moved the action by only ~1.3–1.9% of the policy's own sampling noise.",
+   "ev": [
+    "#gaps",
+    "RECAP gaps"
+   ]
+  },
+  {
+   "t": "**Can the model learn a tag at all? Yes.** A planted tag that shifts the action by RECAP's expected amount is learned on the prompt route and on the AdaRMS route (0.36× noise).",
+   "ev": [
+    "#tag-effect",
+    "Tag-effect chart"
+   ]
+  },
+  {
+   "t": "**Are our labels informative? Barely.** An offline test (the \"coach test\") fits the best possible tag-conditioned action model to our data: our labels support an action difference of 0.015 vs 0.004 for random labels and 0.05 for a positive control. Mostly gripper timing.",
+   "ev": [
+    "#coach",
+    "Label-signal chart"
+   ]
+  },
+  {
+   "t": "**Is the value function the problem? No.** A TD critic, a ResNet + π₀.₅ ensemble, longer lookaheads, hindsight returns and the episode outcome all give weaker labels than the current ResNet. Ground truth from the simulator (restore the state, run 12 continuations) shows the true advantage is itself mostly noise; our labels agree with it only weakly (r = 0.11).",
+   "ev": [
+    "#coach",
+    "Label-signal chart"
+   ],
+   "ev2": [
+    "#branching",
+    "Branching chart"
+   ]
+  },
+  {
+   "t": "**Is it the amount of data? No.** As episodes grow from 112 to 900, the labels' action information levels off by ~450 episodes, while a real signal (the positive control) keeps rising. A round of rollouts with 2× exploration noise adds only a little.",
+   "ev": [
+    "#curve",
+    "Data-curve chart"
+   ]
+  },
+  {
+   "t": "**Where the fine-tune cost comes from.** Training untagged on all rollouts (successes + failures), as RECAP does, drops success to 39.1%: the failure data causes the earlier drop. Tags or advantage weights recover part of it (40.9–52.4%), but not past base. Raising the demo share and lowering the learning rate is what brought it back to base.",
+   "ev": [
+    "#policy",
+    "Policy chart"
+   ]
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "Share of positive labels",
+   "did": "Ours was 70% positive (I had misread RECAP's threshold); switched to 40%. Also tried RECAP's single threshold and a per-round threshold.",
+   "result": "Rules give the same label signal (0.016–0.019).",
+   "status": "settled",
+   "ev": [
+    "#coach",
+    "rules chart"
+   ]
+  },
+  {
+   "gap": "Tag dropout (30%)",
+   "did": "Added.",
+   "result": "Tag still unused.",
+   "status": "settled"
+  },
+  {
+   "gap": "Demos tagged \"+\"",
+   "did": "Added the 29 task demos tagged \"+\", then raised them to 50–75% of training frames.",
+   "result": "Helps the fine-tune cost, not the tag.",
+   "status": "settled",
+   "ev": [
+    "#policy",
+    "Policy chart"
+   ]
+  },
+  {
+   "gap": "Discrete action-token loss + knowledge insulation",
+   "did": "Built π*0.6's FAST-token loss with stop-gradient, plus subtask text in the prompt (\"RECAP-complete\").",
+   "result": "45.8%; tag unused (1.4% of noise).",
+   "status": "settled",
+   "ev": [
+    "#tag-effect",
+    "Tag-effect chart"
+   ]
+  },
+  {
+   "gap": "Tag learned in multi-task pre-training",
+   "did": "Pre-trained a \"speed\" tag on demos of all 40 LIBERO tasks, then fine-tuned.",
+   "result": "Tag not learned; 47.6%.",
+   "status": "settled"
+  },
+  {
+   "gap": "Value model (pre-trained multi-task VLM)",
+   "did": "ResNet-18, out-of-fold; tried a π₀.₅ value expert, a TD critic, an ensemble and subtask-scoped values.",
+   "result": "None gave better labels.",
+   "status": "settled",
+   "ev": [
+    "#coach",
+    "Label-signal chart"
+   ]
+  },
+  {
+   "gap": "Human corrections, real-robot data variety",
+   "did": "Sim only: a round with 2× exploration noise; branching from saved failure states.",
+   "result": "Small gain; branching too noisy at 12 continuations.",
+   "status": "open",
+   "ev": [
+    "#branching",
+    "Branching chart"
+   ]
+  },
+  {
+   "gap": "Scale (many tasks, lots of data)",
+   "did": "One task, ~900 rollouts.",
+   "result": "Not closed with our compute.",
+   "status": "open"
+  }
+ ],
+ "discrepancies": [
+  "**The AdaRMS tag is not fully ignored.** With real labels, flipping the AdaRMS tag moves the action by 0.0060 (13.6% of noise), about 40% of what the labels can support and ~8× the prompt-route runs (0.0008); its training loss is also ~1% lower with the correct tag. Earlier summaries said \"tag ignored on every route\". That is true for the prompt routes, not for AdaRMS. Its eval with the + tag was 40.9%; it was never evaluated with the − tag, so we do not know if this learned shift changes success.",
+  "**The data-curve rule I set used the wrong metric.** I first read \"flat\" from the ideal shift, but the ideal shift stays flat with more data even for the positive control (it measures effect size, not learnability). The right read is action information: the labels level off by ~450 episodes while the positive control keeps rising. Same conclusion, better reason.",
+  "**Eval noise is ±5 points.** Base π₀.₅ scored 56.4% under the older eval settings and 52.4% under the current ones (matched noise); one success-only checkpoint scored 52.1% and 55.5%. One run (demos 75%, low lr) scored 53.6% at step 2000 and 47.0% at step 5000.",
+  "**The prompt-route models react to whether the tag text is there, not to its value.** Removing the tag moves the action ~6× more than flipping + to − (0.0045 vs 0.0008).",
+  "**Branching: the sim restore was not exact at 25% of branch points** (state difference > 1e-3). The results are unchanged when those points are dropped (true-advantage reliability 0.33, label correlation 0.14)."
+ ],
+ "questions": [
+  "**More rollouts from the same policy don't help.** The labels' action information levels off by ~450 episodes, and 2× exploration noise adds little. The ground truth from branching suggests why: in most states the policy's actions barely change the outcome. So the limit seems to be the *kind* of data, not the amount. Is a sim version of RECAP's corrections worth building, i.e. actions the policy wouldn't take itself, such as demo-style recoveries from saved failure states? Or should I accept that this setup can't test the tag?",
+  "Weighting and filtering give my best numbers so far. Should I lean into advantage-weighted training and treat the tag as secondary?",
+  "RECAP learns the tag across many tasks. Is a small multi-task test (a few LIBERO-10 tasks) worth the compute?",
+  "The AdaRMS route did learn ~40% of the label signal. Worth a − tag eval of that run (one job) before dropping the tag?",
+  "On the value side, I plan to score the ResNet and the truncated π₀.₅ value against the sim ground truth. Is that a good use of time compared with the policy questions?",
+  "With ~10-point seed noise, how many seeds would you want before trusting a ~5-point effect?"
+ ],
+ "jobs": [
+  {
+   "job": "18396170",
+   "what": "Train: all rollouts + demos 50%, low lr (untagged)",
+   "why": "Last arm of the recipe grid."
+  },
+  {
+   "job": "18404065",
+   "what": "Eval of that run at step 2000",
+   "after": "18396170"
+  },
+  {
+   "job": "18396173",
+   "what": "Eval of that run at step 5000",
+   "after": "18396170"
+  },
+  {
+   "job": "18404064",
+   "what": "Eval: demos 2%, low lr, step 2000",
+   "why": "Does the low lr alone keep base, without extra demos?"
+  },
+  {
+   "job": "18396977",
+   "what": "Eval: demos 2%, low lr, step 5000"
+  },
+  {
+   "job": "18396978",
+   "what": "Eval: old recipe (39.1% at the end) at step 2000",
+   "why": "Reference: is the drop already there at step 2000?"
+  },
+  {
+   "job": "18401829",
+   "what": "Decision job → follow-up runs",
+   "why": "Picks the best recipe whose 95% CI vs base includes 0 or is above it, then trains 3 runs on it: seed 1; + tag (30% dropout); + success-only advantage weights. Each evaluated at steps 2000 and 5000.",
+   "after": "the grid evals"
+  }
+ ],
+ "cards": {
+  "policy": {
+   "title": "Policy success: what costs performance and what brings it back",
+   "question": "Change in success vs base π₀.₅ (52.4%) on the same 330 trials (10 held-out scenes × 33, matched noise), paired by trial. Bars are 95% CIs; a bar crossing the dashed line is not distinguishable from base.",
+   "verdict": [
+    "**Failure rollouts cause the drop:** untagged on all rollouts = −13.3 points; on successes only = +3.0.",
+    "**More demos + 10× lower lr brings all-rollout training back to base** (demos 75%, low lr: +1.2 at step 2000). Single seed, and the same run is −5.5 at step 5000.",
+    "**Tags do not beat base on any route**; advantage weights on all rollouts reach base exactly (+0.0).",
+    "**Success-only + weights is the best so far (+4.2)**, still within noise."
+   ],
+   "source": "`scripts/site_week09_data.py` (paired bootstrap, 5000 draws) over `runs/eval_*_noise1_*` vs `eval_base_noise1_libero_10_18355478`"
+  },
+  "tag-effect": {
+   "title": "Does the tag change the action?",
+   "question": "Flip the tag (+ vs −) with the same sampling noise and measure how far the executed action moves, as a share of how far it moves between two noise draws (1.0 = as much as the policy's own randomness). Final checkpoints.",
+   "verdict": [
+    "**Real labels on the prompt route: 1.3–1.9%**, the same as the oracle outcome tag (1.7%) and no more than a model that never saw a tag (2.4%).",
+    "**A planted tag of RECAP's expected size is learned (36–37%) on both routes**, and a large one at 164%. The conditioning works.",
+    "**AdaRMS with real labels: 13.6%**, partly learned (see the discrepancies).",
+    "For scale: swapping the task instruction moves the action 98% of noise, so the policy does read its prompt."
+   ],
+   "source": "`runs/tag_usage_*/results.json` (raw actions); prompt swap `runs/prompt_test_1106b`"
+  },
+  "coach": {
+   "title": "How much could the action depend on the tag, given the labels? (coach test)",
+   "question": "Fit the best tag-conditioned action model f(state, tag) on the rollouts and measure how much its action changes between + and −. This is an upper bound on what a policy could learn from those labels. Random labels give the floor.",
+   "verdict": [
+    "**Current labels: 0.015, vs 0.004 for random.** The trained prompt-route policies learned 0.0008 of it (5%), AdaRMS 0.0060 (40%).",
+    "**No other value function does better:** TD critic 0.013, ensemble 0.012, outcome 0.011, longer lookaheads 0.009–0.010, hindsight 0.009.",
+    "**Label rules barely matter** (0.016–0.019), and the exploration round is only slightly above round 1. The PC1 control (a label that truly predicts the action) sits at 0.05–0.06."
+   ],
+   "source": "`reports/2026-11-08-coach-test/`, `reports/2026-11-07-td-labels/`, `reports/2026-11-08-explore-pilot/coach_explore*/`"
+  },
+  "curve": {
+   "title": "Would more of the same data help? The data curve",
+   "question": "Subsample 56–900 episodes (spread evenly over scenes, 5 draws each) and measure how much the action predicts the tag beyond the state (action information, held out). A real signal (PC1 control) should keep rising with data.",
+   "verdict": [
+    "**The positive control keeps rising** (old data 0.03 → 0.17; with exploration rounds 0.10 → 0.23).",
+    "**Our labels level off by ~450 episodes** (0.04 → 0.07; 0.06 → 0.08).",
+    "So collecting more rollouts of the same kind is unlikely to make the tag learnable. Points at 450 (old) and 900 (pooled) are single draws."
+   ],
+   "source": "`reports/2026-11-08-coach-curve/old_fixed/curve.csv`, `explore_explore_vb40_pooled/curve.csv`"
+  },
+  "branching": {
+   "title": "Ground truth from the simulator: when is a failure decided?",
+   "question": "For 12 failed rollouts, restore the exact sim state every 20 steps and run 12 fresh continuations of the base policy. V* = share that succeed (the true chance of success at that moment). The strip under each plot shows the label our pipeline gave that moment (+ or −).",
+   "verdict": [
+    "**The true chance of success is measured reliably:** V* split-half 0.90. In these examples a failure is decided at a few moments: V* falls from ~0.6–0.8 to ~0 within 1–4 branch points (20–80 steps).",
+    "**The true advantage is mostly noise:** A* split-half reliability 0.33 (0.50 for all 12 continuations).",
+    "**Our labels agree with it only weakly:** correlation with A* 0.11; 37% of moments with A* > 0 are labelled +, vs 23% with A* < 0.",
+    "So branching-based corrections would need many more continuations, and only at the decision moments."
+   ],
+   "source": "`runs/branch_fail_{a,b,c}_libero_10_1839541{2,3,4}/points.csv` (12 eps, 299 branch points), `scripts/libero_branch_analyze.py`"
+  }
+ },
+ "minor": [
+  {
+   "id": "m-labelrule",
+   "title": "Label-rule bug: 70% of frames were labelled positive",
+   "oneline": "RECAP's \"30% threshold\" had been read as the 30th percentile. Fixed to 40% positive (RECAP fine-tuning), value-binned.",
+   "status": "settled",
+   "verdict": [
+    "Literature review of RECAP App. A–F: ~30% positive in pre-training, ~40% in fine-tuning, 30% tag dropout, demos tagged +.",
+    "Value-binned calibration (Dissecting, arXiv 2609.28161) removes a V-dependent bias; agreement with a second value model κ 0.20 → 0.29."
+   ],
+   "source": "`reports/2026-11-05-literature-advantage-conditioning/`, `reports/2026-11-05-value-calibration/`"
+  },
+  {
+   "id": "m-predict",
+   "title": "Tag predictability: the action barely predicts the label",
+   "oneline": "Knowing the action explains 3–9% of the label's uncertainty beyond the state (stall control 13%, random 0).",
+   "status": "settled",
+   "verdict": [
+    "RCSL theory: a tag is ignored when P(tag | state, action) ≈ P(tag | state). That is close to our case."
+   ],
+   "source": "`reports/2026-11-05-tag-predictability/`"
+  },
+  {
+   "id": "m-seeds",
+   "title": "Stopping early is not a fix; seed noise is ~10 points",
+   "oneline": "Same recipe, step 1000: seed 0 63.9%, seed 1 51.8%.",
+   "status": "settled",
+   "verdict": [
+    "The two seeds also succeed on different scenes (scene 48: 88% vs 36%).",
+    "Since then: 2 seeds before reading any recipe effect ≤ 10 points; matched-noise evals (same sampling noise per trial) to tighten paired comparisons."
+   ],
+   "source": "evals 18310776, 18340452, 18338526"
+  },
+  {
+   "id": "m-explore",
+   "title": "Exploration-noise pilot",
+   "oneline": "2× sampling noise on some action chunks: success 56.7% vs 64.4% control, 1.64× more spread between rollouts. Chosen for a 450-episode round.",
+   "status": "settled",
+   "verdict": [
+    "The 450-episode round: success 60.9%; its labels carry only slightly more signal than round 1 (coach chart)."
+   ],
+   "source": "`reports/2026-11-08-explore-pilot/`"
+  },
+  {
+   "id": "m-steer",
+   "title": "Steering by picking the best of π₀.₅'s action samples",
+   "oneline": "Even with the simulator as judge, best of 8 gains +0.6 points (CI −2.8 to +4.2); also null at 1.5× and 2× noise.",
+   "status": "settled",
+   "verdict": [
+    "The policy's own samples are too alike to choose between: the same low-headroom story as the labels."
+   ],
+   "source": "`reports/2026-11-04-steer-probe/`"
+  },
+  {
+   "id": "m-infra",
+   "title": "Infrastructure",
+   "oneline": "Evals resume after preemption; matched-noise evals; a demo-share option; a mid-training-eval fix.",
+   "status": "settled",
+   "verdict": [
+    "iris preempted evals overnight; `libero_rollouts.py --args.resume` keeps finished episodes.",
+    "Fixed 2026-11-09: evals of a checkpoint saved while training was still running assumed an unfrozen vision encoder and crashed; training now writes its args at the start."
+   ],
+   "source": "docs/libero_plan.md log, 2026-11-07 and 2026-11-09"
+  },
+  {
+   "id": "m-value",
+   "title": "Value-function track (details on the week 8 page)",
+   "oneline": "Truncated π₀.₅ value (first 4 of 18 layers) is steadier on all 3 seeds but still below the ResNet; π₀.₅ out-of-fold labels are worse than the ResNet's.",
+   "status": "settled",
+   "verdict": [
+    "Subtask-scoped ResNet value: lower error on its own (easier) target, but its labels do not help downstream."
+   ],
+   "source": "`../week-08/index.html#truncated-expert`"
+  }
+ ],
+ "since": {
+  "title": "Since Nov 10: feedback and new experiments",
+  "lead": "The Nov 10 feedback asked whether the learned advantage is informative at all, suggested two directions (run an existing RL baseline on this task; read and implement the Advantage Guidance paper), and asked about determinism, retries, more noise, more rounds and seeds. What came of each is below. Every success number is the same 330 held-out trials as base (52.4%), paired by trial, 95% CI.",
+  "headline": [
+   {
+    "t": "**Advantage Guidance's contrastive guidance is the first arm that beats base: 65.8% vs 52.4%, +13.3 points [+7.0, +19.7]**, with no extra training. It samples the AdaRMS-tag checkpoint as v_ref + w·(v₊ − v₋) at w 8. Success rises with w and the sign flip hurts (w −4: 23.0%). So the tag did learn a small real direction; plain + sampling just under-weights it.",
+    "ev": [
+     "#ag",
+     "AG chart"
+    ]
+   },
+   {
+    "t": "**Caveats on that number:** w was chosen on these same 330 trials, it is one training seed, and the shuffled-label control (is it advantage, or just \"look like the demos\"?) is still running.",
+    "ev": [
+     "#future",
+     "Next experiments"
+    ]
+   },
+   {
+    "dyn": "residual"
+   },
+   {
+    "dyn": "dsrl"
+   },
+   {
+    "t": "**Residual vs DSRL on the same 330 trials: 75.4% vs 67.9%, +7.6 points [+1.2, +13.9]** (paired by start state and repeat; DSRL picks its own start noise, so it does not share the matched noise seed). Both are one seed.",
+    "ev": [
+     "#future",
+     "Next experiments"
+    ]
+   },
+   {
+    "t": "**Other questions from the feedback:** more exploration noise breaks the policy (3× → 28%, 5× → 0%); learned advantages track the simulator's true advantage at only 0.04–0.14 (ceiling 0.69); the round-1 filtered-BC policy is no better than base on the states it collected (57.6% vs 59.8%), and round 2 (seed 1) does not climb: 50.6% vs round 1's 55.5%.",
+    "ev": [
+     "#lars",
+     "Feedback table"
+    ]
+   },
+   {
+    "t": "**Rollout gallery (new):** base vs residual + guidance on the same 330 trials, side by side. Guidance fixes 113 trials and breaks 37; successes are 12 steps shorter on trials both solve [−20.6, −3.9]; most guided failures already have the first pot on the stove.",
+    "ev": [
+     "../gallery-residual/index.html",
+     "Gallery"
+    ]
+   }
+  ],
+  "lars": [
+   {
+    "ask": "Is the policy nearly deterministic? Are some start states never solved?",
+    "did": "Read the existing evals per start state.",
+    "result": "Not deterministic: success per state 12–91% (val) and 13–93% (train). Every state succeeds sometimes.",
+    "status": "settled"
+   },
+   {
+    "ask": "Retry from failed states: does every failure have a success nearby?",
+    "did": "Used the failure-branching runs: 12 continuations from points along 12 failed episodes.",
+    "result": "Early in a failed episode, success is still 17–83% likely. Later, most episodes pass a point of no return (steps 80–440). 50% of points uncertain, 42% none succeed, 8% all succeed. A dedicated retry-until-success eval was not run.",
+    "status": "open"
+   },
+   {
+    "ask": "More exploration noise (2× may not be enough)",
+    "did": "Swept start-noise scale 2×, 3×, 5×, 8×, and 2× on every chunk; 90 episodes each on train states.",
+    "result": "64% (no extra noise) → 57% (2×) → 28% (3×) → 0% (5×, 8×): actions break before they become useful variety.",
+    "status": "settled",
+    "ev": [
+     "#other",
+     "Noise table"
+    ]
+   },
+   {
+    "ask": "Keep successes and retrain for several rounds: does it approach 100%?",
+    "did": "Filtered BC round 2: 900 rollouts with the round-1 policy (30 train states × 15 + 450 fresh layouts), retrain from base on all round-1 + round-2 successes, 2 seeds.",
+    "result": "Seed 1 done: round 2 gets **50.6% (final), −1.8 vs base [−8.5, +4.8] and −4.8 vs round 1's 55.5% [−11.2, +1.5]**; its step-2000 checkpoint is worse (39.7%). The round-1 policy also collected at 57.6% vs base 59.8% on the same train states, so it was not better where it trains. Seed 0 evals rerunning. So far, no climb toward 100%.",
+    "status": "running",
+    "ev": [
+     "#other",
+     "Round-2 table"
+    ]
+   },
+   {
+    "ask": "Is the learned advantage informative? If so, why doesn't it show up in the other methods?",
+    "did": "Scored every value function and label set against the simulator's true advantage (424 branch points).",
+    "result": "Barely: corr(learned A, true A) 0.04–0.14, against a ceiling of 0.69 set by the ground truth's own noise. But guidance (above) shows the AdaRMS tag picked up a small direction that does help once amplified.",
+    "status": "settled",
+    "ev": [
+     "#other",
+     "Value chart"
+    ]
+   },
+   {
+    "ask": "Advantage weighting: good for debugging, not convinced as a method",
+    "did": "Kept it as a baseline; the follow-up runs finished.",
+    "result": "Success-only weights on the 75%-demo recipe: 59.4% at step 2000 (+7.0 [+0.9, +13.0]), 55.5% at the end. Same tag model sampled − (59.1%) is not worse than + (57.0%): the prompt tag is still ignored.",
+    "status": "settled",
+    "ev": [
+     "#followup",
+     "Follow-up chart"
+    ]
+   },
+   {
+    "ask": "Direction 1: run an existing RL baseline on this task to calibrate",
+    "did": "DSRL (Wagenmaker et al., CoRL 2025), online: π₀.₅ frozen, a small pixel SAC agent picks its start noise. Same task, same 30 train states.",
+    "result": "Running. See the DSRL chart: flat near base for ~400 episodes, then rising in the latest cycles.",
+    "status": "running",
+    "ev": [
+     "#dsrl",
+     "DSRL chart"
+    ]
+   },
+   {
+    "ask": "Direction 2: the Advantage Guidance paper (why the policy ignores conditioning; implement it)",
+    "did": "Read the paper and code. Ran contrastive guidance on the existing tag checkpoint (zero training), built the residual parameterisation, and planned action imagination behind a gate.",
+    "result": "Guidance w 8: +13.3 points. Residual at the same action shift: +23.0 points (75.4%), +9.7 [+3.0, +16.7] above AdaRMS w 8 on the same trials. Imagination: not built (needs a critic that can rank π₀.₅'s own samples).",
+    "status": "settled",
+    "ev": [
+     "#ag",
+     "AG chart"
+    ]
+   },
+   {
+    "ask": "Multi-task test: not make-or-break",
+    "did": "Deprioritised.",
+    "result": "Not started.",
+    "status": "open"
+   },
+   {
+    "ask": "Value vs sim ground truth: quick, inference-only signal",
+    "did": "Done (`reports/2026-11-10-value-vs-gt`).",
+    "result": "See the advantage row above; V vs true V* is also weak (0.22–0.29).",
+    "status": "settled",
+    "ev": [
+     "#other",
+     "Value chart"
+    ]
+   },
+   {
+    "ask": "Run several seeds",
+    "did": "Seed 1 of the 75%-demo recipe; round 2 trains 2 seeds.",
+    "result": "Seed 1: 49.7% at step 2000, 53.9% at the end (seed 0: 53.6%, 47.0%). The guidance result is still one training seed.",
+    "status": "running"
+   },
+   {
+    "ask": "Corrections (RECAP-style) / Mulligan robomimic square data",
+    "did": "Deferred, as suggested.",
+    "result": "—",
+    "status": "open"
+   }
+  ],
+  "cards": {
+   "ag": {
+    "title": "Advantage Guidance (Zhou & Levine): contrastive guidance and the residual parameterisation",
+    "question": "At sampling time, each denoising step uses v = v_ref + w·(v₊ − v₋): the + and − tag velocities of the same model, with the no-tag branch as v_ref. w scales a direction the model already learned; nothing is retrained. The residual model keeps π₀.₅ frozen as v_ref and adds a small, zero-initialised tag-conditioned head; residual and AdaRMS are compared at the same action shift, not the same w (w means different amounts in each). Change in success vs base on the same 330 trials.",
+    "verdict": [
+     "**w 8 = 65.8%, +13.3 points [+7.0, +19.7]; 8 of 10 start states improve.** Still above zero when resampling whole start states (+0.6 to +25.8).",
+     "**Dose-response:** w 2 and w 4 are below base, w 8 above it, and pointing the guidance the wrong way (w −4) costs 29 points. The checkpoint's own reference (w 0) is 13.9 points below base, so w 8 is worth ~27 points relative to it.",
+     "**Why w 8 and not the paper's 1–4:** the paper's theorem makes w an inverse temperature (1/β = w·[T(y₊) − T(y₋)]). Our labels are weak (corr 0.10 with the true advantage), which flattens P(+ | A), so a larger w is needed for the same tilt [our reading].",
+     "**Open:** w was chosen on these trials; one training seed; the shuffled-label control decides whether the direction is advantage or demo-vs-rollout."
+    ],
+    "source": "`scripts/site_since_data.py` over `runs/eval_adarms_vb40_*`, `eval_ag_residual_*`, `eval_ctrl_adarms_shufvb40_*` vs base 18355478; contrast checks `runs/contrast_check_*`; `reports/2026-11-11-advantage-guidance/report.md`"
+   },
+   "dsrl": {
+    "title": "DSRL online: an established RL method on the same task (suggested direction 1)",
+    "question": "DSRL keeps π₀.₅ frozen and trains a small pixel SAC agent to choose the flow model's start noise (one 32-d vector per chunk), from sparse success reward, online. Paper settings (UTD 20, 10 Q heads, discount 0.999). Points = training success over one cycle through all 30 train states (30 episodes), with the agent's own exploration noise on.",
+    "verdict": [
+     "**Flat near base for ~400 episodes, in both agent lives.** The job was preempted at episode 443 and restarted with a fresh agent (its replay buffer is in memory only).",
+     "**Then rising:** both lives start climbing at about the same point (cycle 13). The restarted agent's last 3 cycles average {last3} vs base {base} on the same states.",
+     "**Held-out result:** a snapshot saved at episode 971 (about 530 episodes into life 2, early in the rise) gets **67.9% vs base 52.4% on the 330 held-out trials, +15.4 points [+8.5, +22.1]**. The points here are training episodes on the train states with exploration noise on, so they are not comparable with that number. Still one seed; a resumable second seed is next."
+    ],
+    "source": "`runs/dsrl_s0_libero_10_18434524/episodes.csv`; base = round-1 rollouts of base π₀.₅ on the same 30 states (`stage2_moka_18155849`, 450 episodes); `reports/2026-11-10-dsrl-online/report.md`"
+   },
+   "followup": {
+    "title": "Follow-ups on the recipe that kept base (demos 75%, 10× lower lr)",
+    "question": "The decision job picked the best recipe from the grid and trained three runs on it: seed 1, the RECAP tag (prompt route, dropout 0.3), and success-only advantage weights. Change in success vs base on the same 330 trials.",
+    "verdict": [
+     "**The recipe sits at base ± noise:** seed 1 is 49.7% / 53.9% (step 2000 / end), seed 0 was 53.6% / 47.0%.",
+     "**The prompt tag is still ignored:** the same model sampled with − (59.1%) does slightly better than with + (57.0%).",
+     "**Success-only weights at step 2000: 59.4%, +7.0 [+0.9, +13.0]**, the best fine-tune so far, but 55.5% at the end, and +7.0 [−3.9, +15.2] when resampling start states. Treated as a baseline, as suggested."
+    ],
+    "source": "`scripts/site_since_data.py` over `runs/eval_fu_d75_low_*`; decision `reports/2026-11-09-step1-followup/decision.json`"
+   },
+   "other": {
+    "title": "Other checks: exploration noise, value vs ground truth, round-2 collection",
+    "question": "Three quick checks from the feedback.",
+    "verdict": [
+     "**More noise breaks the policy before it adds useful variety** (3× → 28%, 5× → 0%).",
+     "**Every learned advantage tracks the true advantage weakly** (0.04–0.14), well below what the noisy ground truth allows (0.69). Random labels: 0.01.",
+     "**The round-1 filtered-BC policy is not clearly better than base where it collects** (unpaired, about ±3 points)."
+    ],
+    "source": "`reports/2026-11-09-noise-sweep/`, `reports/2026-11-10-value-vs-gt/`, `runs/fbc_r2_collect_*` vs `tables/moka_fixed_fresh`"
+   }
+  },
+  "jobs": [
+   {
+    "job": "18452292",
+    "what": "DSRL final agent (episode 1800) on the 330 held-out trials",
+    "why": "Training finished at 1800 episodes (last 3 training cycles 82%). Does the later climb carry over to unseen states? The episode-971 snapshot got 67.9%."
+   },
+   {
+    "job": "18445301",
+    "what": "AdaRMS checkpoint at w 16",
+    "why": "Does the dose-response keep rising past w 8?",
+    "after": "18445300"
+   },
+   {
+    "job": "18452438",
+    "what": "Residual model at w 16",
+    "why": "AdaRMS keeps climbing with w (65.8% at w 8, ~75% at w 16). Does the residual climb past 75.4% too? Picks the collection policy for the rollout rounds.",
+    "after": "18445301"
+   },
+   {
+    "job": "18438189",
+    "what": "Residual model at the action shift of AdaRMS w 4",
+    "why": "Second point on the residual's curve.",
+    "after": "18452438"
+   },
+   {
+    "job": "18438131",
+    "what": "Shuffled-label control: train (same recipe as the w 8 checkpoint)",
+    "why": "Labels permuted across episodes; demos still +. If it also gains at w 8, the gain is \"look like the demos\", not advantage."
+   },
+   {
+    "job": "18438132",
+    "what": "Shuffled-label control: eval at w 8",
+    "after": "18438131"
+   },
+   {
+    "job": "18451198",
+    "what": "Round 2 seed 0: eval at the end",
+    "why": "Rerun: the first eval pointed at the training run that died on the broken GPU."
+   },
+   {
+    "job": "18451199",
+    "what": "Round 2 seed 0: eval at step 2000"
+   },
+   {
+    "job": "18433699",
+    "what": "Round-1 recipe, seed 1 (held for the GPU cap)",
+    "why": "Seed check of the 55.5% filtered-BC baseline."
+   }
+  ],
+  "future": [
+   {
+    "exp": "Re-test guidance w 8 on fresh trials (new noise seed or held-out states)",
+    "why": "w was picked on the same 330 trials it is scored on.",
+    "cost": "1 eval, ~3 GPU-h",
+    "pri": "high"
+   },
+   {
+    "exp": "Second training seed of the AdaRMS-tag run, then guidance at w 4 / 8 / 16",
+    "why": "Seed alone moves success ~10 points; the +13 is one seed.",
+    "cost": "~4 GPU-h train + 3 evals",
+    "pri": "high"
+   },
+   {
+    "exp": "Anchor swap, no training: v = π₀.₅ + w·(v₊ − v₋), the direction taken from the AdaRMS checkpoint",
+    "why": "The AdaRMS checkpoint's own anchor (no tag) scores 38.5%, 14 points below base. If the swap reaches the residual's 75%, the residual's lead comes from its undamaged anchor; if it stays near 66%, the residual's head learned a better direction.",
+    "cost": "small code change (two models in one server) + 1 eval, ~2 GPU-h",
+    "pri": "high"
+   },
+   {
+    "exp": "AdaRMS tag on the recipe that keeps base (demos 75%, low lr), then guidance",
+    "why": "The w 8 checkpoint starts 14 points below base; a reference at base could clear base by more. Run after the anchor swap, which tests the same idea without training. The lower lr may also shrink v₊ − v₋.",
+    "cost": "~4 GPU-h train + evals",
+    "pri": "high"
+   },
+   {
+    "exp": "Make DSRL resumable, run seed 1, and evaluate later snapshots",
+    "why": "The episode-971 agent gets 67.9% on the held-out trials (+15.4 vs base), but that is one seed and one snapshot, and a requeue already reset one agent.",
+    "cost": "~18 h per seed; 1 eval (~2 GPU-h) per snapshot",
+    "pri": "high"
+   },
+   {
+    "exp": "Second training seed of the residual, and a shuffled-label residual",
+    "why": "The residual is now the best result (75.4%, +9.7 over AdaRMS w 8 and +7.6 over DSRL on the same trials), but it is one seed, and only the control separates advantage from \"look like the demos\".",
+    "cost": "~4 GPU-h train each + evals",
+    "pri": "high"
+   },
+   {
+    "exp": "Pick w on a held-out split and run the residual's full w curve",
+    "why": "Clean dose comparison, residual vs AdaRMS.",
+    "cost": "2–3 evals",
+    "pri": "medium"
+   },
+   {
+    "exp": "The paper's gradient-cosine diagnostic on the AdaRMS and residual runs",
+    "why": "Their diagnostic (i); we only have (ii), the action-shift ratio.",
+    "cost": "~30 min GPU",
+    "pri": "medium"
+   },
+   {
+    "exp": "Action imagination, gated: first a chunk-level Q(s, a) on exploration + branching data",
+    "why": "Only worth building if Q can rank π₀.₅'s own samples on held-out branch points; the simulator oracle could not (+0.6 points). Candidates could come from the guided residual model, whose samples may differ more than base's.",
+    "cost": "~1 day",
+    "pri": "low"
+   },
+   {
+    "exp": "Prompt-route guidance (negative control)",
+    "why": "Its + vs − difference is ~1% of noise, so guidance should do nothing there.",
+    "cost": "1 eval",
+    "pri": "low"
+   },
+   {
+    "exp": "Multi-task test; Mulligan robomimic square data with corrections",
+    "why": "Suggested for later.",
+    "cost": "—",
+    "pri": "later"
+   }
+  ],
+  "ask": [
+   "Guidance beats base, and the residual parameterisation goes further (75.4%, above DSRL's 67.9%). Is this the direction to push (seeds, fresh trials, the anchor test), or does it change the RECAP question?",
+   "Which to prioritise for GPUs: confirming guidance, scaling DSRL (seeds, held-out eval), or the residual / imagination line?",
+   "DSRL reaches 67.9% on the held-out trials after ~1000 episodes. Is it worth more seeds as the RL baseline, or is one run enough to calibrate against?"
+  ]
+ }
+}
