@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moka pots: base vs residual</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1d1b;--mut:#66645e;--card:#fff;--line:#e3e1db}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ecebe6;--mut:#a3a19a;--card:#1f1f1d;--line:#33322f}}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;margin:0}
+main{max-width:1100px;margin:auto;padding:24px 16px} h1{font-size:24px;margin:0 0 4px} .mut{color:var(--mut)}
+table{border-collapse:collapse;margin:12px 0} td,th{border-bottom:1px solid var(--line);padding:4px 12px;text-align:right}
+th:first-child,td:first-child{text-align:left} img{max-width:100%;background:#fff;border-radius:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px}
+video{width:100%;border-radius:4px} figcaption{font-size:13px;color:var(--mut)}
+</style></head><body><main>
+<h1>Moka pots: base π0.5 vs advantage-guidance residual</h1>
+<p class="mut">LIBERO-10 task 8, 10 held-out val states x 33 trials, same trials and sampling noise for both policies
+(base eval 18355478, residual eval 18438187, 2026-11-11). Failure types from the agentview video with a pot-on-stove
+detector (frame accuracy 94% on 120 rollouts with recorded sim state, 93% on their failures' end states).</p>
+<table><tr><th>outcome</th><th>base</th><th>residual</th></tr>
+<tr><td>success (both pots on the stove)</td><td>173</td><td>249</td></tr>
+<tr><td>failed with one pot on the stove</td><td>113</td><td>75</td></tr>
+<tr><td>failed after a placed pot came off</td><td>18</td><td>4</td></tr>
+<tr><td>failed without placing any pot</td><td>26</td><td>2</td></tr></table>
+<ul><li>The residual fixes 113 of base's failures and breaks 37 of its successes (35 of those end with one pot on).</li>
+<li>Almost every remaining failure has the first pot on the stove: the second pot is what is left to fix.</li>
+<li>Faster: successes median 409 vs 397 steps; on the 136 trials both solve, the residual is
+-12.3 steps [-20.6, -3.9]. First pot on the stove: median step 208 vs 192, and base's long
+tail of late first pots (steps 270-520) is gone.</li></ul>
+<img src="overview.png" alt="outcomes, success lengths, first-pot timing">
+<img src="failure_curves.png" alt="pot count and IQL value over time for example failures">
+
+<h3>fixed: base had one pot</h3><div class='grid'>
+<figure><video src='media/fixed_init48_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 48, repeat 0 (left base, right residual)</figcaption></figure>
+<figure><video src='media/fixed_init44_r1.mp4' controls muted loop preload='metadata'></video><figcaption>val state 44, repeat 1 (left base, right residual)</figcaption></figure>
+<figure><video src='media/fixed_init12_r3.mp4' controls muted loop preload='metadata'></video><figcaption>val state 12, repeat 3 (left base, right residual)</figcaption></figure>
+</div>
+<h3>fixed: base placed no pot</h3><div class='grid'>
+<figure><video src='media/fixed_init42_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 42, repeat 0 (left base, right residual)</figcaption></figure>
+<figure><video src='media/fixed_init13_r1.mp4' controls muted loop preload='metadata'></video><figcaption>val state 13, repeat 1 (left base, right residual)</figcaption></figure>
+<figure><video src='media/fixed_init12_r4.mp4' controls muted loop preload='metadata'></video><figcaption>val state 12, repeat 4 (left base, right residual)</figcaption></figure>
+</div>
+<h3>fixed: base lost a pot</h3><div class='grid'>
+<figure><video src='media/fixed_init13_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 13, repeat 0 (left base, right residual)</figcaption></figure>
+<figure><video src='media/fixed_init42_r2.mp4' controls muted loop preload='metadata'></video><figcaption>val state 42, repeat 2 (left base, right residual)</figcaption></figure>
+<figure><video src='media/fixed_init44_r3.mp4' controls muted loop preload='metadata'></video><figcaption>val state 44, repeat 3 (left base, right residual)</figcaption></figure>
+</div>
+<h3>broken: base succeeded, residual one pot</h3><div class='grid'>
+<figure><video src='media/broken_init09_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 9, repeat 0 (left base, right residual)</figcaption></figure>
+<figure><video src='media/broken_init32_r1.mp4' controls muted loop preload='metadata'></video><figcaption>val state 32, repeat 1 (left base, right residual)</figcaption></figure>
+<figure><video src='media/broken_init17_r3.mp4' controls muted loop preload='metadata'></video><figcaption>val state 17, repeat 3 (left base, right residual)</figcaption></figure>
+</div>
+<h3>still failing: both one pot</h3><div class='grid'>
+<figure><video src='media/still_failing_init12_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 12, repeat 0 (left base, right residual)</figcaption></figure>
+<figure><video src='media/still_failing_init17_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 17, repeat 0 (left base, right residual)</figcaption></figure>
+<figure><video src='media/still_failing_init32_r0.mp4' controls muted loop preload='metadata'></video><figcaption>val state 32, repeat 0 (left base, right residual)</figcaption></figure>
+</div></main></body></html>

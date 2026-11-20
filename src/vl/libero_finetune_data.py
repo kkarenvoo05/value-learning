@@ -71,6 +71,28 @@ def action_chunk(actions: np.ndarray, t: int, horizon: int = HORIZON) -> np.ndar
     return actions[idx]
 
 
+# [2026-11-14] Chunk targets (Karen: "set up the distillation experiment with the chunk target fix"). Rollouts replan
+# every 5 steps from 10-action chunks, so the "executed" target a_t .. a_{t+9} joins two separately sampled chunks
+# (or three). "sampled": a rollout contributes only its replan frames (new_chunk), each with the full 10-action chunk
+# the policy sampled there (raw chunk_actions / chunk_t, saved by scripts/libero_rollouts.py from 2026-11-14), i.e.
+# exactly the teacher's output distribution at the states where it was queried [ours]. Demos keep the executed
+# target (one continuous human trajectory, nothing spliced). A rollout without saved chunks is refused.
+CHUNK_TARGETS = "executed"  # "executed" (every run before 2026-11-14) | "sampled"
+
+
+def episode_chunks(z, n: int) -> tuple[np.ndarray, np.ndarray] | None:
+    """(chunk_t (m,), chunk_actions (m, HORIZON, dim)) from an open raw npz, chunks starting at a recorded frame
+    (< n); None if the file has none. Checks: strictly increasing starts, first at frame 0, horizon HORIZON."""
+    if "chunk_actions" not in z.files:
+        return None
+    ct, ca = np.asarray(z["chunk_t"], np.int64), np.asarray(z["chunk_actions"])
+    assert len(ct) == len(ca) and ca.ndim == 3 and ca.shape[1] == HORIZON, (ct.shape, ca.shape)
+    keep = ct < n  # an episode that ended on a client exception right after a request
+    ct, ca = ct[keep], ca[keep]
+    assert len(ct) and ct[0] == 0 and np.all(np.diff(ct) > 0), ct[:5]
+    return ct, ca
+
+
 def held_out_states(cfg_path: Path = MOKA_CFG) -> set[int]:
     split = yaml.safe_load(Path(cfg_path).read_text())["split"]
     return set(split["val"]) | set(split["test"])
@@ -111,16 +133,50 @@ def demo_episodes(table: Path, task: str) -> pd.DataFrame:
                          "policy_steps": d.policy_steps.to_numpy() if "policy_steps" in d else -1})
 
 
+def demo_episodes_any(tables, task: str) -> pd.DataFrame:
+    """[2026-11-19] demo_episodes from the first of `tables` that has the task (pi05_policy_finetune
+    --demo-table-extra: LIBERO-90 demos live in their own table). AssertionError if none has it, as demo_episodes.
+    The tables' episode_index ranges must not overlap (libero90_t64_demos uses 50000 + LeRobot index)."""
+    for t in tables:
+        try:
+            return demo_episodes(t, task)
+        except AssertionError:
+            continue
+    raise AssertionError(f"no demos for {task!r} in {[str(t) for t in tables]}")
+
+
 def oversample_demos(sel: pd.DataFrame, share: float) -> tuple[pd.DataFrame, int, float]:
     """[2026-11-08, step-1 recipe grid; ours] Repeat every demo row k times so demos are ~`share` of the training
     frames (EpisodeStream draws each listed row's frames once per epoch, so a row listed k times is seen k times).
     Frames counted by policy_steps. Returns (rows, k, realised demo frame share)."""
-    assert 0 < share < 1 and "demo" in sel and sel.demo.any() and (~sel.demo).any()
+    return oversample_flag(sel, "demo", share)
+
+
+def oversample_flag(sel: pd.DataFrame, col: str, share: float) -> tuple[pd.DataFrame, int, float]:
+    """oversample_demos for any boolean column `col` [2026-11-13]: repeat the flagged rows k times so they are ~`share`
+    of the training frames. Returns (rows, k, realised frame share of the flagged rows)."""
+    assert 0 < share < 1 and col in sel and sel[col].any() and (~sel[col]).any()
     assert (sel.policy_steps > 0).all(), "frame counts (policy_steps) needed for every row"
-    roll, dem = sel.policy_steps[~sel.demo].sum(), sel.policy_steps[sel.demo].sum()
-    k = max(1, int(round(share / (1 - share) * roll / dem)))
-    out = pd.concat([sel[~sel.demo]] + [sel[sel.demo]] * k, ignore_index=True)
-    return out, k, float(k * dem / (k * dem + roll))
+    m = sel[col].astype(bool)
+    rest, flag = sel.policy_steps[~m].sum(), sel.policy_steps[m].sum()
+    k = max(1, int(round(share / (1 - share) * rest / flag)))
+    out = pd.concat([sel[~m]] + [sel[m]] * k, ignore_index=True)
+    return out, k, float(k * flag / (k * flag + rest))
+
+
+def anchor_episodes(eps: pd.DataFrame, round_: int, held_out: set[int] | None = None) -> pd.DataFrame:
+    """Base-policy anchor rows [2026-11-13; Karen: "anchor with base pi0.5 rollouts instead of demos"; zima co-trains
+    each round with the base policy's own data]: every train rollout of one round of a round table (successes AND
+    failures, untagged), i.e. the base policy's on-policy samples when round_ = 1 (moka_fbc_r2 round 1 =
+    moka_fixed_fresh, the base pi0.5 rollouts). Same columns as select_episodes plus anchor = True; the caller adds
+    them beside the arm's rows (a round-1 success is then listed twice: once as data, once as anchor)."""
+    assert "round" in eps, "the anchor needs a round table (scripts/libero_round2_table.py)"
+    held_out = held_out_states() if held_out is None else held_out
+    sel = eps[(eps.split == "train") & (eps["round"] == round_)]
+    assert len(sel), f"no train episodes in round {round_}"
+    bad = set(sel.init_state) & held_out
+    assert not bad, f"held-out init states in the anchor: {sorted(bad)}"
+    return sel.sort_values("episode_index").reset_index(drop=True).assign(anchor=True)
 
 
 def demo_labels(demos: pd.DataFrame) -> pd.DataFrame:
@@ -182,13 +238,27 @@ def frame_weights(weights: pd.DataFrame, episode_index: int, n_frames: int) -> n
 
 
 def load_episode(raw: str, labels: pd.DataFrame | None, episode_index: int,
-                 weights: pd.DataFrame | None = None, subtask: bool | None = None) -> dict:
+                 weights: pd.DataFrame | None = None, subtask: bool | None = None,
+                 chunk_targets: str | None = None) -> dict:
+    """chunk_targets: None = CHUNK_TARGETS; the trainer's fixed val batch passes "executed" (val rollouts predate
+    saved chunks, and val loss stays comparable across runs)."""
     subtask = SUBTASK_PROMPT if subtask is None else subtask
+    chunk_targets = CHUNK_TARGETS if chunk_targets is None else chunk_targets
+    assert chunk_targets in ("executed", "sampled"), chunk_targets
     with np.load(raw) as z:
         ep = {"image": z["image"], "wrist_image": z["wrist_image"], "state": z["state"],
               "actions": z["actions"], "prompt": str(z["prompt"])}
         ep["subtask"] = frame_subtasks(z["goals"]) if subtask and "goals" in z.files else None
-    n = len(ep["actions"])
+        n = len(ep["actions"])
+        if chunk_targets == "sampled":  # [2026-11-14] see CHUNK_TARGETS
+            ch = episode_chunks(z, n)
+            if ch is None:
+                assert "new_chunk" not in z.files, f"{raw}: a rollout without saved chunks (chunk_actions)"
+            else:  # targets at the replan frames only; sample_frames lists them
+                ep["chunk_t"], ep["chunk_actions"] = ch
+                nc = np.asarray(z["new_chunk"], bool)
+                assert np.array_equal(np.flatnonzero(nc), ch[0]), f"{raw}: chunk_t differs from new_chunk"
+                assert np.allclose(ch[1][:, 0], ep["actions"][ch[0]]), f"{raw}: executed != sampled chunk start"
     assert len(ep["image"]) == len(ep["wrist_image"]) == len(ep["state"]) == n
     ep["label"] = None if labels is None else frame_labels(labels, episode_index, n)
     if weights is not None:
@@ -202,7 +272,12 @@ def sample(ep: dict, t: int, tag: bool | None, action_shift: float = 0.0) -> dic
     action_shift [ours, 2026-11-06, tag positive control]: tagged samples get action dim SHIFT_DIM of the whole chunk
     moved by +shift (positive tag) / -shift (negative tag), raw units; untagged samples are unchanged. With random
     tags this makes the tag informative by construction, independent of the state."""
-    chunk = action_chunk(ep["actions"], t)
+    if "chunk_t" in ep:  # [2026-11-14] CHUNK_TARGETS "sampled": the chunk the policy sampled at replan frame t
+        j = int(np.searchsorted(ep["chunk_t"], t))
+        assert j < len(ep["chunk_t"]) and ep["chunk_t"][j] == t, f"frame {t} is not a replan frame"
+        chunk = np.asarray(ep["chunk_actions"][j], ep["actions"].dtype)
+    else:
+        chunk = action_chunk(ep["actions"], t)
     if action_shift and tag is not None:
         chunk = chunk.copy()
         chunk[:, SHIFT_DIM] += action_shift if tag else -action_shift
@@ -212,6 +287,12 @@ def sample(ep: dict, t: int, tag: bool | None, action_shift: float = 0.0) -> dic
     if ep.get("weight") is not None:
         s["weight"] = float(ep["weight"][t])
     return s
+
+
+def sample_frames(ep: dict) -> np.ndarray:
+    """Frames of an episode that start a training sample: every frame, or only the replan frames of a rollout with
+    sampled chunk targets [2026-11-14, CHUNK_TARGETS]."""
+    return ep["chunk_t"] if "chunk_t" in ep else np.arange(len(ep["actions"]))
 
 
 class EpisodeStream:
@@ -255,7 +336,7 @@ class EpisodeStream:
             grp = self.q.get()
             if isinstance(grp, BaseException):
                 raise grp
-            idx = [(k, t) for k, (_, ep) in enumerate(grp) for t in range(len(ep["actions"]))]
+            idx = [(k, int(t)) for k, (_, ep) in enumerate(grp) for t in sample_frames(ep)]
             order = self.rng.permutation(len(idx))
             for s in range(0, len(order) - self.batch + 1, self.batch):  # the group's last partial batch is dropped
                 out, meta = [], []

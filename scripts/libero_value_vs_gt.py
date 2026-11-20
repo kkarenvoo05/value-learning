@@ -37,6 +37,9 @@ SOURCES = {  # name -> description (V and A columns)
     "look_n80_vb40": "ResNet V, lookahead n = 80",
     "look_n160_vb40": "ResNet V, lookahead n = 160",
     "hind_v0_vb40": "realized return - V (hindsight)",
+    "iql09_vb40": "IQL tau 0.9 V (frozen features, OOF), vb 40%",  # [2026-11-12] scripts/libero_iql_labels.py
+    "iql07_vb40": "IQL tau 0.7 V (frozen features, OOF), vb 40%",
+    "iqlmc_vb40": "MC-fit V (same frozen features, OOF), vb 40%",
 }
 LABEL_ONLY = {"resnet_valuebinned_p40": "faithful RECAP labels (vb 40%)", "scoped_valuebinned_p40": "subtask-scoped vb 40%",
               "control_random_p50": "random labels (control)"}

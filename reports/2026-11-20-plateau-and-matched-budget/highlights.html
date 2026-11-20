@@ -1,0 +1,175 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LIBERO Highlights Nov 20</title></head><body><style>
+.hl{--hl-fg:var(--foreground,var(--fg));--hl-mut:var(--muted-foreground,var(--fg2));--hl-grid:var(--border,var(--grid,#ddd));
+ --hl-bg:var(--background,var(--bg));--hl-ag:var(--chart-3,#d98a1f);--hl-s0:var(--chart-4,#9b6dd6);--hl-s1:var(--chart-1,#3b7ddd);
+ --hl-t:var(--chart-2,#1aa39a);--hl-ref:var(--muted-foreground,var(--fg3,#8a8984));--hl-bad:var(--destructive,#d9534f);--hl-good:var(--success,#2f9e66)}
+.hl h2{font-size:16px;font-weight:600;margin:26px 0 2px;border:0;padding:0}
+.hl .lede{font-size:13px;color:var(--hl-mut);margin:0 0 8px;line-height:1.5;max-width:760px}
+.hl .ch{width:100%;position:relative}.hl .ch svg{display:block;overflow:visible}
+.hl .lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--hl-mut);margin:4px 0}
+.hl .lg span::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:var(--sw);vertical-align:-1px}
+.hl .lg span.h::before{background:none;border:1.5px solid var(--sw);width:7px;height:7px}
+.hl .lg span.d::before{border-radius:0;height:0;width:14px;border-top:2px dashed var(--sw);background:none;vertical-align:3px}
+.hl ul.n{font-size:13px;line-height:1.5;margin:6px 0 0;padding-left:18px;max-width:780px}.hl ul.n li{margin:3px 0}
+.hl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}
+.hl .tile{border:1px solid var(--hl-grid);border-radius:10px;padding:9px 12px}
+.hl .tile .v{font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.hl .tile .l{font-size:12px;color:var(--hl-mut);line-height:1.35}
+.hl svg text{font-family:inherit}.hl .ax text{fill:var(--hl-mut);font-size:11px}.hl .lb{fill:var(--hl-fg);font-size:12px}.hl .lb2{fill:var(--hl-mut);font-size:11px}
+.hl .tip{position:fixed;pointer-events:none;background:var(--popover,var(--surface,#fff));color:var(--popover-foreground,var(--fg));border:1px solid var(--hl-grid);
+ border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.4;max-width:320px;opacity:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.hl .src{font-size:12px;color:var(--hl-mut);margin-top:14px}
+</style>
+<div class="hl">
+<section data-s="0"><div class="tiles">
+ <div class="tile"><div class="v">87.6 / 90.0%</div><div class="l">Best AG round (r5) / best DSRL checkpoint (seed 1, 2,400 episodes). Base 52.4%.</div></div>
+ <div class="tile"><div class="v">88–89%</div><div class="l">π₀.₅ fine-tuned on DSRL or AG successes. Distillation keeps the teacher's success.</div></div>
+ <div class="tile"><div class="v">+0.6 vs −48</div><div class="l">Points lost to a judge that flips 25% of outcomes: AG vs DSRL.</div></div>
+ <div class="tile"><div class="v">79.7 → 53.0%</div><div class="l">100-episode chain, round 0 → round 1. The small chains drop at round 1.</div></div>
+</div></section>
+
+<section data-s="1"><h2>1 · Both methods level off at 85–90%</h2>
+<p class="lede">Held-out success (330 matched trials, 95% intervals) against robot episodes used. AG counts its 900 base rollouts plus 100 per round. DSRL counts only its own episodes. Hollow markers redo round 6 from round 5 with a differently collected batch of 100 episodes (same budget as round 6), offset slightly so they don't overlap.</p>
+<div class="lg"><span style="--sw:var(--hl-ag)">AG rounds 0–7</span><span class="h" style="--sw:var(--hl-ag)">Round 6 redone: rerun / extra noise / push 1.5 / random push</span><span style="--sw:var(--hl-s0)">DSRL seed 0</span><span style="--sw:var(--hl-s1)">DSRL seed 1 (resumed to 3,300)</span><span class="d" style="--sw:var(--hl-ref)">Base 52.4%</span></div>
+<div class="ch" id="c1"></div>
+<ul class="n">
+ <li>DSRL seed 1 goes 87.0 → 89.1 → 90.0 → 86.1 → 88.2% from 1,300 to 3,300 episodes. Its best checkpoint is 2.4 points above AG r5 (−2.4 to +7.3 paired), and training past 1,800 episodes adds nothing (3,300 vs 1,800: −0.9).</li>
+ <li>AG rounds after round 0 move within 74.5–87.6%. Re-running round 6 with more varied collection gave 80.3–84.2% against the original 77.3%. Only the random-push collection is clearly above the original (+7.0 [+1.5, +12.4]), and only +3.9 [−1.8, +9.4] against the plain rerun.</li>
+ <li>Re-evaluating the same checkpoint with a second noise seed moves r5 by −2.7 and r7 by −3.0. Two evals of the same policy agree on only 72–75% of trials.</li>
+</ul></section>
+
+<section data-s="2"><h2>2 · Guidance strength is not the bottleneck</h2>
+<p class="lede">Push = how far guidance moves the action, as a multiple of π₀.₅'s own sampling noise. Every round is calibrated to push 0.99. Left: push sweep around it. Right: small fixed weights (w = 1, 2, 4) against the calibrated weight (r5 w 9.8, r7 w 8.1).</p>
+<div class="lg"><span style="--sw:var(--hl-ag)">r5</span><span style="--sw:var(--hl-t)">r6</span><span style="--sw:var(--hl-s1)">r7</span></div>
+<div class="ch" id="c2"></div>
+<ul class="n">
+ <li>Push 0.8–1.2 is flat. Push 1.8 costs 9.7 (r5) and 11.5 (r7) points. Small fixed weights fall toward base: w = 1 gives 63–64% on all three rounds.</li>
+ <li>So the ~85% plateau does not come from too little or too much guidance; what limits success is in the learned head or its data.</li>
+</ul></section>
+
+<section data-s="3"><h2>3 · Distilling into π₀.₅ keeps the teacher's success</h2>
+<p class="lede">LoRA fine-tune of π₀.₅ (imitation, final checkpoint, sampled action targets) on the successful episodes of 300 rollouts from each teacher (train states). A distilled policy needs no residual head or DSRL actor at test time.</p>
+<div class="ch" id="c3"></div>
+<ul class="n">
+ <li>DSRL-distilled 88.2% (+35.8 [+29.7, +41.8] vs base), equal to the DSRL teacher on val (−0.9 vs seed 1 at 1,800). AG-distilled 89.1% on 266 of 330 trials (the eval stopped there), equal to AG r5 on the same trials (+0.8).</li>
+ <li>Distilling base's own successes gives no gain (49.7%, −2.7; 50.3% with the old executed-action targets, so the Nov 14 chunk-target fix does not matter here). The gain comes from the better teacher, and the fine-tune recipe (filtered BC round 1's) no longer loses points against base.</li>
+ <li>Hybrid collection (base for the first ~40% of the episode, then the DSRL actor) gives 80.9%.</li>
+</ul></section>
+
+<section data-s="4"><h2>4 · AG tolerates a noisy judge, DSRL does not</h2>
+<p class="lede">Each episode's success label flipped with probability 0.25 in both directions. Paired difference from the clean run at the same point.</p>
+<div class="ch" id="c4"></div>
+<ul class="n">
+ <li>AG round 0 trained on flipped labels: 76.1% vs 75.5% clean. DSRL with flipped rewards: 43.0% at 400 episodes and 35.2% at 600, below base. Its training success fell after the first 100 episodes.</li>
+ <li>For zima's VLM judge, this favours AG. The test uses symmetric, independent flips; a real judge's errors are likely lopsided and concentrated on near-misses.</li>
+</ul></section>
+
+<section data-s="5"><h2>5 · Changes that did not raise the plateau (and two that did)</h2>
+<p class="lede">Paired difference against the policy each variant is built on (same 330 trials, 95% bootstrap). Right of zero is better.</p>
+<div class="ch" id="c5"></div>
+<ul class="n">
+ <li>Moving the guidance reference away from frozen base does not help. Anchoring it to the data's average action costs up to 28 points. A learned no-tag branch peaks 7.9 points below standard guidance. Stacking on the previous round's policy is neutral.</li>
+ <li>IQL labels on round 7's data (−4.2) and on 100 base episodes (−15.8 at round 0) are worse than the value-binned labels.</li>
+ <li><b>Dropping the 29 demos helps.</b> Round 0 on the 900 rollouts: +5.8 [−0.6, +11.8]. On 50 rollouts: +27.9 [+20.9, +35.2] (44.8 → 72.7%).</li>
+ <li>A 700-step limit instead of 520 adds nothing for r5 (+0.3): the remaining failures are stalls, not slow finishes.</li>
+</ul></section>
+
+<section data-s="6"><h2>6 · Small fixed-budget chains drop at round 1</h2>
+<p class="lede">Chains that start from 50 / 100 / 200 base rollouts and add the same number each round. "cv": V refit on the chain's own data only. "mt": 50 moka + 50 task-64 episodes per round, one shared policy (moka val shown).</p>
+<div class="lg"><span style="--sw:var(--hl-ag)">900 chain (reference)</span><span style="--sw:var(--hl-s1)">b100 (900-episode V)</span><span style="--sw:var(--hl-t)">b100 IQL</span><span style="--sw:var(--hl-bad)">mt100cv (moka val)</span><span class="h" style="--sw:var(--hl-mut)">round 0 only: b50cv / b100cv / b200cv / b50 no demos</span></div>
+<div class="ch" id="c6"></div>
+<ul class="n">
+ <li>b100 drops 26.7 points at round 1 (79.7 → 53.0%) and recovers only partly at round 2 (72.1%; 69.7% on a re-run). The two-task chain falls to 4.5% on moka val at round 1. The 900 chain never dropped like this.</li>
+ <li>Karen's write-up (<code>reports/2026-11-20-mt-r1-drop/</code>) rules out labels, V quality, calibration, training and serving. Still open: the one-step jump to ~50% guided data from a single policy, a base of only 100 episodes, and seed noise. Note that every one of these chains still uses the demos that section 5 shows hurt.</li>
+</ul></section>
+
+<section data-s="7"><p class="src">Compiled Nov 20 from <code>/iris/u/ankile/karenvo/libero/runs/</code> (evals through Nov 20 10:00 PT). LIBERO libero_10 task 8 (moka pots), 330 held-out trials = 10 val start states × 33, env seed 7, matched noise seed 1, base π₀.₅ 52.4%. Paired intervals: bootstrap over trials, 5,000 draws. Every policy is one training seed.</p>
+</section><div class="tip" id="hltip"></div>
+</div>
+<script>
+(()=>{
+const J={"S": {"base": [0.524, 0.47, 0.578, 330], "r0": [0.755, 0.705, 0.798, 330], "r1": [0.791, 0.744, 0.831, 330], "r2": [0.745, 0.696, 0.789, 330], "r3": [0.809, 0.763, 0.848, 330], "r4": [0.794, 0.747, 0.834, 330], "r5": [0.876, 0.836, 0.907, 330], "r6": [0.773, 0.725, 0.815, 330], "r7": [0.83, 0.786, 0.867, 330], "r5n2": [0.848, 0.806, 0.883, 330], "r7n2": [0.8, 0.754, 0.84, 330], "r5cap700": [0.879, 0.839, 0.91, 330], "r5p06": [0.794, 0.747, 0.834, 330], "r5p08": [0.861, 0.819, 0.894, 330], "r5p12": [0.848, 0.806, 0.883, 330], "r5p15": [0.836, 0.793, 0.872, 330], "r5p18": [0.779, 0.731, 0.82, 330], "r6p08": [0.773, 0.725, 0.815, 330], "r6p12": [0.77, 0.721, 0.812, 330], "r7p06": [0.827, 0.783, 0.864, 330], "r7p08": [0.806, 0.76, 0.845, 330], "r7p12": [0.809, 0.763, 0.848, 330], "r7p15": [0.794, 0.747, 0.834, 330], "r7p18": [0.715, 0.664, 0.761, 330], "r5w1": [0.636, 0.583, 0.686, 330], "r5w2": [0.685, 0.633, 0.733, 330], "r5w4": [0.785, 0.737, 0.826, 330], "r6w1": [0.627, 0.574, 0.678, 330], "r6w2": [0.712, 0.661, 0.758, 330], "r6w4": [0.764, 0.715, 0.806, 330], "r7w1": [0.639, 0.586, 0.689, 330], "r7w2": [0.727, 0.677, 0.773, 330], "r7w4": [0.8, 0.754, 0.84, 330], "anc_r0": [0.748, 0.699, 0.792, 330], "anc_r5": [0.779, 0.731, 0.82, 330], "anc_r7": [0.548, 0.495, 0.601, 330], "unc_std": [0.824, 0.78, 0.862, 330], "unc_w0": [0.591, 0.537, 0.643, 330], "unc_w2": [0.745, 0.696, 0.789, 330], "unc_w4": [0.712, 0.661, 0.758, 330], "unc_w8": [0.53, 0.476, 0.583, 330], "stk_r0": [0.682, 0.63, 0.73, 330], "stk_r5": [0.867, 0.826, 0.899, 330], "stk_r6": [0.761, 0.712, 0.803, 330], "rs6": [0.803, 0.757, 0.842, 330], "pmix6": [0.842, 0.799, 0.878, 330], "cp15_6": [0.821, 0.776, 0.859, 330], "nz2_6": [0.803, 0.757, 0.842, 330], "iqlr7": [0.788, 0.741, 0.829, 330], "r7vb15": [0.812, 0.766, 0.851, 330], "r7vb10": [0.839, 0.796, 0.875, 330], "nd900": [0.812, 0.766, 0.851, 330], "ndb50": [0.727, 0.677, 0.773, 330], "b50cv_r0": [0.448, 0.396, 0.502, 330], "b100cv_r0": [0.761, 0.712, 0.803, 330], "b200cv_r0": [0.736, 0.686, 0.781, 330], "b100_r0": [0.797, 0.75, 0.837, 330], "b100_r1": [0.53, 0.476, 0.583, 330], "b100_r2": [0.721, 0.67, 0.767, 330], "b100_r2b": [0.697, 0.645, 0.744, 330], "b100iql_r0": [0.639, 0.586, 0.689, 330], "b100iql_r1": [0.555, 0.501, 0.607, 330], "mt_r0": [0.658, 0.605, 0.707, 330], "mt_r1": [0.045, 0.028, 0.074, 330], "agjudge": [0.761, 0.712, 0.803, 330], "dj400": [0.43, 0.378, 0.484, 330], "dj600": [0.352, 0.302, 0.404, 330], "d400": [0.797, 0.75, 0.837, 330], "d600": [0.83, 0.786, 0.867, 330], "d100": [0.548, 0.495, 0.601, 330], "d200": [0.482, 0.428, 0.536, 330], "d800": [0.827, 0.783, 0.864, 330], "d900": [0.652, 0.599, 0.701, 330], "d1000": [0.797, 0.75, 0.837, 330], "d1100": [0.83, 0.786, 0.867, 330], "d1200": [0.809, 0.763, 0.848, 330], "d1300": [0.824, 0.78, 0.862, 330], "d1357": [0.861, 0.819, 0.894, 330], "s1_1300": [0.87, 0.829, 0.902, 330], "s1_1800": [0.891, 0.853, 0.92, 330], "s1_2400": [0.9, 0.863, 0.928, 330], "s1_3000": [0.861, 0.819, 0.894, 330], "s1_3300": [0.882, 0.843, 0.912, 330], "dist_base": [0.497, 0.443, 0.551, 330], "dist_hybrid": [0.809, 0.763, 0.848, 330], "dist_dsrl": [0.882, 0.843, 0.912, 330], "dist_ag": [0.891, 0.848, 0.923, 266], "dist_base_exec": [0.503, 0.449, 0.557, 330], "dist2k_base": [0.391, 0.34, 0.445, 330], "dist2k_hybrid": [0.824, 0.78, 0.862, 330], "dist2k_dsrl": [0.842, 0.799, 0.878, 330], "dist2k_ag": [0.889, 0.819, 0.934, 117]}, "P": {"r5n2|r5": [-0.027, -0.076, 0.021, 330], "r7n2|r7": [-0.03, -0.088, 0.027, 330], "r5cap700|r5": [0.003, -0.045, 0.048, 330], "anc_r0|r0": [-0.006, -0.07, 0.052, 330], "anc_r5|r5": [-0.097, -0.155, -0.039, 330], "anc_r7|r7": [-0.282, -0.342, -0.221, 330], "unc_w0|unc_std": [-0.233, -0.3, -0.17, 330], "unc_w2|unc_std": [-0.079, -0.139, -0.015, 330], "unc_w4|unc_std": [-0.112, -0.176, -0.048, 330], "unc_w8|unc_std": [-0.294, -0.358, -0.23, 330], "unc_std|r7": [-0.006, -0.064, 0.052, 330], "stk_r0|r0": [-0.073, -0.136, -0.006, 330], "stk_r5|r5": [-0.009, -0.058, 0.042, 330], "stk_r6|r6": [-0.012, -0.073, 0.048, 330], "rs6|r6": [0.03, -0.024, 0.088, 330], "pmix6|r6": [0.07, 0.015, 0.124, 330], "cp15_6|r6": [0.048, -0.006, 0.106, 330], "nz2_6|r6": [0.03, -0.024, 0.085, 330], "pmix6|rs6": [0.039, -0.018, 0.094, 330], "iqlr7|r7": [-0.042, -0.1, 0.015, 330], "r7vb15|r7": [-0.018, -0.073, 0.033, 330], "r7vb10|r7": [0.009, -0.045, 0.061, 330], "nd900|r0": [0.058, -0.006, 0.118, 330], "ndb50|b50cv_r0": [0.279, 0.209, 0.352, 330], "b100iql_r0|b100_r0": [-0.158, -0.221, -0.091, 330], "b100_r1|b100_r0": [-0.267, -0.336, -0.194, 330], "b100_r2|b100_r0": [-0.076, -0.139, -0.012, 330], "b100_r2b|b100_r2": [-0.024, -0.085, 0.036, 330], "agjudge|r0": [0.006, -0.055, 0.067, 330], "dj400|d400": [-0.367, -0.442, -0.291, 330], "dj600|d600": [-0.479, -0.545, -0.412, 330], "dist_dsrl|base": [0.358, 0.297, 0.418, 330], "dist_hybrid|base": [0.285, 0.215, 0.348, 330], "dist_base|base": [-0.027, -0.091, 0.036, 330], "dist_base_exec|base": [-0.021, -0.088, 0.045, 330], "dist_ag|base": [0.38, 0.308, 0.447, 266], "dist_ag|r5": [0.008, -0.045, 0.056, 266], "dist_dsrl|s1_1800": [-0.009, -0.058, 0.036, 330], "s1_2400|r5": [0.024, -0.024, 0.073, 330], "s1_3300|s1_1800": [-0.009, -0.058, 0.039, 330], "s1_2400|s1_1800": [0.009, -0.036, 0.052, 330], "r5p06|r5": [-0.082, -0.133, -0.03, 330], "r5p08|r5": [-0.015, -0.064, 0.033, 330], "r5p12|r5": [-0.027, -0.076, 0.021, 330], "r5p15|r5": [-0.039, -0.094, 0.015, 330], "r5p18|r5": [-0.097, -0.155, -0.039, 330], "r5w1|r5": [-0.239, -0.3, -0.176, 330], "r5w2|r5": [-0.191, -0.252, -0.133, 330], "r5w4|r5": [-0.091, -0.142, -0.039, 330], "r6p08|r6": [0.0, -0.058, 0.058, 330], "r6p12|r6": [-0.003, -0.064, 0.055, 330], "r6w1|r6": [-0.145, -0.209, -0.085, 330], "r6w2|r6": [-0.061, -0.121, 0.0, 330], "r6w4|r6": [-0.009, -0.064, 0.042, 330], "r7p06|r7": [-0.003, -0.058, 0.055, 330], "r7p08|r7": [-0.024, -0.079, 0.027, 330], "r7p12|r7": [-0.021, -0.073, 0.033, 330], "r7p15|r7": [-0.036, -0.091, 0.018, 330], "r7p18|r7": [-0.115, -0.176, -0.055, 330], "r7w1|r7": [-0.191, -0.255, -0.127, 330], "r7w2|r7": [-0.103, -0.164, -0.045, 330], "r7w4|r7": [-0.03, -0.085, 0.024, 330]}};const S=J.S,P=J.P;
+const NS="http://www.w3.org/2000/svg";
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function tx(p,x,y,s,c,an){const e=el("text",{x,y,class:c||"lb","text-anchor":an||"start"},p);e.textContent=s;return e;}
+const tip=document.getElementById('hltip');
+function bind(e,h){e.addEventListener('mousemove',ev=>{tip.innerHTML=h;tip.style.opacity=1;const r=tip.getBoundingClientRect();let x=ev.clientX+14,y=ev.clientY+14;if(x+r.width>innerWidth-8)x=ev.clientX-r.width-14;if(y+r.height>innerHeight-8)y=ev.clientY-r.height-14;tip.style.left=x+'px';tip.style.top=y+'px';});e.addEventListener('mouseleave',()=>tip.style.opacity=0);}
+const pct=v=>(100*v).toFixed(1);
+const C={ag:"var(--hl-ag)",s0:"var(--hl-s0)",s1:"var(--hl-s1)",t:"var(--hl-t)",ref:"var(--hl-ref)",bad:"var(--hl-bad)",mut:"var(--hl-mut)"};
+// generic xy
+function xy(id,o){const box=document.getElementById(id);box.innerHTML='';if(box.clientWidth<60)return;const W=box.clientWidth,H=o.h||300,L=44,R=o.R||14,T=10,B=34;
+ const svg=el("svg",{width:W,height:H},box);const x=v=>L+(v-o.x0)/(o.x1-o.x0)*(W-L-R),y=v=>T+(1-(v-o.y0)/(o.y1-o.y0))*(H-T-B);
+ const ax=el("g",{class:"ax"},svg);
+ for(const v of o.yt){el("line",{x1:L,x2:W-R,y1:y(v),y2:y(v),stroke:"var(--hl-grid)"},ax);tx(ax,L-6,y(v)+4,Math.round(v*100)+"%","","end");}
+ for(const v of o.xt){tx(ax,x(v),H-B+16,o.xf?o.xf(v):v,"","middle");}
+ if(o.xl)tx(ax,(L+W-R)/2,H-3,o.xl,"","middle");
+ if(o.ref!=null){el("line",{x1:L,x2:W-R,y1:y(o.ref),y2:y(o.ref),stroke:C.ref,"stroke-dasharray":"4 4"},svg);}
+ for(const s of o.series){
+  if(s.line!==false&&s.pts.length>1){el("polyline",{points:s.pts.map(p=>x(p[0])+","+y(S[p[1]][0])).join(" "),fill:"none",stroke:s.c,"stroke-width":1.8,"stroke-opacity":.85},svg);}
+  for(const p of s.pts){const v=S[p[1]];const cx=x(p[0]+(s.dx||0)),cy=y(v[0]);
+   el("line",{x1:cx,x2:cx,y1:y(v[1]),y2:y(v[2]),stroke:s.c,"stroke-width":1.3,"stroke-opacity":.5},svg);
+   el("circle",{cx,cy,r:s.r||4,fill:s.hol?"var(--hl-bg)":s.c,stroke:s.c,"stroke-width":s.hol?1.6:0},svg);
+   const h=el("circle",{cx,cy,r:9,fill:"transparent"},svg);bind(h,`<b>${p[2]||s.n}</b><br>${pct(v[0])}% [${pct(v[1])}, ${pct(v[2])}] on ${v[3]} trials`);
+   if(p[3])tx(svg,cx+(p[3][0]||0),cy+(p[3][1]||0),p[3][2],"lb2",p[3][3]||"start");}}
+ return svg;}
+function draw1(){const ag=[0,1,2,3,4,5,6,7].map(i=>[1000+100*i,"r"+i,"AG round "+i+` (${1000+100*i} episodes)`]);ag[0][1]="r0";
+ xy("c1",{h:320,x0:0,x1:3450,y0:.45,y1:.95,yt:[.5,.6,.7,.8,.9],xt:[0,500,1000,1500,2000,2500,3000],xf:v=>v.toLocaleString(),xl:"robot episodes",ref:.524,
+ series:[
+  {n:"DSRL s0",c:C.s0,pts:[[100,"d100"],[200,"d200"],[400,"d400"],[600,"d600"],[800,"d800"],[900,"d900"],[1000,"d1000"],[1100,"d1100"],[1200,"d1200"],[1300,"d1300"],[1357,"d1357"]].map(p=>[p[0],p[1],"DSRL seed 0, "+p[0]+" own episodes"]),r:3.2},
+  {n:"DSRL s1",c:C.s1,pts:[[1300,"s1_1300"],[1800,"s1_1800"],[2400,"s1_2400",0,[0,-10,"90.0%","middle"]],[3000,"s1_3000"],[3300,"s1_3300"]].map(p=>[p[0],p[1],"DSRL seed 1, "+p[0]+" episodes",p[3]])},
+  {n:"AG",c:C.ag,pts:ag.map((p,i)=>i==5?[...p,[0,-11,"r5 87.6%","middle"]]:p)},
+  {n:"r6 variants",c:C.ag,hol:true,line:false,pts:[[1650,"rs6","Round 6 rerun (new seeds)"],[1690,"nz2_6","Round 6, extra collection noise"],[1730,"cp15_6","Round 6, collected at push 1.5"],[1770,"pmix6","Round 6, random push per episode"]],r:3.4},
+ ]});}
+function draw2(){const box=document.getElementById("c2");box.innerHTML='';if(box.clientWidth<60)return;const W=box.clientWidth;const two=W>560;
+ const a=document.createElement("div"),b=document.createElement("div");a.id="c2a";b.id="c2b";
+ const wrap=document.createElement("div");wrap.style.cssText=two?"display:grid;grid-template-columns:3fr 2fr;gap:16px":"";wrap.append(a,b);box.append(wrap);
+ const ps=[[.6,"06"],[.8,"08"],[.99,""],[1.2,"12"],[1.5,"15"],[1.8,"18"]];
+ const ser=(r,c,dx)=>({n:"r"+r,c,dx,pts:ps.filter(p=>S[p[1]?`r${r}p${p[1]}`:`r${r}`]).map(p=>[p[0],p[1]?`r${r}p${p[1]}`:`r${r}`,`r${r}, push ${p[0]}`])});
+ xy("c2a",{h:260,x0:.5,x1:1.9,y0:.6,y1:.92,yt:[.6,.7,.8,.9],xt:[.6,.8,.99,1.2,1.5,1.8],xl:"push (× sampling noise)",series:[ser(5,C.ag,-.012),ser(6,C.t,0),ser(7,C.s1,.012)]});
+ const ws=[[1,"w1"],[2,"w2"],[4,"w4"]];
+ const pos={1:1,2:2,4:3};const ser2=(r,c,dx,cal)=>({n:"r"+r,c,dx,pts:[...ws.map(p=>[pos[p[0]],`r${r}${p[1]}`,`r${r}, w ${p[0]}`]),...(cal?[[4.2,`r${r}`,`r${r}, calibrated w ${cal} (push 0.99)`]]:[])]});
+ xy("c2b",{h:260,x0:.5,x1:4.7,y0:.6,y1:.92,yt:[.6,.7,.8,.9],xt:[1,2,3,4.2],xf:v=>({1:"1",2:"2",3:"4",4.2:"calibrated"})[v],xl:"guidance weight w",series:[ser2(5,C.ag,-.05,9.8),ser2(6,C.t,0),ser2(7,C.s1,.05,8.1)]});}
+function bars(id,rows,o){const box=document.getElementById(id);box.innerHTML='';if(box.clientWidth<60)return;const W=box.clientWidth,rh=30,L=Math.min(250,W*.42),R=60,H=rows.length*rh+26;
+ const svg=el("svg",{width:W,height:H},box);const x=v=>L+v*(W-L-R);const ax=el("g",{class:"ax"},svg);
+ for(const v of [0,.2,.4,.6,.8,1]){el("line",{x1:x(v),x2:x(v),y1:0,y2:H-22,stroke:"var(--hl-grid)"},ax);tx(ax,x(v),H-6,Math.round(v*100)+"%","","middle");}
+ el("line",{x1:x(.524),x2:x(.524),y1:0,y2:H-22,stroke:C.ref,"stroke-dasharray":"4 4"},svg);
+ rows.forEach((r,i)=>{const v=S[r.k],y0=i*rh+4;tx(svg,L-8,y0+15,r.n,"lb","end");
+  el("rect",{x:x(0),y:y0+3,width:x(v[0])-x(0),height:rh-12,rx:3,fill:r.c,"fill-opacity":r.op||.85},svg);
+  el("line",{x1:x(v[1]),x2:x(v[2]),y1:y0+rh/2-1,y2:y0+rh/2-1,stroke:"var(--hl-fg)","stroke-width":1.2},svg);
+  tx(svg,x(v[2])+6,y0+15,pct(v[0])+"%"+(v[3]<330?` (${v[3]})`:""),"lb2");
+  const h=el("rect",{x:0,y:y0,width:W,height:rh,fill:"transparent"},svg);bind(h,`<b>${r.n}</b><br>${pct(v[0])}% [${pct(v[1])}, ${pct(v[2])}], ${v[3]} trials${r.t?"<br>"+r.t:""}`);});}
+function draw3(){bars("c3",[
+ {k:"base",n:"Base π₀.₅",c:C.ref},
+ {k:"dist_base",n:"Distilled from base successes",c:C.ref,op:.5,t:"Teacher collection success 57.3%"},
+ {k:"dist_hybrid",n:"Distilled from hybrid base→DSRL",c:C.s0,op:.5,t:"Teacher collection success 76.7%"},
+ {k:"dist_dsrl",n:"Distilled from DSRL",c:C.s1,t:"Teacher collection success 85.0% (train states)"},
+ {k:"dist_ag",n:"Distilled from AG",c:C.ag,t:"Teacher collection success 85.3%; eval stopped at 266 of 330 trials"},
+ {k:"s1_1800",n:"Teacher: DSRL seed 1, 1,800 ep",c:C.s1,op:.35},
+ {k:"r5",n:"Teacher: AG round 5",c:C.ag,op:.35}]);}
+function forest(id,rows,o){const box=document.getElementById(id);box.innerHTML='';if(box.clientWidth<60)return;const W=box.clientWidth,rh=24,L=Math.min(270,W*.46),R=14,top=4;
+ let H=top;rows.forEach(r=>H+=r.g?26:rh);H+=26;const svg=el("svg",{width:W,height:H},box);const lo=o.lo,hi=o.hi;const x=v=>L+(v-lo)/(hi-lo)*(W-L-R);
+ const ax=el("g",{class:"ax"},svg);for(const v of o.t){el("line",{x1:x(v),x2:x(v),y1:top,y2:H-22,stroke:v===0?"var(--hl-mut)":"var(--hl-grid)"},ax);tx(ax,x(v),H-6,(v>0?"+":"")+Math.round(v*100),"","middle");}
+ let y=top;rows.forEach(r=>{if(r.g){tx(svg,0,y+18,r.g,"lb").setAttribute("font-weight","600");y+=26;return;}
+  const d=P[r.k];if(!d){y+=rh;return;}const [m,a,b,n]=d;const sig=a>0||b<0;const c=sig?(m>0?"var(--hl-good)":"var(--hl-bad)"):"var(--hl-mut)";
+  tx(svg,L-8,y+rh/2+4,r.n,"lb2","end");el("line",{x1:x(Math.max(a,lo)),x2:x(Math.min(b,hi)),y1:y+rh/2,y2:y+rh/2,stroke:c,"stroke-width":1.6},svg);
+  el("circle",{cx:x(Math.max(lo,Math.min(hi,m))),cy:y+rh/2,r:4,fill:sig?c:"var(--hl-bg)",stroke:c,"stroke-width":1.6},svg);
+  const h=el("rect",{x:0,y,width:W,height:rh,fill:"transparent"},svg);const [A,B]=r.k.split("|");
+  bind(h,`<b>${r.n}</b><br>${pct(S[A][0])}% vs ${pct(S[B][0])}%<br>paired ${m>0?"+":""}${pct(m)} [${pct(a)}, ${pct(b)}] on ${n} trials`);y+=rh;});}
+function draw4(){forest("c4",[
+ {k:"agjudge|r0",n:"AG round 0, flipped labels vs clean"},{k:"dj400|d400",n:"DSRL at 400 episodes, flipped vs clean"},{k:"dj600|d600",n:"DSRL at 600 episodes, flipped vs clean"}],{lo:-.6,hi:.15,t:[-.6,-.4,-.2,0]});}
+function draw5(){forest("c5",[
+ {g:"Reference for guidance"},{k:"anc_r5|r5",n:"Anchored to data average (r5)"},{k:"anc_r7|r7",n:"Anchored to data average (r7)"},{k:"unc_w2|unc_std",n:"Learned no-tag branch, best w (2)"},
+ {k:"stk_r0|r0",n:"Stacked on previous policy (r0)"},{k:"stk_r5|r5",n:"Stacked on previous policy (r5)"},{k:"stk_r6|r6",n:"Stacked on previous policy (r6)"},
+ {g:"Labels and data"},{k:"iqlr7|r7",n:"IQL labels, round 7 data"},{k:"b100iql_r0|b100_r0",n:"IQL labels, 100 base episodes"},{k:"r7vb10|r7",n:"Top 10% instead of 40% (r7)"},
+ {k:"nd900|r0",n:"No demos, 900 rollouts"},{k:"ndb50|b50cv_r0",n:"No demos, 50 rollouts"},
+ {g:"Collection for round 6"},{k:"rs6|r6",n:"Same recipe, new seeds"},{k:"nz2_6|r6",n:"Extra sampling noise"},{k:"cp15_6|r6",n:"Collected at push 1.5"},{k:"pmix6|r6",n:"Random push per episode"},
+ {g:"Eval settings"},{k:"r5cap700|r5",n:"700-step limit (r5)"},{k:"r5n2|r5",n:"Second eval noise seed (r5)"},{k:"r7n2|r7",n:"Second eval noise seed (r7)"}],{lo:-.36,hi:.36,t:[-.3,-.2,-.1,0,.1,.2,.3]});}
+function draw6(){xy("c6",{h:280,x0:-.3,x1:2.4,y0:0,y1:.95,yt:[0,.2,.4,.6,.8],xt:[0,1,2],xf:v=>"round "+v,xl:"",ref:.524,series:[
+ {n:"900 chain",c:C.ag,pts:[[0,"r0","900 chain r0"],[1,"r1","900 chain r1"],[2,"r2","900 chain r2"]]},
+ {n:"b100",c:C.s1,dx:.03,pts:[[0,"b100_r0","b100 r0"],[1,"b100_r1","b100 r1"],[2,"b100_r2","b100 r2"]]},
+ {n:"b100 rerun",c:C.s1,hol:true,line:false,dx:.09,pts:[[2,"b100_r2b","b100 r2, second eval"]]},
+ {n:"b100iql",c:C.t,dx:-.03,pts:[[0,"b100iql_r0","b100 IQL r0"],[1,"b100iql_r1","b100 IQL r1"]]},
+ {n:"mt",c:C.bad,dx:.06,pts:[[0,"mt_r0","mt100cv r0 (moka val)"],[1,"mt_r1","mt100cv r1 (moka val)",[8,4,"4.5%"]]]},
+ {n:"r0 only",c:C.mut,hol:true,line:false,pts:[[-.2,"b50cv_r0","b50cv r0"],[-.13,"ndb50","b50, no demos, r0"],[-.06,"b100cv_r0","b100cv r0"],[.1,"b200cv_r0","b200cv r0"]],r:3.4}]});}
+function all(){draw1();draw2();draw3();draw4();draw5();draw6();}
+all();let to;addEventListener('resize',()=>{clearTimeout(to);to=setTimeout(all,120)});
+})();
+</script></body></html>

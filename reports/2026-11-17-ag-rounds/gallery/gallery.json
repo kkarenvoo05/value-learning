@@ -1,0 +1,242 @@
+{
+ "fixed_r0": {
+  "trial": [
+   42,
+   5
+  ],
+  "shown": [
+   {
+    "policy": "base",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_base_noise1_libero_10_18355478/videos/ep0057_task8_init42_r5_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "failed"
+   },
+   {
+    "policy": "r0",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_ag_residual_vb40_s0_shift099_noise1_libero_10_18438187/videos/ep0057_task8_init42_r5_success.mp4",
+    "success": 1,
+    "steps": 398,
+    "end": "success"
+   },
+   {
+    "policy": "r7",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r7_s0_shift099_noise1_libero_10_18524603/videos/ep0057_task8_init42_r5_success.mp4",
+    "success": 1,
+    "steps": 387,
+    "end": "success"
+   }
+  ],
+  "all_policies": {
+   "base": "failed",
+   "r0": "S",
+   "r1": "S",
+   "r2": "S",
+   "r3": "S",
+   "r4": "S",
+   "r5": "S",
+   "r6": "S",
+   "r7": "S"
+  }
+ },
+ "second_fixed": {
+  "trial": [
+   12,
+   11
+  ],
+  "shown": [
+   {
+    "policy": "base",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_base_noise1_libero_10_18355478/videos/ep0111_task8_init12_r11_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "failed"
+   },
+   {
+    "policy": "r2",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r2_s0_shift099_noise1_libero_10_18460313/videos/ep0111_task8_init12_r11_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "second pot missing"
+   },
+   {
+    "policy": "r5",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r5_s0_shift099_noise1_libero_10_18484607/videos/ep0111_task8_init12_r11_success.mp4",
+    "success": 1,
+    "steps": 371,
+    "end": "success"
+   }
+  ],
+  "all_policies": {
+   "base": "failed",
+   "r0": "failed",
+   "r1": "failed",
+   "r2": "second pot missing",
+   "r3": "S",
+   "r4": "no pot on",
+   "r5": "S",
+   "r6": "S",
+   "r7": "S"
+  }
+ },
+ "traded": {
+  "trial": [
+   13,
+   21
+  ],
+  "shown": [
+   {
+    "policy": "r2",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r2_s0_shift099_noise1_libero_10_18460313/videos/ep0212_task8_init13_r21_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "second pot missing"
+   },
+   {
+    "policy": "r5",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r5_s0_shift099_noise1_libero_10_18484607/videos/ep0212_task8_init13_r21_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "first pot lost"
+   },
+   {
+    "policy": "r7",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r7_s0_shift099_noise1_libero_10_18524603/videos/ep0212_task8_init13_r21_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "first pot lost"
+   }
+  ],
+  "all_policies": {
+   "base": "failed",
+   "r0": "failed",
+   "r1": "S",
+   "r2": "second pot missing",
+   "r3": "S",
+   "r4": "second pot missing",
+   "r5": "first pot lost",
+   "r6": "first pot lost",
+   "r7": "first pot lost"
+  }
+ },
+ "flips": {
+  "trial": [
+   44,
+   19
+  ],
+  "shown": [
+   {
+    "policy": "r4",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r4_s0_shift099_noise1_libero_10_18463162/videos/ep0198_task8_init44_r19_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "first pot lost"
+   },
+   {
+    "policy": "r5",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r5_s0_shift099_noise1_libero_10_18484607/videos/ep0198_task8_init44_r19_success.mp4",
+    "success": 1,
+    "steps": 334,
+    "end": "success"
+   },
+   {
+    "policy": "r6",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r6_s0_shift099_noise1_libero_10_18509037/videos/ep0198_task8_init44_r19_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "first pot lost"
+   }
+  ],
+  "all_policies": {
+   "base": "failed",
+   "r0": "S",
+   "r1": "S",
+   "r2": "first pot lost",
+   "r3": "S",
+   "r4": "first pot lost",
+   "r5": "S",
+   "r6": "first pot lost",
+   "r7": "S"
+  }
+ },
+ "worse": {
+  "trial": [
+   17,
+   9
+  ],
+  "shown": [
+   {
+    "policy": "r5",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r5_s0_shift099_noise1_libero_10_18484607/videos/ep0093_task8_init17_r9_success.mp4",
+    "success": 1,
+    "steps": 375,
+    "end": "success"
+   },
+   {
+    "policy": "r6",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r6_s0_shift099_noise1_libero_10_18509037/videos/ep0093_task8_init17_r9_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "second pot missing"
+   },
+   {
+    "policy": "r7",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r7_s0_shift099_noise1_libero_10_18524603/videos/ep0093_task8_init17_r9_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "second pot missing"
+   }
+  ],
+  "all_policies": {
+   "base": "S",
+   "r0": "S",
+   "r1": "S",
+   "r2": "S",
+   "r3": "S",
+   "r4": "S",
+   "r5": "S",
+   "r6": "second pot missing",
+   "r7": "second pot missing"
+  }
+ },
+ "hardest": {
+  "trial": [
+   13,
+   13
+  ],
+  "shown": [
+   {
+    "policy": "base",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_base_noise1_libero_10_18355478/videos/ep0132_task8_init13_r13_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "failed"
+   },
+   {
+    "policy": "r5",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r5_s0_shift099_noise1_libero_10_18484607/videos/ep0132_task8_init13_r13_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "first pot lost"
+   },
+   {
+    "policy": "r7",
+    "video": "/iris/u/ankile/karenvo/libero/runs/eval_agr_r7_s0_shift099_noise1_libero_10_18524603/videos/ep0132_task8_init13_r13_failure.mp4",
+    "success": 0,
+    "steps": 520,
+    "end": "second pot missing"
+   }
+  ],
+  "all_policies": {
+   "base": "failed",
+   "r0": "failed",
+   "r1": "failed",
+   "r2": "second pot missing",
+   "r3": "no pot on",
+   "r4": "S",
+   "r5": "first pot lost",
+   "r6": "first pot lost",
+   "r7": "second pot missing"
+  }
+ }
+}

@@ -1,0 +1,180 @@
+{
+ "labels": [
+  "base",
+  "r0",
+  "r1",
+  "r2",
+  "r3",
+  "r4",
+  "r5",
+  "r6",
+  "r7"
+ ],
+ "states": [
+  9,
+  12,
+  13,
+  17,
+  25,
+  32,
+  40,
+  42,
+  44,
+  48
+ ],
+ "checkpoints": {
+  "base": {
+   "pooled": 0.5242424242424243,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 3,
+   "min_rate": 0.12121212121212122
+  },
+  "r0": {
+   "pooled": 0.7545454545454545,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 0,
+   "min_rate": 0.5454545454545454
+  },
+  "r1": {
+   "pooled": 0.7909090909090909,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 0,
+   "min_rate": 0.5454545454545454
+  },
+  "r2": {
+   "pooled": 0.7454545454545455,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 1,
+   "min_rate": 0.36363636363636365
+  },
+  "r3": {
+   "pooled": 0.8090909090909091,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 0,
+   "min_rate": 0.6666666666666666
+  },
+  "r4": {
+   "pooled": 0.793939393939394,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 0,
+   "min_rate": 0.6060606060606061
+  },
+  "r5": {
+   "pooled": 0.8757575757575757,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 0,
+   "min_rate": 0.7272727272727273
+  },
+  "r6": {
+   "pooled": 0.7727272727272727,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 1,
+   "min_rate": 0.48484848484848486
+  },
+  "r7": {
+   "pooled": 0.8303030303030303,
+   "n_states": 10,
+   "trials_per_state": [
+    33
+   ],
+   "zero_states": [],
+   "zero_upper95": {},
+   "states_below_50": 0,
+   "min_rate": 0.5151515151515151
+  }
+ },
+ "per_state_spearman_vs_checkpoint": {
+  "9": 0.7797730291639321,
+  "12": 0.4256282653793743,
+  "13": 0.2333333333333333,
+  "17": 0.1176512129542425,
+  "25": 0.629929832761474,
+  "32": 0.5063696835418333,
+  "40": -0.025318484177091663,
+  "42": 0.3697609549990479,
+  "44": 0.13445852909056286,
+  "48": 0.09128709291752769
+ },
+ "bottom_k_first": {
+  "states": [
+   12,
+   42,
+   13,
+   48,
+   32
+  ],
+  "mean_rate": {
+   "base": 0.32121212121212117,
+   "r0": 0.7757575757575758,
+   "r1": 0.7636363636363637,
+   "r2": 0.7030303030303031,
+   "r3": 0.7575757575757576,
+   "r4": 0.7090909090909092,
+   "r5": 0.8363636363636363,
+   "r6": 0.7090909090909092,
+   "r7": 0.8121212121212121
+  }
+ },
+ "bottom_k_split_half": {
+  "picked_on": "base even repeats",
+  "scored_on": "odd repeats",
+  "states": [
+   12,
+   42,
+   13,
+   48,
+   17
+  ],
+  "mean_rate": {
+   "base": 0.3875,
+   "r0": 0.825,
+   "r1": 0.775,
+   "r2": 0.6375,
+   "r3": 0.7,
+   "r4": 0.7125,
+   "r5": 0.825,
+   "r6": 0.65,
+   "r7": 0.825
+  }
+ }
+}

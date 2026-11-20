@@ -9,9 +9,13 @@ read the camera keys, so the extra entries reach the model's sample_actions / co
 
 from __future__ import annotations
 
-from vl.libero_finetune_data import TAG_FORMAT, tag_prompt
+from vl.libero_finetune_data import SUBTASK_FORMAT, SUBTASKS, TAG_FORMAT, tag_prompt
 
 MASK_POS, MASK_NEG = "adv_tag_pos", "adv_tag_neg"  # image_mask keys carrying the tag
+# [2026-11-12] residual-head subtask input (scripts/pi05_ag_residual.py --head-subtask): the subtask text that
+# tag_prompt puts before the tag is cut the same way and carried as two more boolean entries (none = both False)
+MASK_SUB = ("subtask_first", "subtask_second")
+_SUB_SUFFIX = {i: SUBTASK_FORMAT.format(prompt="", subtask=text) for i, text in enumerate(SUBTASKS)}
 _SUFFIX = {tag: TAG_FORMAT.format(prompt="", tag=word) for tag, word in ((True, "positive"), (False, "negative"))}
 
 
@@ -29,14 +33,32 @@ def tag_masks(tag: bool | None) -> dict:
     return {MASK_POS: np.bool_(tag is True), MASK_NEG: np.bool_(tag is False)}
 
 
-def wrap_input_transform(transform):
-    """Policy input transform that strips the tag from the prompt and adds it as image_mask entries."""
+def split_subtask(prompt: str) -> tuple[str, int | None]:
+    """Inverse of tag_prompt's subtask part (call after split_tag): (task prompt, 0 / 1 / None)."""
+    for i, suffix in _SUB_SUFFIX.items():
+        if prompt.endswith(suffix):
+            return prompt[: -len(suffix)], i
+    return prompt, None
+
+
+def subtask_masks(sub: int | None) -> dict:
+    import numpy as np
+    return {k: np.bool_(sub == i) for i, k in enumerate(MASK_SUB)}
+
+
+def wrap_input_transform(transform, subtask: bool = False):
+    """Policy input transform that strips the tag from the prompt and adds it as image_mask entries. subtask=True
+    [2026-11-12]: also strips the subtask text into MASK_SUB entries, so the model's prompt is the plain task."""
     def f(data: dict) -> dict:
         data = dict(data)
         prompt, tag = split_tag(str(data["prompt"]))
+        extra = tag_masks(tag)
+        if subtask:
+            prompt, sub = split_subtask(prompt)
+            extra.update(subtask_masks(sub))
         data["prompt"] = prompt
         out = transform(data)
-        out["image_mask"] = {**out["image_mask"], **tag_masks(tag)}
+        out["image_mask"] = {**out["image_mask"], **extra}
         return out
     return f
 

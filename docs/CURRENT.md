@@ -1,94 +1,62 @@
 # Current state
 
-**Updated 2026-11-11 22:30 PST.** Overwrite this file at the end of every session; do not append. History lives
+**Updated 2026-11-20 11:30 PST** (mentor session: Karen's working tree committed, Nov 13-20 summary report, Nov 20 site page; Karen's 09:00 state below unchanged). Overwrite this file at the end of every session; do not append. History lives
 in `docs/libero_plan.md` `## Log` (LIBERO) and `PROGRESS.md` (Mulligan stages). Where to find things:
-`docs/INDEX.md`. Longer-lived direction lists (mentor 2026-11-03 steps, SmolVLA layers, SeeQ): `docs/directions.md`.
-Progress site: https://storage.googleapis.com/zima-robot/reports/karenvo/value-learning/index.html. New work goes on
-Week 9 (`reports/site/content/week09.json`, `["since"]` section; built by `scripts/build_site.py`).
+`docs/INDEX.md`. Longer-lived direction lists: `docs/directions.md`.
+Progress site: https://storage.googleapis.com/zima-robot/reports/karenvo/value-learning/index.html.
 
-Comparable evals: libero_10 task 8, val states 9 12 13 17 25 32 40 42 44 48 × 33 = 330 trials, env seed 7, matched
-noise seed 1 (`MATCHED_NOISE=1`). Base under these settings = **0.524** (18355478). `runs/` =
-`/iris/u/ankile/karenvo/libero/runs/`. Intervals are paired-by-trial 95% CIs vs base unless stated.
+Comparable evals: moka = libero_10 task 8, val 330 trials (10 states x 33, env seed 7, `MATCHED_NOISE=1`), base
+**52.4%**; moka_cont100 (300 fresh-layout continuation starts); t64_cont100 = libero_90 task 64 ("stack the right
+bowl on the left bowl and place them in the tray"), base **60.7%**. All residual AG evals at push 0.99 unless stated.
+`runs/` = `/iris/u/ankile/karenvo/libero/runs/`. Every number is one seed; round-to-round noise ~3 pts (r6 77.3 vs
+rerun rs6 80.3).
 
-## Where things stand (one line each; details in the log entries named)
+## Results that matter now
 
-| arm | success | vs base | status / log entry |
-|---|---|---|---|
-| Residual Advantage Guidance, shift 0.99 (w 9.26), frozen base + AdaLN head | **0.754** | +0.230 [+0.164, +0.300] | final; 11-11 11:55 |
-| Residual AG, shift 0.57 / w 16 | 0.697 / 0.658 | — | final; 0.99 is the peak; 11-11 21:45 |
-| AdaRMS vb40 + contrastive guidance w 8 | 0.658 | +0.133 [+0.070, +0.197] | final; 11-11 06:00 |
-| AdaRMS vb40 w 16 | 0.742 on 264/330 | — | **partial** (18445301 TIMEOUT) |
-| Null control: episode-shuffled labels, AdaRMS w 8 | 0.363 on 289/330 | −0.304 vs real-label w 8 | **partial** (18438132 TIMEOUT) |
-| DSRL online (noise-space SAC on base), final agent ep 1800 | **0.861** | +0.106 [+0.048, +0.167] vs residual | final, held-out (18452292); 1 seed |
-| Filtered BC round 2 (s0 / s1, final) | 0.442 / 0.506 | below round 1 (0.555) | final; no climb; 11-11 15:30 / 21:45 |
+| what | result | log |
+|---|---|---|
+| 900 chain (frozen 900-ep V), r0 -> r7 | 75.5, 79.1, 74.5, 80.9, 79.4, 87.6, 77.3, 83.0 | 11-1x |
+| **Demos hurt** (moka, no --demos, same labels) | nd900 81.2 vs 75.5 with; ndb50 72.7 vs 44.8 (cont 60.7 vs 51.0) | 11-19 22:45, 11-20 01:25 |
+| Small chains dip at round 1 | b100 79.7 -> 53.0 (r2 69.7); b100iql 63.9 -> 55.5; mt100cv moka cont 63.7 -> 33.3, t64 cont 77.3 -> 31.4 (207/300) | 11-20 08:10 |
+| Two-task r0 (mt100cv, moka demos only) on task 64 | 77.3 (combined w) / 75.3 (task-64 w) vs base 60.7 | 11-19 23:10 |
+| Task-64 demos | t64d50 0% (demo strategy = stack first; pi0.5 = tray first) | reports/2026-11-19-t64-demo-collapse |
+| Fresh-layout sweep of base pi0.5, 4 trained suites | 94-99%; only moka (75%) in 50-80% -> no new second task | 11-19 22:45 |
+| 700-step cap (r5) | 87.9 vs 85.5 by step 520: failures are stalls, not lack of time | 11-19 19:00 |
+| DSRL s1 run long | 87.0 / 89.1 / 90.0 / 86.1 / 88.2 at 1.3k / 1.8k / 2.4k / 3.0k / 3.3k episodes: saturated | reports/2026-11-20-plateau-and-matched-budget |
+| Distillation into π₀.₅ (LoRA, teacher successes) | DSRL 88.2, AG 89.1 (266/330), hybrid 80.9, base 49.7 | same |
+| Noisy judge, 25% symmetric flips | AG r0 76.1 (clean 75.5); DSRL 43.0 / 35.2 at 400 / 600 | same |
+| Push sweep r5-r7 | 0.8-1.2 flat; 1.8: r5 77.9, r7 71.5; w=1: 63-64 | same |
 
-Value vs simulator ground truth (`reports/2026-11-10-value-vs-gt/`): corr(A, A*) 0.04–0.14 for every source
-against a ceiling of 0.69; the advantage labels carry little action information. Gallery of base vs residual
-rollouts: `reports/site/value-learning/gallery-residual/` (guidance removes the "closed freeze" failure: base 12/30,
-guided 0/30 on the wrist-view reruns; 11-11 17:00).
+## Open question: why the small chains drop at round 1
+`reports/2026-11-20-mt-r1-drop/report.md`. Ruled out: iris7, labels (40% per (round, task), sensible per stage), V
+quality (b100 uses the same frozen 900 V as the 900 chain and still dips), calibration, training, serving. Failures
+stall at the second stage and time out. Not the guided-data share alone (900 chain reached 42% by r7 without a drop);
+remaining: one-step jump to ~50% guided data from one policy, only 100 base episodes, seed noise.
 
-Every policy number above is **one training seed**. Single-seed recipe effects of ≤ 0.1 have flipped before
-(`docs/findings.md` "Method traps").
+## Running / queued (gpu_cap priority order, `logs/.gpu_cap_priority`)
+1. `scripts/mt_r1_tests_submit.sh` (logs/mt_r1_tests.log): **overs** = mt100cv r1 retrained with the 100 base eps x9
+   (90.8% of rollout frames) 18605557-61; **sweep** = r1 at push 0.3 / 0.6 on moka / t64 cont rep0 18605562-65.
+2. b100cv r1 eval / ceval 18580609/11, b50cv r1 eval / ceval 18581090/91 (two more small chains at r1).
+3. b100 r1 seed-1 retrain 18593303 (critic_tests b100s1; seed test of the dip).
+4. mt100cv chain: round 2 re-fed by host 18604928 (`logs/feeders_mt/mt100cv.env`); r1 val eval rerun 18604938; r1
+   t64 ceval 18598987 requeued (resumes at 207/300).
+5. mtbv (one ResNet V on 450 moka + 450 task-64 base rollouts, no task-64 demos): t64_base E 18604936 / F 18604924
+   -> bigv_label 18604937 -> train 18599010 -> checks / evals.
+6. b50v900 (b50 r0 with the frozen 900 V labels) check / evals; mid-task r6 check 18604917 / eval 18604923.
 
-## Running and queued jobs (iris; mentor 11-11: rollout rounds with the best policy, 5–10 rounds)
+## Infrastructure
+- **iris7 hung 11-20 ~02:20** (GPU jobs silent, unkillable). Excluded in every pending job and the active scripts
+  (`iris[1-4,7-10]`); undo when fixed. Usable GPU nodes now iris5 / iris6 only.
+- `gpu_cap` batch job 18593806 (`scripts/gpu_cap.sh` v3): <= 6 GPU jobs (`logs/.gpu_cap`), releases in priority
+  order, offers each released job to `iris-hi,iris`. Held jobs sit on iris-hi only (iris QOS MaxSubmitPU 25 counts
+  any job listing iris). Jobs preempted on iris sometimes end PREEMPTED without requeue: resubmit by hand.
+- Feeders: host 18581098 (b100 / b100cv / b100iql / b200cv / b50cv), host 18604928 (mt100cv). `ag_rounds_feed.sh`
+  counts only iris-QOS jobs (FEED_MAX).
+- Eval harness counts client-errored episodes as failures: check `episodes.csv` `error` before trusting a number.
+- gcloud needs re-auth (`! /iris/u/ankile/karenvo/google-cloud-sdk/bin/gcloud auth login`); value videos
+  (reports/2026-11-19-t64-value-videos) not uploaded yet.
 
-**Residual AG rollout rounds** (`scripts/ag_rounds.sh`, log 11-11 18:30 and 21:45). Per round: collect 100 episodes
-with the previous round's residual policy at shift 0.99 (30 train states × 2 + 40 fresh) → table + labels (OOF V,
-vb40 within each round; `libero_round_labels.py`) → residual head retrained from zero init on all rounds → contrast
-check → 330-trial eval. Next round's collection runs beside the eval.
-
-| round | collect | label | train | check | eval |
-|---|---|---|---|---|---|
-| 1 | 18460302 / 03 | 18460304 | 18460305 | 18460306 | 18460307 |
-| 2 | 18460308 / 09 | 18460310 | 18460311 | 18460312 | 18460313 |
-| 3 | 18460314 / 15 | 18460316 | 18460317 | 18460318 | 18460319 |
-| 4–9 | submitted by the feeder as queue space frees (QOS limit 25 jobs per user) | | | | |
-
-- **Feeder**: `scripts/ag_rounds_feed.sh 4 9 18460317 18460318`, running in the background on the interactive
-  session **18453948 (iris2, 24 h limit, started ~17:40 11-11)**. It checks every 10 min, submits round R when
-  ≤ 19 non-interactive jobs are queued, and stops on any failed or never-satisfiable round job. Log:
-  `/iris/u/ankile/karenvo/libero/logs/ag_rounds_feed.log`. **If the interactive session ends, the feeder dies**;
-  rounds 4–9 will likely outlast it (see Resume steps).
-- **Held**: 18433699 (filtered BC round-1 recipe, seed 1) → evals 18433700 (afterok) / 18433701 (afterany). Held
-  for the GPU cap. Release with `scontrol release 18433699`, or cancel: round 2 did not climb, so this only adds a
-  second seed to round 1's 0.555.
-
-## Resume steps
-
-1. `tail /iris/u/ankile/karenvo/libero/logs/ag_rounds_feed.log`; `squeue -u karenvo`. If the feeder stopped
-   because the interactive job ended, restart it from the next unsubmitted round R with the previous round's train /
-   check ids: `scripts/ag_rounds_feed.sh R 9 <train id> <check id>` (in a new interactive session or under `nohup`).
-2. As each round's eval lands: paired vs base 18355478 and vs round 0 (residual shift 0.99, 0.754) on the same 330
-   trials. Read: rising round over round → self-improvement works with guidance; flat → the residual head is
-   saturated on this data.
-3. Add each round to the week-9 page (`week09.json["since"]`, `scripts/site_since_data.py`), rebuild, publish.
-4. Write `reports/2026-11-11-ag-rounds/` (report.md + summary.json) when the rounds finish; update
-   `docs/findings.md`.
-
-## Open decisions for Karen
-
-1. **IQL in parallel** (mentor 11-11): not started. Needs a choice of critic inputs (π₀.₅ features vs ResNet) and
-   whether it uses the rounds' data.
-2. **Seeds**: residual AG and DSRL are one seed each. A second seed of residual shift 0.99 (and of the shuffled-label
-   residual, already on the week-9 page as a future row) would make the +0.23 a claim rather than an observation.
-3. Rerun the two partial evals (AdaRMS w 16, shuffled control) to 330/330 with a longer time limit, or leave partial.
-4. 18433699: release or cancel (above).
-
-## Traps
-
-- π₀.₅ does not load in a 16 GiB interactive session (OOM while restoring the checkpoint; `sacct` MaxRSS misses the
-  spike). Always sbatch π₀.₅ jobs, evals included. A one-batch π₀.₅ check can run as a **CPU** sbatch
-  (`JAX_PLATFORMS=cpu`, 96G, ~7 min; `scripts/debug/*.sbatch`) without using a GPU.
-- Bad nodes: iris8 (`nvidia-smi` hangs, GPU driver stuck), iris9 (JAX finds no CUDA device), iris10 (uncorrectable
-  ECC). Excluded in the sbatch defaults; Turing nodes iris[1-4] and iris-hp-z8 fail the bf16 self-check.
-- iris QOS: at most 25 submitted jobs per user; a long chain has to be fed in pieces (`ag_rounds_feed.sh`).
-- Chains that re-point to a rerun: check every downstream job names the rerun's run dir, not the dead one (round 2 s0
-  evals once pointed at the failed 18433693).
-- DSRL is not resumable (replay buffer lives in memory): a requeue restarts with a fresh agent.
-- Matched-noise evals are deterministic, but `--args.save-raw` reruns are not bit-reproducible.
-- `/iris/u/ankile` is 99% full: large features go to `/move/u/karenvo/libero_features/`.
-- Never `scancel` other sessions' jobs; re-chain only your own.
-- Site rebuild: `.venv/bin/python scripts/build_site.py`; upload with
-  `/iris/u/ankile/karenvo/google-cloud-sdk/bin/gcloud storage cp -r --cache-control=no-cache reports/site/value-learning/* gs://zima-robot/reports/karenvo/value-learning/`.
-- The repo has a second, stale clone at `/iris/u/karenvo/value-learning` (last touched 2026-11-05). Work here, in
-  `/move/u/karenvo/Projects/value-learning`, which every sbatch script points at.
+## Waiting on Karen
+- Drop `--demos` from the chains (demos hurt in both no-demo tests)?
+- Rebalancing (rbag / rbfail, `SUBMIT=1 PARTS=rebal scripts/plateau_tests_submit.sh`) still a dry run.
+- Retry iris10 for more GPUs (bad card history)?

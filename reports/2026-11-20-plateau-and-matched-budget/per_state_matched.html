@@ -1,0 +1,162 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Per-State Matched Budget</title>
+<style>
+  :root { --c-ag: var(--chart-3); --c-d0: var(--chart-4); --c-d0b: var(--chart-2); --c-d1: var(--chart-1); --c-ref: var(--muted-foreground); }
+  body { margin: 0; }
+  .wrap { max-width: 900px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 22px 0 2px; }
+  h2:first-child { margin-top: 4px; }
+  .sub { font-size: 12.5px; color: var(--muted-foreground); margin: 0 0 8px; line-height: 1.45; }
+  .chart { width: 100%; position: relative; }
+  .chart svg { display: block; overflow: visible; }
+  .tip { position: fixed; pointer-events: none; background: var(--popover); color: var(--popover-foreground);
+         border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 9px; font-size: 12px;
+         line-height: 1.4; max-width: 300px; opacity: 0; transition: opacity .08s; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted-foreground); margin: 2px 0 6px; }
+  .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; background: var(--sw); vertical-align: -1px; }
+  .legend span.sq::before { border-radius: 2px; }
+  .legend span.hol::before { background: none; border: 1.5px solid var(--sw); width: 7px; height: 7px; }
+  .notes { font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; padding-left: 18px; }
+  .notes li { margin: 2px 0; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+  .kpi { border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; }
+  .kpi .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 11.5px; color: var(--muted-foreground); line-height: 1.35; }
+  text { font-family: var(--font-sans); }
+  .ax text { fill: var(--muted-foreground); font-size: 11px; }
+  .ax line { stroke: var(--border); }
+  .lbl { fill: var(--foreground); font-size: 12px; }
+  .lbl2 { fill: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .hit { fill: transparent; }
+</style></head>
+<body><div class="wrap">
+
+<h2>Every start state is solved by every method</h2>
+<p class="sub">AG r5 (1.4k robot episodes incl. the 900-rollout base pool) against the three DSRL agents nearest that budget: seed 0 at 1300 and 1357 of its own episodes, seed 1 at 1300. 10 held-out states × 33 trials, matched noise seed per trial.</p>
+<div class="kpis" id="kpis"></div>
+
+<h2>Success by held-out start state</h2>
+<p class="sub">Dots are per-state success with 95% Wilson intervals (n = 33, so each interval is about ±0.13). States are sorted by base success, hardest first. Hover for counts.</p>
+<div class="legend" id="lg1"></div>
+<div class="chart" id="dot"></div>
+
+<h2>Per-state gap: AG r5 minus DSRL</h2>
+<p class="sub">Paired over the 33 trials of each state (same init and noise seed), 95% bootstrap intervals. Right of zero means AG solved the state more often. Filled markers are intervals that exclude zero.</p>
+<div class="legend" id="lg2"></div>
+<div class="chart" id="gap"></div>
+<ul class="notes">
+  <li>No gap reverses the picture from "solved" to "unsolved". The largest is state 44, where DSRL s0 at checkpoint 1300 gets 15/33 against AG's 31/33. The same DSRL run gets 29/33 there 57 episodes later.</li>
+  <li>There are 30 tests here, so about 1.5 would exclude zero by chance. Two patterns repeat across the DSRL agents. AG is ahead on state 9 (33/33 vs 28–30) and state 44 against two of the three agents. DSRL is ahead on state 40 (33/33 for every DSRL agent vs AG's 29/33) and state 17 (31–33 vs 28). These are gaps of 3–5 trials out of 33.</li>
+</ul>
+
+<h2>Every trial</h2>
+<p class="sub">One cell per trial, with columns aligned by repeat index, so each column shares the init state and noise seed across rows. The seed-0 checkpoint-1357 eval did not log goal states, so its failures show only as failures. Base is left out here; its per-state rates are in the first chart.</p>
+<div class="legend">
+  <span class="sq" style="--sw:color-mix(in srgb, var(--foreground) 20%, transparent)">Both pots (success)</span>
+  <span class="sq" style="--sw:var(--warning)">Failed, one pot placed</span>
+  <span class="sq" style="--sw:var(--destructive)">Failed, no pot placed</span>
+  <span class="sq hol" style="--sw:var(--foreground)">Failed, goals not logged</span>
+</div>
+<div class="chart" id="grid"></div>
+<ul class="notes">
+  <li>Failures are spread across repeats. Every agent fails on 27–29 of the 33 repeat columns, and no column has more than 4 failures for one agent. Certain noise seeds are not breaking everything.</li>
+  <li>No single trial is failed by all four agents. 7 trials are failed by three, including the two seed-0 checkpoints from the same run.</li>
+  <li>No-pot failures (red) concentrate where each method is weak: DSRL s0 @1300 has 8 on state 44 and 5 on state 12, DSRL s1 has 5 on state 13, and AG's 8 are spread over five states.</li>
+</ul>
+<div class="tip" id="tip"></div>
+</div>
+<script>
+const T={"base": {"9": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0], "12": [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "13": [0, 0, 0, 0, 0, 2, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 2, 0, 0, 2, 0, 2], "17": [0, 0, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 0, 2, 0, 2, 2, 0, 0, 2, 2, 0, 2, 2, 0, 2, 2, 0, 0, 0, 2, 2, 0], "25": [2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 2, 0, 2, 2], "32": [0, 2, 0, 0, 2, 0, 0, 2, 0, 0, 2, 2, 2, 2, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 2, 2, 0, 2, 2, 0, 2, 2, 2], "40": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 0, 2, 0, 2], "42": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0], "44": [2, 0, 0, 0, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 2, 2, 0, 0, 0, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 0, 2], "48": [0, 2, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 2, 0, 2, 2, 2, 2, 0, 0, 2, 2, 0, 2, 2, 2, 2, 2, 0, 2, 0, 2, 2]}, "base_steps": {"9": [383, 388, 377, 378, 384, 391, 480, 394, 379, 433, 520, 520, 520, 520, 520, 391, 520, 520, 520, 520, 379, 520, 430, 496, 429, 372, 382, 364, 437, 363, 404, 520, 520], "12": [520, 476, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 486, 400, 452, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520], "13": [520, 520, 520, 520, 520, 487, 520, 520, 362, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 487, 520, 520, 482, 520, 520, 508, 520, 439], "17": [520, 520, 436, 431, 400, 425, 476, 389, 520, 405, 418, 395, 520, 400, 520, 401, 394, 520, 520, 393, 445, 520, 471, 417, 520, 405, 451, 520, 520, 520, 450, 434, 520], "25": [374, 422, 386, 520, 404, 446, 367, 399, 392, 397, 421, 403, 417, 402, 400, 413, 520, 520, 520, 409, 405, 520, 456, 420, 384, 520, 400, 418, 382, 400, 520, 414, 401], "32": [520, 410, 520, 520, 489, 520, 520, 393, 520, 520, 392, 442, 512, 393, 520, 520, 412, 446, 519, 396, 402, 415, 520, 520, 393, 454, 520, 416, 433, 520, 402, 426, 436], "40": [390, 395, 444, 399, 422, 391, 413, 395, 384, 411, 387, 440, 375, 400, 395, 410, 422, 387, 416, 415, 395, 391, 520, 409, 389, 417, 399, 409, 417, 520, 399, 520, 417], "42": [520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 520, 404, 520, 520, 520, 470, 520, 520, 520, 520, 520, 520, 520, 520, 520, 466, 401, 520, 520, 520, 520], "44": [410, 520, 520, 520, 481, 377, 380, 520, 421, 375, 376, 520, 446, 376, 465, 473, 382, 520, 520, 520, 349, 375, 403, 476, 446, 520, 465, 391, 510, 365, 388, 520, 489], "48": [520, 382, 520, 520, 520, 520, 520, 422, 520, 420, 520, 454, 419, 520, 412, 427, 520, 396, 520, 520, 411, 406, 520, 400, 411, 417, 390, 457, 520, 421, 520, 413, 431]}, "base_hasgoals": false, "r5": {"9": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "12": [2, 1, 0, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2], "13": [1, 2, 2, 2, 2, 2, 2, 2, 1, 0, 2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 1, 2, 0, 2, 2, 2, 1, 2, 2, 2, 0, 2], "17": [2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2], "25": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 0, 2], "32": [2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2], "40": [2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2], "42": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2], "44": [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "48": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 1, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1]}, "r5_steps": {"9": [349, 355, 350, 332, 348, 351, 351, 333, 324, 354, 338, 384, 354, 364, 364, 373, 366, 337, 333, 353, 341, 341, 338, 354, 352, 329, 339, 343, 340, 336, 358, 377, 338], "12": [457, 520, 520, 368, 366, 449, 520, 334, 345, 338, 520, 371, 488, 340, 357, 520, 500, 356, 356, 478, 429, 327, 520, 415, 346, 333, 475, 339, 520, 520, 465, 354, 319], "13": [520, 420, 509, 384, 349, 347, 414, 387, 520, 520, 450, 333, 394, 520, 358, 488, 353, 409, 520, 338, 389, 520, 394, 520, 457, 441, 336, 520, 358, 502, 402, 520, 358], "17": [439, 380, 400, 390, 401, 380, 392, 520, 439, 375, 520, 356, 369, 376, 369, 390, 442, 520, 375, 520, 353, 369, 377, 375, 353, 432, 520, 360, 396, 357, 365, 427, 376], "25": [348, 364, 358, 366, 415, 367, 388, 520, 344, 353, 386, 367, 400, 361, 412, 352, 362, 354, 364, 442, 361, 357, 373, 362, 520, 361, 359, 371, 354, 359, 355, 520, 362], "32": [483, 437, 520, 403, 394, 368, 358, 401, 489, 352, 376, 376, 385, 365, 371, 363, 357, 363, 378, 520, 356, 398, 368, 363, 370, 520, 375, 412, 372, 520, 362, 366, 412], "40": [357, 343, 367, 520, 520, 355, 369, 361, 372, 376, 520, 358, 362, 384, 352, 351, 454, 351, 363, 365, 357, 344, 360, 357, 372, 364, 351, 520, 369, 371, 388, 352, 356], "42": [377, 350, 411, 345, 420, 362, 360, 376, 358, 395, 360, 500, 371, 384, 366, 412, 458, 378, 426, 409, 337, 367, 352, 358, 386, 366, 358, 375, 393, 370, 520, 520, 384], "44": [520, 333, 347, 350, 406, 321, 357, 356, 338, 337, 380, 371, 370, 370, 347, 351, 520, 375, 419, 334, 336, 405, 335, 414, 367, 472, 462, 327, 322, 394, 350, 483, 356], "48": [385, 374, 390, 365, 365, 395, 368, 373, 419, 376, 363, 405, 520, 369, 356, 520, 360, 367, 386, 354, 414, 384, 520, 377, 372, 366, 361, 365, 351, 499, 371, 398, 520]}, "r5_hasgoals": true, "d1300": {"9": [2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1], "12": [2, 2, 1, 2, 2, 2, 2, 1, 1, 2, 2, 2, 0, 1, 2, 2, 2, 1, 0, 1, 2, 0, 2, 2, 2, 2, 0, 2, 1, 2, 1, 0, 2], "13": [2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 0, 1, 1, 2, 2, 2, 2, 2, 2, 0, 1, 2, 2, 2, 2, 2], "17": [2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1], "25": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "32": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2], "40": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "42": [1, 1, 0, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 0, 2, 1, 2, 1, 1, 2, 2, 2, 2, 1, 2, 2, 2, 2], "44": [2, 2, 1, 2, 2, 0, 0, 0, 2, 1, 1, 2, 2, 0, 1, 1, 0, 2, 2, 1, 1, 1, 1, 1, 2, 2, 2, 0, 2, 0, 2, 2, 0], "48": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2]}, "d1300_steps": {"9": [314, 311, 301, 308, 327, 309, 324, 520, 325, 520, 329, 301, 327, 359, 302, 314, 325, 321, 315, 316, 317, 316, 329, 318, 304, 324, 520, 358, 312, 300, 313, 316, 520], "12": [328, 415, 520, 406, 379, 381, 428, 520, 520, 330, 413, 448, 520, 520, 346, 432, 291, 520, 520, 520, 408, 520, 328, 422, 325, 296, 520, 373, 520, 392, 520, 520, 440], "13": [342, 433, 520, 344, 375, 352, 336, 315, 332, 520, 349, 321, 366, 359, 314, 409, 341, 520, 520, 520, 314, 355, 344, 331, 402, 366, 520, 520, 320, 325, 322, 368, 312], "17": [365, 350, 345, 342, 326, 375, 520, 341, 326, 377, 318, 314, 378, 331, 331, 328, 325, 325, 318, 333, 324, 339, 349, 329, 345, 330, 319, 319, 334, 335, 323, 297, 520], "25": [337, 340, 326, 334, 357, 339, 322, 345, 330, 321, 520, 353, 520, 338, 339, 343, 335, 324, 340, 342, 357, 338, 358, 333, 331, 326, 318, 355, 331, 342, 343, 344, 343], "32": [325, 351, 342, 333, 331, 319, 318, 304, 315, 319, 313, 318, 312, 323, 319, 306, 312, 312, 353, 315, 319, 314, 323, 520, 331, 299, 323, 325, 316, 320, 317, 316, 313], "40": [339, 344, 370, 350, 355, 348, 345, 302, 340, 362, 341, 341, 339, 335, 351, 336, 362, 343, 330, 339, 348, 337, 334, 356, 344, 367, 353, 364, 385, 492, 331, 348, 352], "42": [520, 520, 520, 376, 428, 376, 328, 491, 520, 499, 314, 477, 369, 489, 520, 339, 464, 324, 520, 303, 520, 497, 520, 520, 310, 373, 454, 344, 520, 449, 390, 386, 308], "44": [356, 335, 520, 487, 416, 520, 520, 520, 412, 520, 520, 330, 340, 520, 520, 520, 520, 349, 444, 520, 520, 520, 520, 520, 363, 367, 329, 520, 351, 520, 457, 329, 520], "48": [316, 313, 329, 326, 329, 332, 325, 331, 336, 406, 320, 325, 325, 309, 327, 329, 326, 336, 319, 327, 317, 381, 326, 320, 326, 320, 340, 337, 319, 314, 520, 334, 320]}, "d1300_hasgoals": true, "d1357": {"9": [2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "12": [0, 0, 0, 2, 2, 2, 2, 2, 0, 0, 0, 2, 2, 2, 2, 2, 0, 2, 2, 2, 0, 0, 0, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2], "13": [0, 2, 2, 2, 0, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "17": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2], "25": [0, 2, 2, 2, 2, 2, 0, 2, 2, 2, 0, 0, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 0, 2, 2, 0, 2, 2, 2], "32": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2], "40": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "42": [0, 2, 2, 0, 2, 2, 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 0, 2, 0, 2], "44": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2], "48": [2, 2, 2, 2, 2, 0, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2]}, "d1357_steps": {"9": [313, 305, 320, 520, 304, 306, 308, 301, 308, 316, 335, 325, 285, 320, 320, 340, 520, 325, 520, 315, 317, 307, 312, 317, 400, 304, 306, 339, 307, 310, 310, 332, 311], "12": [520, 520, 520, 378, 406, 315, 308, 386, 520, 520, 520, 407, 415, 314, 489, 461, 520, 412, 466, 300, 520, 520, 520, 472, 374, 520, 520, 520, 520, 393, 484, 392, 503], "13": [520, 491, 356, 350, 520, 425, 358, 384, 377, 366, 520, 423, 355, 342, 427, 520, 371, 448, 348, 520, 382, 367, 354, 356, 476, 376, 356, 337, 348, 353, 347, 383, 388], "17": [313, 438, 325, 426, 322, 332, 338, 328, 314, 330, 326, 311, 317, 318, 330, 364, 325, 320, 374, 321, 312, 314, 337, 311, 304, 520, 316, 306, 315, 336, 307, 317, 316], "25": [520, 336, 341, 346, 338, 346, 520, 344, 337, 333, 520, 520, 336, 337, 520, 356, 346, 345, 338, 324, 331, 335, 338, 327, 520, 338, 520, 337, 347, 520, 318, 321, 345], "32": [353, 320, 316, 315, 348, 316, 312, 354, 313, 305, 322, 313, 330, 359, 313, 322, 316, 322, 353, 322, 317, 332, 318, 520, 314, 326, 323, 323, 335, 326, 314, 324, 342], "40": [331, 353, 340, 344, 335, 340, 324, 338, 333, 323, 331, 340, 331, 340, 334, 342, 334, 325, 343, 343, 343, 352, 313, 355, 324, 350, 348, 352, 340, 323, 331, 327, 356], "42": [520, 377, 331, 520, 371, 330, 520, 295, 520, 346, 367, 310, 306, 332, 355, 443, 299, 321, 472, 358, 343, 387, 302, 457, 415, 504, 520, 318, 372, 520, 460, 520, 336], "44": [322, 386, 347, 416, 338, 306, 338, 330, 385, 322, 335, 319, 366, 325, 322, 319, 319, 323, 520, 520, 520, 329, 309, 322, 323, 328, 346, 444, 520, 459, 369, 318, 351], "48": [308, 320, 325, 335, 324, 520, 318, 520, 309, 320, 315, 347, 331, 330, 334, 325, 314, 332, 320, 330, 311, 323, 331, 520, 323, 323, 329, 311, 332, 318, 324, 325, 364]}, "d1357_hasgoals": false, "s1_1300": {"9": [2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2], "12": [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2], "13": [2, 2, 2, 1, 2, 1, 0, 2, 1, 2, 1, 1, 0, 2, 0, 2, 2, 2, 0, 2, 1, 1, 1, 2, 2, 1, 1, 0, 1, 2, 2, 2, 2], "17": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "25": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 1, 2], "32": [2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 0, 2, 2, 2], "40": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], "42": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2], "44": [1, 2, 1, 2, 1, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 1, 2, 2, 2, 0, 2, 0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2], "48": [2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2]}, "s1_1300_steps": {"9": [294, 520, 520, 336, 341, 332, 346, 329, 325, 367, 313, 319, 305, 371, 520, 300, 313, 318, 322, 322, 309, 311, 520, 325, 304, 324, 321, 350, 520, 335, 365, 318, 365], "12": [520, 346, 320, 366, 307, 315, 311, 299, 302, 310, 339, 307, 308, 315, 311, 343, 339, 315, 328, 374, 310, 312, 315, 313, 520, 297, 336, 323, 314, 323, 432, 307, 322], "13": [433, 339, 335, 520, 470, 520, 520, 308, 520, 293, 520, 520, 520, 297, 520, 467, 301, 344, 520, 326, 520, 520, 520, 445, 319, 520, 520, 520, 520, 303, 335, 351, 359], "17": [339, 332, 322, 329, 347, 331, 329, 318, 355, 320, 322, 333, 333, 317, 319, 298, 333, 342, 329, 332, 341, 328, 339, 314, 323, 332, 326, 322, 340, 341, 316, 315, 328], "25": [321, 336, 328, 422, 338, 350, 321, 331, 334, 335, 322, 328, 320, 332, 310, 334, 319, 316, 520, 339, 339, 321, 322, 327, 323, 319, 373, 520, 337, 326, 327, 520, 329], "32": [421, 338, 360, 343, 520, 418, 393, 336, 413, 334, 434, 351, 328, 336, 337, 339, 426, 417, 417, 325, 338, 337, 399, 520, 347, 347, 339, 341, 337, 520, 346, 346, 432], "40": [337, 332, 355, 326, 323, 325, 323, 331, 338, 330, 333, 362, 334, 337, 351, 321, 317, 334, 337, 344, 338, 395, 323, 325, 342, 325, 323, 345, 324, 335, 338, 344, 323], "42": [465, 338, 346, 445, 440, 300, 296, 293, 472, 350, 326, 314, 302, 303, 306, 315, 449, 339, 431, 520, 409, 352, 354, 312, 292, 520, 337, 297, 380, 297, 378, 334, 336], "44": [520, 371, 520, 364, 520, 336, 439, 321, 297, 520, 520, 520, 362, 412, 414, 396, 520, 294, 306, 444, 520, 423, 520, 520, 302, 305, 388, 405, 399, 315, 484, 506, 491], "48": [325, 322, 325, 520, 329, 322, 327, 316, 331, 314, 328, 313, 319, 322, 310, 324, 322, 323, 314, 319, 315, 323, 315, 520, 321, 319, 320, 322, 326, 313, 315, 323, 318]}, "s1_1300_hasgoals": true, "diff": {"d1300": {"9": [0.121, 0.03, 0.242], "12": [0.152, -0.091, 0.394], "13": [-0.061, -0.242, 0.121], "17": [-0.091, -0.242, 0.061], "25": [-0.03, -0.152, 0.091], "32": [-0.091, -0.242, 0.03], "40": [-0.121, -0.242, -0.03], "42": [0.242, 0.061, 0.424], "44": [0.485, 0.303, 0.667], "48": [-0.091, -0.212, 0.03]}, "d1357": {"9": [0.091, 0.0, 0.182], "12": [0.182, 0.0, 0.364], "13": [-0.121, -0.333, 0.091], "17": [-0.121, -0.273, 0.0], "25": [0.152, 0.0, 0.303], "32": [-0.091, -0.212, 0.03], "40": [-0.121, -0.242, -0.03], "42": [0.152, 0.0, 0.303], "44": [0.061, -0.091, 0.212], "48": [-0.03, -0.182, 0.121]}, "s1_1300": {"9": [0.152, 0.03, 0.273], "12": [-0.182, -0.364, 0.0], "13": [0.212, 0.0, 0.455], "17": [-0.152, -0.273, -0.03], "25": [0.0, -0.121, 0.121], "32": [-0.03, -0.152, 0.091], "40": [-0.121, -0.242, -0.03], "42": [0.0, -0.121, 0.121], "44": [0.242, 0.091, 0.394], "48": [-0.061, -0.212, 0.091]}}};
+const M=[
+ {k:"base",n:"Base π₀.₅",c:"var(--c-ref)",hol:true},
+ {k:"r5",n:"AG r5 (1.4k)",c:"var(--c-ag)"},
+ {k:"d1300",n:"DSRL s0 @1300",c:"var(--c-d0)"},
+ {k:"d1357",n:"DSRL s0 @1357",c:"var(--c-d0b)"},
+ {k:"s1_1300",n:"DSRL s1 @1300",c:"var(--c-d1)"},
+];
+const S=Object.keys(T.r5).map(Number);
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const succ=(k,s)=>T[k][s].filter(v=>v===2).length;
+S.sort((a,b)=>succ("base",a)-succ("base",b)||a-b);
+const tip=document.getElementById('tip');
+function bind(e,h){e.addEventListener('mousemove',ev=>{tip.innerHTML=h;tip.style.opacity=1;const r=tip.getBoundingClientRect();let x=ev.clientX+14,y=ev.clientY+14;if(x+r.width>innerWidth-8)x=ev.clientX-r.width-14;if(y+r.height>innerHeight-8)y=ev.clientY-r.height-14;tip.style.left=x+'px';tip.style.top=y+'px';});e.addEventListener('mouseleave',()=>tip.style.opacity=0);}
+const NS="http://www.w3.org/2000/svg";
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function txt(p,x,y,s,cls,anchor){const e=el("text",{x,y,class:cls||"lbl","text-anchor":anchor||"start"},p);e.textContent=s;return e;}
+function wilson(k,n){const z=1.96,p=k/n,d=1+z*z/n,c=(p+z*z/(2*n))/d,h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/d;return[c-h,c+h];}
+
+// KPIs
+(()=>{const box=document.getElementById('kpis');
+ for(const m of M){if(m.k==="base")continue;
+  const per=S.map(s=>succ(m.k,s));const mn=Math.min(...per),ms=S[per.indexOf(mn)];
+  const tot=sum(per);
+  const d=document.createElement('div');d.className='kpi';
+  d.innerHTML=`<div class="v" style="color:${m.c}">${mn}/33</div><div class="l">${m.n}: worst state (${ms}).<br>Overall ${tot}/330 = ${(tot/330).toFixed(3)}</div>`;box.appendChild(d);}
+ const pb=S.map(s=>succ("base",s));const mb=Math.min(...pb);
+ const d=document.createElement('div');d.className='kpi';d.innerHTML=`<div class="v" style="color:var(--c-ref)">${mb}/33</div><div class="l">Base worst state (${S[pb.indexOf(mb)]}).<br>Overall ${sum(pb)}/330 = ${(sum(pb)/330).toFixed(3)}</div>`;box.appendChild(d);
+})();
+
+function legend(id,items){const b=document.getElementById(id);for(const m of items){const s=document.createElement('span');s.textContent=m.n;s.style.setProperty('--sw',m.c);if(m.hol)s.className='hol';b.appendChild(s);}}
+legend('lg1',M);legend('lg2',M.slice(2));
+
+// dot plot
+function dot(){const box=document.getElementById('dot');box.innerHTML='';
+ const W=box.clientWidth,L=78,R=16,rh=42,top=6,H=top+S.length*rh+24;
+ const svg=el("svg",{width:W,height:H},box);const x=v=>L+v*(W-L-R);
+ const ax=el("g",{class:"ax"},svg);
+ for(let v=0;v<=1.0001;v+=0.2){el("line",{x1:x(v),x2:x(v),y1:top,y2:H-20},ax);txt(ax,x(v),H-6,v.toFixed(1),"","middle");}
+ S.forEach((s,i)=>{const y0=top+i*rh;
+  if(i>0)el("line",{x1:L,x2:W-R,y1:y0,y2:y0,stroke:"var(--border)","stroke-dasharray":"2 3"},svg);
+  txt(svg,6,y0+rh/2+4,"State "+s);
+  M.forEach((m,j)=>{const y=y0+7+j*((rh-14)/(M.length-1));const k=succ(m.k,s),p=k/33,[lo,hi]=wilson(k,33);
+   el("line",{x1:x(lo),x2:x(hi),y1:y,y2:y,stroke:m.c,"stroke-width":1.5,"stroke-opacity":.55},svg);
+   el("circle",{cx:x(p),cy:y,r:3.6,fill:m.hol?"var(--background)":m.c,stroke:m.c,"stroke-width":m.hol?1.5:0},svg);});
+  const minDs=Math.min(...["d1300","d1357","s1_1300"].map(k=>succ(k,s)));
+  const h=el("rect",{x:0,y:y0,width:W,height:rh,class:"hit"},svg);
+  bind(h,`<b>State ${s}</b><br>`+M.map(m=>`${m.n}: ${succ(m.k,s)}/33`).join("<br>"));
+ });
+ txt(svg,W-R+8,top-0+0,"","lbl2");
+}
+// gap
+function gap(){const box=document.getElementById('gap');box.innerHTML='';
+ const W=box.clientWidth,L=78,R=20,rh=34,top=6,H=top+S.length*rh+24;
+ const svg=el("svg",{width:W,height:H},box);const lo=-0.5,hi=0.75;const x=v=>L+(v-lo)/(hi-lo)*(W-L-R);
+ const ax=el("g",{class:"ax"},svg);
+ for(let v=-0.5;v<=0.7501;v+=0.25){el("line",{x1:x(v),x2:x(v),y1:top,y2:H-20,stroke:Math.abs(v)<1e-9?"var(--muted-foreground)":"var(--border)"},ax);txt(ax,x(v),H-6,(v>0?"+":"")+v.toFixed(2),"","middle");}
+ const D=M.slice(2);
+ S.forEach((s,i)=>{const y0=top+i*rh;txt(svg,6,y0+rh/2+4,"State "+s);
+  if(i>0)el("line",{x1:L,x2:W-R,y1:y0,y2:y0,stroke:"var(--border)","stroke-dasharray":"2 3"},svg);
+  D.forEach((m,j)=>{const y=y0+8+j*((rh-16)/(D.length-1));const [d,a,b]=T.diff[m.k][s];const sig=a>0||b<0;
+   el("line",{x1:x(a),x2:x(b),y1:y,y2:y,stroke:m.c,"stroke-width":1.5,"stroke-opacity":.7},svg);
+   el("circle",{cx:x(d),cy:y,r:3.6,fill:sig?m.c:"var(--background)",stroke:m.c,"stroke-width":1.5},svg);});
+  const h=el("rect",{x:0,y:y0,width:W,height:rh,class:"hit"},svg);
+  bind(h,`<b>State ${s}</b>, AG r5 ${succ("r5",s)}/33<br>`+D.map(m=>{const[d,a,b]=T.diff[m.k][s];return `vs ${m.n} (${succ(m.k,s)}/33): ${d>0?"+":""}${d.toFixed(3)} [${a.toFixed(2)}, ${b.toFixed(2)}]`}).join("<br>"));
+ });
+}
+// grid
+function grid(){const box=document.getElementById('grid');box.innerHTML='';
+ const W=box.clientWidth;const nc=W>=620?2:1,gapc=24,CW=(W-(nc-1)*gapc)/nc;
+ const G=M.slice(1);const L=Math.min(92,CW*0.32),R=36;const cw=Math.max(4,Math.min(12,(CW-L-R)/33));const g=Math.max(1,cw*0.2);const ch=9;
+ const rowh=12.5,bh=G.length*rowh+24;const per=Math.ceil(S.length/nc);const H=per*bh+2;
+ const svg=el("svg",{width:W,height:H},box);
+ S.forEach((s,i)=>{const col=Math.floor(i/per),ox=col*(CW+gapc),y0=(i%per)*bh;
+  txt(svg,ox,y0+12,`State ${s}`,"lbl").setAttribute("font-weight","600");
+  G.forEach((m,j)=>{const y=y0+18+j*rowh;
+   txt(svg,ox,y+ch-0.5,m.n.replace(' (1.4k)','').replace(' @',' '),"lbl2").setAttribute("font-size","10");
+   const v=T[m.k][s],st=T[m.k+"_steps"][s],hg=T[m.k+"_hasgoals"];
+   v.forEach((c,r)=>{const xx=ox+L+r*cw;let a={x:xx,y,width:cw-g,height:ch,rx:1.2};let lab;
+    if(c===2){a.fill="color-mix(in srgb, var(--foreground) 20%, transparent)";lab="Both pots (success)";}
+    else if(!hg){a.fill="none";a.stroke="var(--foreground)";a["stroke-width"]=1.2;a.x+=.6;a.y+=.6;a.width-=1.2;a.height-=1.2;lab="Failed (goals not logged)";}
+    else if(c===1){a.fill="var(--warning)";lab="One pot placed";}
+    else {a.fill="var(--destructive)";lab="No pot placed";}
+    const e=el("rect",a,svg);
+    bind(e,`<b>${m.n}</b><br>State ${s}, repeat ${r}<br>${lab}<br>${st[r]} policy steps`);});
+   el("rect",{x:ox+L-5,y:y+ch/2-1.5,width:3,height:3,fill:m.c,rx:1.5},svg);
+   txt(svg,ox+L+33*cw+4,y+ch-0.5,`${v.filter(c=>c===2).length}/33`,"lbl2").setAttribute("font-size","10");
+  });
+ });
+}
+function draw(){dot();gap();grid();}
+draw();let to;addEventListener('resize',()=>{clearTimeout(to);to=setTimeout(draw,100)});
+</script></body></html>

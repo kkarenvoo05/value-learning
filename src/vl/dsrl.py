@@ -186,6 +186,11 @@ def _sample(apply_fn, params, key, pixels, state, magnitude):
     return tanh_sample(key, mean, log_std, magnitude)[0]
 
 
+@functools.partial(jax.jit, static_argnames=("apply_fn",))
+def _q(apply_fn, params, pixels, state, action):
+    return apply_fn({"params": params}, pixels, state, action)
+
+
 class DSRLAgent:
     def __init__(self, seed: int = 0, cfg: DSRLConfig | None = None):
         cfg = cfg or DSRLConfig()
@@ -214,6 +219,13 @@ class DSRLAgent:
                     jnp.asarray(state, jnp.float32)[None], self.cfg.action_magnitude)
         return np.asarray(a[0], np.float32)
 
+    def q(self, pixels: np.ndarray, state: np.ndarray, w: np.ndarray) -> np.ndarray:
+        """[2026-11-13, DSRL G1] Q(s, w) of every head, (num_qs, B), for B observations (B, H, W, 3) uint8 + (B,
+        state_dim) and noise vectors (B, noise_dim). No random crop (that is train-time augmentation only); the
+        SAC losses use the mean over heads."""
+        return np.asarray(_q(self.critic.apply_fn, self.critic.params, jnp.asarray(pixels),
+                             jnp.asarray(state, jnp.float32), jnp.asarray(w, jnp.float32)), np.float32)
+
     def update(self, batch: dict) -> dict:
         self.rng, self.actor, self.critic, self.target_params, self.temp, info = _update(
             self.rng, self.actor, self.critic, self.target_params, self.temp, batch, self.cfg, self.target_entropy)
@@ -223,6 +235,23 @@ class DSRLAgent:
         blob = {"cfg": asdict(self.cfg), "actor": self.actor.params, "critic": self.critic.params,
                 "target": self.target_params, "temp": self.temp.params, "rng": self.rng}
         Path(path).write_bytes(pickle.dumps(jax.device_get(blob)))
+
+    def full_state(self) -> dict:
+        """[2026-11-12] Everything update() and sample() depend on (weights, Adam moments, steps, target, rng), for a
+        resumable run; load(path) keeps restoring weights only."""
+        ts = {name: {"step": t.step, "params": t.params, "opt_state": t.opt_state}
+              for name, t in (("actor", self.actor), ("critic", self.critic), ("temp", self.temp))}
+        return jax.device_get({"cfg": asdict(self.cfg), **ts, "target": self.target_params, "rng": self.rng})
+
+    @classmethod
+    def from_full_state(cls, blob: dict) -> "DSRLAgent":
+        agent = cls(0, DSRLConfig(**blob["cfg"]))
+        for name in ("actor", "critic", "temp"):
+            t = getattr(agent, name)
+            setattr(agent, name, t.replace(step=blob[name]["step"], params=blob[name]["params"],
+                                           opt_state=blob[name]["opt_state"]))
+        agent.target_params, agent.rng = blob["target"], jnp.asarray(blob["rng"])
+        return agent
 
     @classmethod
     def load(cls, path, seed: int = 0) -> "DSRLAgent":
@@ -275,3 +304,38 @@ class ReplayBuffer:
     def sample(self, batch_size: int) -> dict:
         idx = self.rng.integers(0, self.n, batch_size)
         return {k: v[idx] for k, v in self.d.items()}
+
+    def save_chunks(self, directory, chunks: list[str]) -> dict:
+        """[2026-11-12] Append-only save for a resumable run: writes rows [end of the last chunk, n) as one new .npz
+        chunk (~25 KB per transition, so ~100 MB per 50 episodes; the whole buffer is several GB, and the client's
+        websocket gives up if a request blocks for ~40 s). Returns the meta to store with the checkpoint (chunk list,
+        n, i, rng state). Needs a buffer that never wrapped (capacity 250k >= 1800 episodes x 104 decisions)."""
+        assert self.i == self.n < self.capacity, "buffer wrapped: chunked saving needs a larger capacity"
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        start = int(chunks[-1].split("_")[2].split(".")[0]) if chunks else 0
+        chunks = list(chunks)
+        if self.n > start:
+            name = f"rows_{start:07d}_{self.n:07d}.npz"
+            tmp = directory / (name + ".tmp.npz")
+            np.savez(tmp, **{k: v[start: self.n] for k, v in self.d.items()})
+            tmp.replace(directory / name)
+            chunks.append(name)
+        return {"chunks": chunks, "n": self.n, "i": self.i, "capacity": self.capacity,
+                "rng": self.rng.bit_generator.state}
+
+    def load_chunks(self, directory, meta: dict) -> None:
+        directory = Path(directory)
+        assert meta["capacity"] == self.capacity, (meta["capacity"], self.capacity)
+        pos = 0
+        for name in meta["chunks"]:
+            a, b = (int(x) for x in name[len("rows_"):-len(".npz")].split("_"))
+            assert a == pos, (name, pos)
+            with np.load(directory / name) as z:
+                for k in self.d:
+                    assert len(z[k]) == b - a, (name, k)
+                    self.d[k][a:b] = z[k]
+            pos = b
+        assert pos == meta["n"], (pos, meta["n"])
+        self.n, self.i = meta["n"], meta["i"]
+        self.rng.bit_generator.state = meta["rng"]

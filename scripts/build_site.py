@@ -9,6 +9,9 @@ Figures named in the content files are copied next to each page. Output: reports
   index.html, site.css, charts.js, week-05/ … week-09/ (each index.html + assets/)
   week09.json + week09_data.json (scripts/site_week09_data.py) → week-09/ [2026-11-09]
   week09.json["since"] + week09_since_data.json (scripts/site_since_data.py) → "Since Nov 10" block on week-09 [2026-11-11]
+  architecture.html (hand-written body: diagrams of pi0.5 and the models built on it) → architecture/ [2026-11-12]
+  week09_nov14.html (hand-written body) + reports/2026-11-14-figures/*.png (scripts/libero_mentor_figures.py)
+    → week-09-nov14/ [2026-11-14]
 Publish: scripts/publish_week_report.sh value-learning   (public bucket; review first)
 """
 
@@ -614,8 +617,69 @@ def earlier(ce: dict):
         (d / "index.html").write_text(page(f"Week {n} progress", f'<a href="../index.html">Value learning</a> › Week {n}', body, 1))
 
 
+def architecture():
+    """Architecture explainer (reports/site/content/architecture.html, hand-written body) -> architecture/ [2026-11-12]."""
+    d = OUT / "architecture"
+    d.mkdir(parents=True, exist_ok=True)
+    body = (CONTENT / "architecture.html").read_text()
+    (d / "index.html").write_text(page("How the models work", '<a href="../index.html">Value learning</a> › Architectures', body, 1))
+
+
+NOV14_FIGS = ROOT / "reports" / "2026-11-14-figures"
+
+
+def week9_nov14():
+    """Nov 14 update (reports/site/content/week09_nov14.html, hand-written body; figures from
+    scripts/libero_mentor_figures.py) -> week-09-nov14/ [2026-11-14]."""
+    d = OUT / "week-09-nov14"
+    (d / "assets").mkdir(parents=True, exist_ok=True)
+    body = (CONTENT / "week09_nov14.html").read_text()
+    for name in re.findall(r'src="assets/([^"]+)"', body):
+        shutil.copy2(NOV14_FIGS / name, d / "assets" / name)
+    (d / "index.html").write_text(page("Week 9 · Nov 14", '<a href="../index.html">Value learning</a> › Week 9 · Nov 14', body, 1))
+
+
+NOV17_FIGS = ROOT / "reports" / "2026-11-17-ag-rounds"
+
+
+def week9_nov17():
+    """Nov 17 update (reports/site/content/week09_nov17.html, hand-written body; figures from
+    scripts/libero_week9_nov17.py) -> week-09-nov17/ [2026-11-17]."""
+    d = OUT / "week-09-nov17"
+    (d / "assets").mkdir(parents=True, exist_ok=True)
+    body = (CONTENT / "week09_nov17.html").read_text()
+    for name in re.findall(r'src="assets/([^"]+)"', body):
+        (d / "assets" / name).parent.mkdir(parents=True, exist_ok=True)  # gallery/ clips
+        shutil.copy2(NOV17_FIGS / name, d / "assets" / name)
+    (d / "index.html").write_text(page("Week 9 · Nov 17", '<a href="../index.html">Value learning</a> › Week 9 · Nov 17', body, 1))
+
+
+def week10_nov20():
+    """Nov 20 update (reports/site/content/week10_nov20.html, hand-written body with inline SVG charts and data from
+    reports/2026-11-20-plateau-and-matched-budget/compute_evals.py) -> week-10-nov20/ [2026-11-20]."""
+    d = OUT / "week-10-nov20"
+    d.mkdir(parents=True, exist_ok=True)
+    body = (CONTENT / "week10_nov20.html").read_text()
+    (d / "index.html").write_text(page("Week 10 · Nov 20", '<a href="../index.html">Value learning</a> › Week 10 · Nov 20', body, 1))
+
+
 def hub(c7: dict, ce: dict, c8: dict, c9: dict):
-    cards = (f'<a class="wk" href="week-09/index.html"><div class="wn">Week 9 · update for Nov 10, follow-up Nov 11 · current</div>'
+    cards = ('<a class="wk" href="architecture/index.html"><div class="wn">Reference · how the models work</div>'
+             '<div class="wt">Architecture diagrams: π₀.₅, the tag routes, the residual head, value expert, DSRL</div>'
+             '<div style="color:var(--fg2)">What each model is made of, where the advantage tag enters, and what trains.</div></a>')
+    cards += ('<a class="wk" href="week-10-nov20/index.html"><div class="wn">Week 10 · Nov 20 update · current</div>'
+              '<div class="wt">LIBERO: AG and DSRL level off at 85–90%, distillation into π₀.₅ keeps it, and AG survives a noisy judge</div>'
+              '<div style="color:var(--fg2)">DSRL seed 1 run to 3,300 episodes stays at 86–90%; AG r5 87.6%. π₀.₅ fine-tuned on DSRL / AG '
+              'successes reaches 88–89%. With 25% of outcomes flipped, AG is unchanged and DSRL falls below base.</div></a>')
+    cards += ('<a class="wk" href="week-09-nov17/index.html"><div class="wn">Week 9 · Nov 17 update</div>'
+              '<div class="wt">LIBERO: eight AG rounds, where the failures are, and the fixed-budget / continuous-state setup</div>'
+              '<div style="color:var(--fg2)">AG rounds 0–7: 75.5–87.6% vs base 52.4%, no steady climb after round 0; the swings are '
+              'real policy differences. Failures look random within each state, and what is left is mostly the second pot.</div></a>')
+    cards += ('<a class="wk" href="week-09-nov14/index.html"><div class="wn">Week 9 · Nov 14 update</div>'
+              '<div class="wt">LIBERO: RL on top of π₀.₅ reaches 86–89%, how the remaining failures happen, and distilling it back</div>'
+              '<div style="color:var(--fg2)">AG residual (round 5) 87.6% and DSRL (1,800 rollouts) 86.1% / 89.1% vs base 52.4%. '
+              'Most remaining failures put the first pot on the stove edge. A chunk-target bug in our fine-tunes is fixed; its test is queued.</div></a>')
+    cards += (f'<a class="wk" href="week-09/index.html"><div class="wn">Week 9 · update for Nov 10, follow-up Nov 11</div>'
              f'<div class="wt">LIBERO: a fine-tune recipe that keeps base performance, and why the advantage tag goes unused</div>'
              f'<div style="color:var(--fg2)">{inline(c9["summary"][0]["t"])}</div></a>'
              f'<a class="wk" href="week-08/index.html"><div class="wn">Week 8 · Nov 3 – Nov 10</div>'
@@ -649,6 +713,10 @@ def main():
     sp = CONTENT / "week09_since_data.json"  # scripts/site_since_data.py [2026-11-11]
     week9(c9, json.loads((CONTENT / "week09_data.json").read_text()), json.loads(sp.read_text()) if sp.exists() else None)
     earlier(ce)
+    architecture()
+    week9_nov14()
+    week9_nov17()
+    week10_nov20()
     hub(c7, ce, c8, c9)
     print("->", OUT)
 

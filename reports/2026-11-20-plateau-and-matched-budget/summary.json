@@ -1,0 +1,91 @@
+{
+ "title": "Plateau, distillation, noisy judge, matched-budget per state (Nov 13–20)",
+ "status": "observations, one seed per policy",
+ "question": "Where do AG rounds and DSRL level off on moka, can the gain be distilled into π₀.₅, and how do the methods handle a noisy judge?",
+ "verdict": [
+  "Both level off at 85–90%: AG r5 87.6%, DSRL seed 1 87.0–90.0% from 1,300 to 3,300 episodes.",
+  "Distilling DSRL or AG successes into π₀.₅ keeps the teacher's success (88.2% / 89.1%); distilling base's successes gives 49.7%.",
+  "25% symmetric label flips: AG +0.6, DSRL −36.7 to −47.9 points.",
+  "Guidance push 0.8–1.2 is flat; reference changes and IQL labels did not help; dropping demos helped (+27.9 at 50 rollouts).",
+  "At matched budget no start state is solved by one method and unsolved by the other."
+ ],
+ "tiles": [
+  {
+   "label": "Best AG round (r5)",
+   "value": "87.6%",
+   "sub": "base 52.4%"
+  },
+  {
+   "label": "Best DSRL (s1, 2,400 ep)",
+   "value": "90.0%",
+   "sub": "+2.4 [−2.4, +7.3] vs r5"
+  },
+  {
+   "label": "Distilled from DSRL",
+   "value": "88.2%",
+   "sub": "LoRA fine-tune of π₀.₅"
+  },
+  {
+   "label": "DSRL with noisy judge",
+   "value": "35.2%",
+   "sub": "clean 83.0% at 600 episodes"
+  }
+ ],
+ "charts": [
+  {
+   "title": "Held-out success (330 trials)",
+   "bars": [
+    {
+     "label": "Base π₀.₅",
+     "value": 0.524,
+     "highlight": false
+    },
+    {
+     "label": "AG round 5",
+     "value": 0.876,
+     "highlight": true
+    },
+    {
+     "label": "AG round 7",
+     "value": 0.83,
+     "highlight": false
+    },
+    {
+     "label": "DSRL s1 @2400",
+     "value": 0.9,
+     "highlight": true
+    },
+    {
+     "label": "DSRL s1 @3300",
+     "value": 0.882,
+     "highlight": false
+    },
+    {
+     "label": "Distilled: base successes",
+     "value": 0.497,
+     "highlight": false
+    },
+    {
+     "label": "Distilled: DSRL",
+     "value": 0.882,
+     "highlight": true
+    },
+    {
+     "label": "Distilled: AG (266 trials)",
+     "value": 0.891,
+     "highlight": true
+    },
+    {
+     "label": "AG r0, noisy judge",
+     "value": 0.761,
+     "highlight": false
+    },
+    {
+     "label": "DSRL @600, noisy judge",
+     "value": 0.352,
+     "highlight": false
+    }
+   ]
+  }
+ ]
+}

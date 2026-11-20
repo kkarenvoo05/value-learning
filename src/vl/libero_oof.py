@@ -3,6 +3,8 @@ ResNet trainer and the openpi value-expert script can import it)."""
 import numpy as np
 import pandas as pd
 
+INNER_FRAC = 0.2  # fresh-only tables: early-stopping share of the other folds' episodes [ours]
+
 
 def oof_split(meta: pd.DataFrame, fold: int, k_folds: int = 5, n_inner: int = 5) -> tuple[np.ndarray, np.ndarray]:
     """Out-of-fold V for Stage 5 labels on the train rollouts (docs/libero_plan.md): (held-out mask, inner mask).
@@ -20,6 +22,14 @@ def oof_split(meta: pd.DataFrame, fold: int, k_folds: int = 5, n_inner: int = 5)
     f_fold = dict(zip(rng.permutation(fresh), np.arange(len(fresh)) % k_folds))
     ep_fold = {e: (f_fold[e] if s < 0 else s_fold[s]) for e, s in eps.items()}
     held = tr.values & (meta.episode_index.map(ep_fold).values == fold)
+    if len(states) == 0:
+        # [2026-11-16] fresh-layout-only tables (chain-only V, scripts/libero_chainv_round_labels.py): no fixed states
+        # to early-stop on, so inner = INNER_FRAC of the other folds' episodes (at least n_inner), drawn rng 1 + fold
+        # [ours]. Tables with fixed train states take the branch below, unchanged.
+        others = np.sort([e for e in fresh if f_fold[e] != fold])
+        n = min(len(others) - 1, max(n_inner, round(INNER_FRAC * len(others))))
+        inner_eps = np.random.default_rng(1 + fold).choice(others, size=n, replace=False)
+        return held, tr.values & meta.episode_index.isin(inner_eps).values & ~held
     others = np.array([s for s in states if s_fold[s] != fold])
     inner_states = np.random.default_rng(1 + fold).choice(others, size=n_inner, replace=False)
     inner = tr.values & meta.init_state.isin(inner_states).values & ~held

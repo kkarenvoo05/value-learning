@@ -17,6 +17,13 @@ rollout. Branching restores the MuJoCo state, solver warm start, robosuite's ste
 would otherwise end the episode early) and the gripper's integrated command (not part of the MuJoCo state). A fidelity check repeats candidate 0 from the restored state and compares the
 resulting MuJoCo state with the first execution (written to the log and the npz as restore_maxdiff).
 
+DSRL probe [2026-11-13, G1 with DSRL's critic; server: scripts/dsrl_pi05.py --mode eval, which answers each
+request with the noise w it used and its critic's Q(s, w)]: --args.cand-source actor|gauss sends every one of the N
+candidates as a DSRL probe request (actor samples, or w ~ N(0, I) clipped to [-1, 1]); the base episode then takes
+one more, ordinary request (the DSRL actor) for the chunk it executes, so the trunk is the DSRL policy whatever the
+candidates are. Continuations are ordinary requests (the DSRL actor) unless --args.continue-source base. The w and
+served Q of every candidate are saved (rp_cand_w / rp_cand_q, br_w / br_q). Scoring: scripts/libero_dsrl_g1.py.
+
 Output: <out>/probe/epNNNN.npz per base episode and <out>/episodes.csv. Analysis: scripts/libero_steer_analyze.py.
 
 Usage:
@@ -56,6 +63,9 @@ class Args:
     # v2 [ours, 2026-11-04]: candidates 1..N-1 sample with start noise x cand_noise_scale (server: serve_pi05_finetuned.py
     # --base); candidate 0, the base episode and every continuation stay at the policy's normal noise. 1.0 = v1.
     cand_noise_scale: float = 1.0
+    # DSRL probe [2026-11-13] (module docstring): "" = off; "actor" / "gauss" = candidate noise source on a DSRL server
+    cand_source: str = ""
+    continue_source: str = ""  # "" = the server's default policy (DSRL actor); "base" = plain pi0.5 continuations
     branch_steps: List[int] = dataclasses.field(default_factory=lambda: [40, 130, 220, 310])  # policy steps
     repeats: int = 2  # continuations per candidate at a branch step
     num_steps_wait: int = 10
@@ -73,7 +83,11 @@ class FakePolicy:
     def infer(self, element):
         a = self.rng.normal(0, 0.3, (10, 7))
         a[:, 6] = np.sign(a[:, 6])
-        return {"actions": a}
+        out = {"actions": a}
+        if "dsrl_cand" in element:  # mimics the DSRL probe server's answer
+            out["dsrl_w"] = np.clip(self.rng.normal(0, 1, 32), -1, 1).astype(np.float32)
+            out["dsrl_q"] = float(self.rng.normal())
+        return out
 
 
 def preprocess(obs, size):
@@ -115,13 +129,20 @@ class Sim:
         return obs
 
 
-def query(client, obs, prompt, size, noise_scale=None):
+def query(client, obs, prompt, size, noise_scale=None, cand=None, info=None):
+    """cand: DSRL probe request ("actor" / "gauss" / "base"); info (dict) receives the server's dsrl_w / dsrl_q."""
     img, wrist, state = preprocess(obs, size)
     element = {"observation/image": img, "observation/wrist_image": wrist, "observation/state": state,
                "prompt": prompt}
     if noise_scale is not None:
         element["noise_scale"] = float(noise_scale)
-    return np.asarray(client.infer(element)["actions"]), (img, wrist, state)
+    if cand:
+        element["dsrl_cand"] = cand
+    out = client.infer(element)
+    if info is not None:
+        info["w"] = np.asarray(out.get("dsrl_w", np.full(32, np.nan)), np.float32)
+        info["q"] = float(out.get("dsrl_q", np.nan))
+    return np.asarray(out["actions"]), (img, wrist, state)
 
 
 def run_policy(env, client, obs, prompt, t, max_steps, args):
@@ -130,7 +151,7 @@ def run_policy(env, client, obs, prompt, t, max_steps, args):
     done = False
     while t < max_steps:
         if not plan:
-            chunk, _ = query(client, obs, prompt, args.resize_size)
+            chunk, _ = query(client, obs, prompt, args.resize_size, cand=args.continue_source or None)
             plan.extend(chunk[: args.replan_steps])
         obs, _, done, _ = env.step(plan.popleft().tolist())
         t += 1
@@ -159,14 +180,21 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
     branch = set(args.branch_steps)
     while t < max_steps and not done:
         snap = sim.save()
-        cands = []
+        cands, cw, cq = [], [], []
         for c in range(args.n_cand):
             ns = args.cand_noise_scale if (c > 0 and args.cand_noise_scale != 1.0) else None
-            chunk, pre = query(client, obs, prompt, args.resize_size, ns)
+            info = {}
+            chunk, pre = query(client, obs, prompt, args.resize_size, ns, cand=args.cand_source or None, info=info)
             cands.append(chunk)
+            cw.append(info["w"])
+            cq.append(info["q"])
             if c == 0:
                 img, wrist, state = pre
         cands = np.stack(cands)  # (N, H, 7)
+        if args.cand_source:  # DSRL probe: the trunk executes its own ordinary (DSRL actor) chunk, not a candidate
+            trunk, _ = query(client, obs, prompt, args.resize_size, cand=args.continue_source or None)
+        else:
+            trunk = cands[0]
         k = min(args.replan_steps, max_steps - t)
         eef, grip, cand_done = [], [], []
         is_branch = t in branch
@@ -209,19 +237,23 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
             br["after_wrist"].append(np.stack(after_wrist))
             br["after_state"].append(np.stack(after_state))
             br["chunks"].append(cands)
+            br["w"].append(np.stack(cw))
+            br["q"].append(np.array(cq, np.float32))
             logging.info(f"{log_prefix} branch t={t}: success per candidate {np.array(succ).mean(1).round(2).tolist()}")
         rec["t"].append(t)
         rec["image"].append(img)
         rec["wrist_image"].append(wrist)
         rec["state"].append(state)
         rec["chunks"].append(cands)
+        rec["cand_w"].append(np.stack(cw))
+        rec["cand_q"].append(np.array(cq, np.float32))
         rec["eef_after"].append(np.stack(eef))
         rec["grip_after"].append(np.stack(grip))
         rec["cand_done"].append(np.array(cand_done))
-        # continue the base episode with candidate 0
+        # continue the base episode with candidate 0 (DSRL probe: with the trunk's own chunk)
         obs = sim.restore(snap)
-        obs, done = execute(env, cands[0, :k])
-        rec["executed"].append(cands[0, :k])
+        obs, done = execute(env, trunk[:k])
+        rec["executed"].append(trunk[:k])
         t += k
     out = {f"rp_{k_}": np.asarray(v) for k_, v in rec.items() if k_ != "executed"}
     out["executed"] = np.concatenate(rec["executed"])
@@ -229,6 +261,8 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
         out[f"br_{k_}"] = np.asarray(v)
     out["restore_maxdiff"] = np.array(restore_maxdiff if restore_maxdiff is not None else np.nan)
     out["cand_noise_scale"] = np.array(args.cand_noise_scale)
+    out["cand_source"] = np.array(args.cand_source)
+    out["continue_source"] = np.array(args.continue_source)
     return done, t, out
 
 

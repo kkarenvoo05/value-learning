@@ -101,6 +101,20 @@ def test_demo_rows_and_positive_labels(tmp_path):
         fd.demo_episodes(tmp_path, "missing task")
 
 
+def test_demo_episodes_any_searches_tables_in_order(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir(), b.mkdir()
+    pd.DataFrame({"episode_index": [0], "task": ["moka"], "success": 1, "raw": ["a0"]}).to_csv(a / "episodes.csv",
+                                                                                            index=False)
+    pd.DataFrame({"episode_index": [50139, 50208], "task": ["bowls", "moka"], "success": 1,
+                  "raw": ["b0", "b1"]}).to_csv(b / "episodes.csv", index=False)
+    assert fd.demo_episodes_any([a, b], "moka").raw.tolist() == ["a0"]  # first table wins
+    d = fd.demo_episodes_any([a, b], "bowls")
+    assert d.raw.tolist() == ["b0"] and d.episode_index.tolist() == [fd.DEMO_OFFSET + 50139]
+    with pytest.raises(AssertionError):
+        fd.demo_episodes_any([a, b], "missing task")
+
+
 def test_weights_floor_on_grid_and_reach_samples():
     w = pd.DataFrame({"episode_index": [0, 0], "frame_index": [0, 4], "weight": [0.5, 2.0]})
     assert fd.frame_weights(w, 0, 6).tolist() == [0.5] * 4 + [2.0] * 2
@@ -190,3 +204,71 @@ def test_oversample_demos_hits_the_frame_share():  # step-1 recipe grid, 2026-11
         assert abs(f[True] / f.sum() - share) < 1e-9
     with pytest.raises(AssertionError):
         fd.oversample_demos(roll, 0.5)  # no demos to repeat
+
+
+def test_anchor_episodes_and_share():  # base-rollout anchor, 2026-11-13
+    eps = pd.DataFrame({"episode_index": range(8), "split": ["train"] * 6 + ["val"] * 2,
+                        "round": [1, 1, 1, 2, 2, 2, 1, 2], "init_state": [0, 1, 2, 0, 1, -1, 9, 9],
+                        "success": [1, 0, 1, 1, 1, 0, 1, 1], "raw": "x", "policy_steps": 100})
+    anc = fd.anchor_episodes(eps, 1, held_out={9})
+    assert list(anc.episode_index) == [0, 1, 2] and anc.anchor.all()  # train rows of round 1, failures included
+    with pytest.raises(AssertionError):
+        fd.anchor_episodes(eps, 1, held_out={1})  # a held-out state in the anchor
+    with pytest.raises(AssertionError):
+        fd.anchor_episodes(eps.drop(columns="round"), 1, held_out=set())
+    data = fd.select_episodes(eps, "imitation", held_out={9}).assign(anchor=False)  # 0, 2, 3, 4
+    out, k, share = fd.oversample_flag(pd.concat([data, anc], ignore_index=True), "anchor", 0.5)
+    assert k == 1 and abs(share - 3 / 7) < 1e-9 and len(out) == 7
+    out, k, share = fd.oversample_flag(pd.concat([data, anc], ignore_index=True), "anchor", 0.75)
+    assert k == 4 and abs(share - 12 / 16) < 1e-9
+
+
+def _rollout_npz(path, T=23, replan=5, horizon=10, chunks=True, seed=0):
+    """A synthetic rollout raw file as scripts/libero_rollouts.py writes it (Changes 8: sampled chunks)."""
+    rng = np.random.default_rng(seed)
+    ct = np.arange(0, T, replan)
+    ca = rng.standard_normal((len(ct), horizon, 7)).astype(np.float32)
+    actions = np.concatenate([ca[j, :min(replan, T - t)] for j, t in enumerate(ct)]).astype(np.float64)
+    new_chunk = np.isin(np.arange(T), ct)
+    img = np.zeros((T, 4, 4, 3), np.uint8) + np.arange(T)[:, None, None, None].astype(np.uint8)
+    extra = {"chunk_actions": ca, "chunk_t": ct} if chunks else {}
+    np.savez(path, image=img, wrist_image=img, state=np.zeros((T, 8)), actions=actions, new_chunk=new_chunk,
+             prompt=np.array("p"), **extra)
+    return ct, ca, actions
+
+
+def test_sampled_chunk_targets(tmp_path, monkeypatch):  # chunk target fix, 2026-11-14
+    ct, ca, actions = _rollout_npz(tmp_path / "r.npz")
+    ep = fd.load_episode(str(tmp_path / "r.npz"), None, 0)  # default: executed targets, every frame
+    assert "chunk_t" not in ep and len(fd.sample_frames(ep)) == 23
+    s = fd.sample(ep, 3, None)  # executed target at frame 3 joins chunk 0 (2 actions) and chunk 1
+    assert np.allclose(s["actions"][:2], ca[0, 3:5]) and np.allclose(s["actions"][2:7], ca[1, :5])
+    monkeypatch.setattr(fd, "CHUNK_TARGETS", "sampled")
+    ep = fd.load_episode(str(tmp_path / "r.npz"), None, 0)
+    assert np.array_equal(fd.sample_frames(ep), ct)
+    for j, t in enumerate(ct):
+        s = fd.sample(ep, int(t), None)
+        assert np.allclose(s["actions"], ca[j]) and s["observation/image"][0, 0, 0] == t
+        assert not np.allclose(s["actions"][5:], fd.action_chunk(actions, int(t))[5:])  # differs from executed
+    with pytest.raises(AssertionError, match="replan frame"):
+        fd.sample(ep, 3, None)
+    ex = fd.load_episode(str(tmp_path / "r.npz"), None, 0, chunk_targets="executed")  # trainer's fixed val batch
+    assert "chunk_t" not in ex
+    _rollout_npz(tmp_path / "old.npz", chunks=False)  # a rollout saved before Changes 8 is refused
+    with pytest.raises(AssertionError, match="without saved chunks"):
+        fd.load_episode(str(tmp_path / "old.npz"), None, 0)
+    np.savez(tmp_path / "demo.npz", image=np.zeros((9, 4, 4, 3), np.uint8), wrist_image=np.zeros((9, 4, 4, 3), np.uint8),
+             state=np.zeros((9, 8)), actions=np.zeros((9, 7)), prompt=np.array("p"))  # demos keep executed targets
+    assert len(fd.sample_frames(fd.load_episode(str(tmp_path / "demo.npz"), None, 0))) == 9
+
+
+def test_sampled_chunks_in_stream(tmp_path, monkeypatch):
+    monkeypatch.setattr(fd, "CHUNK_TARGETS", "sampled")
+    cts = {}
+    for e in range(3):
+        cts[e] = _rollout_npz(tmp_path / f"{e}.npz", T=20 + 3 * e, seed=e)[0]
+    sel = pd.DataFrame({"episode_index": [0, 1, 2], "raw": [str(tmp_path / f"{e}.npz") for e in range(3)]})
+    n = sum(len(c) for c in cts.values())  # 4 + 5 + 6 = 15 replan frames, batch 5 -> 3 batches per epoch
+    it = iter(fd.EpisodeStream(sel, batch=5, seed=0, group=3))
+    seen = [tuple(m[:2]) for _ in range(3) for m in next(it)[1]]
+    assert sorted(seen) == sorted((e, int(t)) for e in cts for t in cts[e]) and len(seen) == n

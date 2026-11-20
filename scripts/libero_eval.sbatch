@@ -16,7 +16,7 @@
 #SBATCH --account=iris
 #SBATCH --partition=iris
 #SBATCH --gres=gpu:1
-#SBATCH --exclude=iris[1-4,9],iris-hgx-[1-2],iris-hp-z8   # Turing GPUs fail the pi05 bf16 self-check; iris9: JAX finds no CUDA device (2026-11-05); hgx: shared H100/H200s not needed, evals run on 24 GB cards (2026-11-08)
+#SBATCH --exclude=iris[1-4,7,9],iris-hgx-[1-2],iris-hp-z8   # Turing GPUs fail the pi05 bf16 self-check; iris9: JAX finds no CUDA device (2026-11-05); hgx: shared H100/H200s not needed, evals run on 24 GB cards (2026-11-08)
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=08:00:00
@@ -26,7 +26,7 @@ SUITE=${SUITE:-libero_spatial} TRIALS=${TRIALS:-1} NAME=${NAME:-smoke} SEED=${SE
 OPENPI=/iris/u/ankile/karenvo/pi05/openpi
 ROOT=/iris/u/ankile/karenvo/libero
 CKPT=/iris/u/rbhowmik/cache/openpi/openpi-assets/checkpoints/pi05_libero
-OUT=$ROOT/runs/${NAME}_${SUITE}_${SLURM_JOB_ID}
+OUT=${OUT_DIR:-$ROOT/runs/${NAME}_${SUITE}_${SLURM_JOB_ID}}  # OUT_DIR [2026-11-17]: continue an existing run dir (DSRL resume)
 PORT=$((8100 + SLURM_JOB_ID % 800))
 mkdir -p "$OUT"
 export UV_CACHE_DIR=/iris/u/ankile/karenvo/pi05/uv-cache XDG_CACHE_HOME=/iris/u/ankile/karenvo/pi05/cache
@@ -46,7 +46,7 @@ if [ -n "${DSRL_MODE:-}" ]; then  # [2026-11-10] DSRL on base pi05 (scripts/dsrl
     CLIENT_ARGS="${CLIENT_ARGS:-} --args.dsrl"
     .venv/bin/python /move/u/karenvo/Projects/value-learning/scripts/dsrl_pi05.py --mode $DSRL_MODE \
         ${DSRL_AGENT:+--agent $DSRL_AGENT} --out "$OUT" --seed ${DSRL_SEED:-0} ${DSRL_ARGS:-} --port $PORT \
-        > "$OUT/server.log" 2>&1 &
+        >> "$OUT/server.log" 2>&1 &   # append: a requeued (resumed) server keeps the earlier attempts' log
 elif [ -n "${FT_RUN:-}" ] || [ -n "${BASE_OURS:-}" ]; then
     echo "fine-tuned run ${FT_RUN:-none (base, our server)} tag ${FT_TAG:-auto} step ${FT_STEP:-final}"
     .venv/bin/python /move/u/karenvo/Projects/value-learning/scripts/serve_pi05_finetuned.py \

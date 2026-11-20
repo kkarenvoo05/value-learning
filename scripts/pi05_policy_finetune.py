@@ -221,7 +221,7 @@ def raw_samples(n_eps: int, per_ep: int, tag=None, split_name="train", seed=0):
     rows = eps[eps.split == split_name].sort_values("episode_index").head(n_eps)
     rng, out = np.random.default_rng(seed), []
     for r in rows.itertuples():
-        ep = fd.load_episode(r.raw, None, int(r.episode_index))
+        ep = fd.load_episode(r.raw, None, int(r.episode_index), chunk_targets="executed")  # [2026-11-14] fixed batches
         for t in rng.choice(len(ep["actions"]), per_ep, replace=False):
             out.append(fd.sample(ep, int(t), tag))
     return out
@@ -394,6 +394,7 @@ def run(a, overfit=False):
     (out / "args.json").write_text(json.dumps(vars(a), indent=2, default=str))  # for mid-training evals (run_args)
     t0 = time.time()
     fd.SUBTASK_PROMPT = a.subtask_prompt  # [2026-11-07] subtask text before the tag (vl.libero_finetune_data)
+    fd.CHUNK_TARGETS = a.chunk_targets  # [2026-11-14] sampled = the policy's own chunk at replan frames only
     if a.table:  # [2026-11-07] RECAP round 2: a table with more rounds of rollouts (scripts/libero_round2_table.py)
         fd.TABLE = Path(a.table)
     assert not a.fast_tokens or a.discrete_weight > 0, "--fast-tokens is a tokenizer for --discrete-weight > 0"
@@ -438,7 +439,26 @@ def run(a, overfit=False):
         sel = fd.select_episodes(eps, a.arm, ep_list)
     n_demos = len(sel) if a.pretrain_demos else 0
     if a.demos:  # the task's LIBERO demos join the training set, tagged positive in arm C [RECAP Alg. 1 / §IV-B]
-        demos = fd.demo_episodes(fd.DEMO_TABLE, str(fd.load_episode(sel.raw.iloc[0], None, 0)["prompt"]))
+        if "task" in sel.columns and sel.task.nunique() > 1:
+            # [2026-11-16, multi-task AG] one prompt per task (first episode of each); tasks without LIBERO demos in
+            # DEMO_TABLE (libero_90: not in openpi's data) are skipped, so only moka's demos join
+            parts = []
+            for task, g in sel.groupby("task", sort=True):
+                prompt = str(fd.load_episode(g.raw.iloc[0], None, 0)["prompt"])
+                try:
+                    parts.append(fd.demo_episodes_any([fd.DEMO_TABLE, *a.demo_table_extra], prompt))
+                    print(f"--demos: {len(parts[-1])} demos for {task} ({prompt!r})")
+                except AssertionError:
+                    print(f"--demos: no demos for {task} ({prompt!r}); skipped")
+            assert parts, "--demos: no task in the table has demos"
+            demos = pd.concat(parts, ignore_index=True)
+        else:
+            prompt = str(fd.load_episode(sel.raw.iloc[0], None, 0)["prompt"])
+            try:
+                demos = fd.demo_episodes_any([fd.DEMO_TABLE, *a.demo_table_extra], prompt)
+            except AssertionError:  # [2026-11-16] task-64-only chains: no libero_90 demos, train without
+                print(f"--demos: no demos for {prompt!r}; skipped")
+                demos = sel.iloc[:0].assign(demo=True)
         n_demos = len(demos)
         sel = pd.concat([sel.assign(demo=False), demos], ignore_index=True)
         if labels is not None:
@@ -454,6 +474,23 @@ def run(a, overfit=False):
         assert a.demos, "--demo-share needs --demos"
         sel, k, share = fd.oversample_demos(sel, a.demo_share)
         info.update(demo_repeats=k, demo_frame_share=round(share, 4))
+    if a.oversample_episodes:  # [2026-11-19] data rebalancing (reports/2026-11-19-residual-failures): repeat the
+        # listed episodes (whitespace-separated episode_index) k times so they are ~--oversample-share of the frames
+        ids = {int(x) for x in Path(a.oversample_episodes).read_text().split()}
+        sel = sel.assign(boost=sel.episode_index.isin(ids))
+        assert sel.boost.any(), f"--oversample-episodes: none of {len(ids)} episodes is in the training set"
+        n_boost = int(sel.boost.sum())
+        sel, k, share = fd.oversample_flag(sel, "boost", a.oversample_share)
+        info.update(oversample_episodes=n_boost, oversample_repeats=k, oversample_frame_share=round(share, 4))
+    if a.anchor_round is not None:  # [2026-11-13] base-rollout anchor (fd.anchor_episodes), after the demo share
+        assert a.arm == "imitation" and labels is None and weights is None, "--anchor-round: imitation arm only"
+        anc = fd.anchor_episodes(eps, a.anchor_round)
+        sel = pd.concat([sel.assign(anchor=False), anc], ignore_index=True)
+        if "demo" in sel:
+            sel["demo"] = sel["demo"].fillna(False).astype(bool)
+        sel, k, share = fd.oversample_flag(sel, "anchor", a.anchor_share)
+        info.update(anchor_round=a.anchor_round, anchor_episodes=len(anc), anchor_successes=int(anc.success.sum()),
+                    anchor_repeats=k, anchor_frame_share=round(share, 4))
     if labels is not None:
         lab = labels[labels.episode_index.isin(sel.episode_index)]
         info["label_positive_share"] = float(lab.positive.mean())
@@ -615,8 +652,16 @@ def main():
     ap.add_argument("--weights", help="weighted arm: parquet episode_index, frame_index, weight (mean ~1)")
     ap.add_argument("--demos", action="store_true", help="add the task's LIBERO demos (libero_demos table) to the "
                     "training set; arm C tags every demo frame positive [RECAP]")
+    ap.add_argument("--oversample-episodes", help="[2026-11-19] file of episode_index values to repeat (rebalancing)")
+    ap.add_argument("--oversample-share", type=float, default=0.5, help="with --oversample-episodes: their target "
+                    "share of the training frames (integer repeats, so the realised share is logged)")
+    ap.add_argument("--demo-table-extra", action="append", default=[], help="[2026-11-19] with --demos: more demo "
+                    "tables searched after libero_demos for a task's demos (e.g. tables/libero90_t64_demos)")
     ap.add_argument("--demo-share", type=float, default=0.0, help="[2026-11-08] with --demos: repeat the demos so "
                     "they are this share of the training frames (0 = each demo once, ~2%% of frames)")
+    ap.add_argument("--anchor-round", type=int, default=None, help="[2026-11-13] imitation arm: add every train "
+                    "rollout of this round of --table (successes and failures; round 1 = base pi0.5) as an anchor")
+    ap.add_argument("--anchor-share", type=float, default=0.5, help="with --anchor-round: anchor frame share")
     ap.add_argument("--steps", type=int, default=5000)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--accum", type=int, default=4)
@@ -650,6 +695,10 @@ def main():
                     "= moka_fixed_fresh); round 2 uses scripts/libero_round2_table.py's output")
     ap.add_argument("--subtask-prompt", action="store_true", help="[2026-11-07] subtask text before the tag "
                     "(vl.libero_finetune_data.SUBTASKS from the goal predicates; serve with the client's subtask)")
+    ap.add_argument("--chunk-targets", choices=["executed", "sampled"], default="executed",
+                    help="[2026-11-14] executed: a_t..a_t+9 as executed (joins separately sampled chunks); sampled: "
+                    "rollouts train only on their replan frames, each with the full chunk the policy sampled there "
+                    "(raw chunk_actions; vl.libero_finetune_data.CHUNK_TARGETS); demos keep executed")
     a = ap.parse_args()
     if a.overfit:
         a.steps, a.warmup, a.eval_every, a.log_every = min(a.steps, 300), 20, 100, 20

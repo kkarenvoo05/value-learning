@@ -39,6 +39,8 @@ conclusions). Open only what the question needs. Dated reports and log entries a
 | Does guidance (amplifying the tag difference at inference) beat base? Residual AG? | [advantage guidance](../reports/2026-11-11-advantage-guidance/report.md), [findings](findings.md) "Policy improvement" |
 | What does an established RL method (DSRL) get on this task? | [DSRL online](../reports/2026-11-10-dsrl-online/report.md) |
 | Do learned values / advantages match simulator ground truth? | [value vs GT](../reports/2026-11-10-value-vs-gt/report.md) |
+| Where AG / DSRL level off, distillation into π₀.₅, noisy judge, matched-budget per state (Nov 13-20, all evals with paired CIs) | [plateau and matched budget](../reports/2026-11-20-plateau-and-matched-budget/report.md), [findings](findings.md) "Plateau, distillation, noisy judge" |
+| Why does AG plateau? Which failures remain, is their fix in the data, do labels point at it? | [residual failures](../reports/2026-11-19-residual-failures/report.md) |
 | Fitted n-step TD critic / V-ensemble labels (lane 3 gate) | [td-labels](../reports/2026-11-07-td-labels/) (data only: `ideal_shift/`) |
 | Coach test across collection rounds | [coach curve](../reports/2026-11-08-coach-curve/) (data only) |
 | How much exploration noise is tolerable (×2–×8)? | [noise sweep](../reports/2026-11-09-noise-sweep/) (data only: `pilot.json`) |

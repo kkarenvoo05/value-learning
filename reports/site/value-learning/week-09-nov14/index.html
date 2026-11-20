@@ -1,0 +1,104 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Week 9 · Nov 14</title><link rel="stylesheet" href="../site.css"><script src="../charts.js"></script></head><body><div class="wr"><header class="top"><div class="crumb"><a href="../index.html">Value learning</a> › Week 9 · Nov 14</div><button class="theme" id="theme">Light / dark</button></header><h1>Week 9 · Nov 14 update</h1>
+<div class="sub">LIBERO moka pots (libero_10 task 8, π₀.₅ <code>pi05_libero</code>): RL on top of π₀.₅, how the remaining failures happen, and moving the gain back into π₀.₅</div>
+<nav class="jump"><a href="#results">Results</a><a href="#states">Per start state</a><a href="#failures">How failures end</a>
+<a href="#drift">After the first pot</a><a href="#chunks">Chunk targets</a><a href="#distill">Distillation</a><a href="#jobs">Running now</a></nav>
+
+<p class="lead" style="margin-top:14px">Two RL methods on top of a frozen π₀.₅ both raise success on held-out start states from 52% to 86–89%:
+the Advantage Guidance (AG) residual head after five rounds and DSRL after 1,800 rollouts. Most remaining failures put
+the first pot down at the edge of the stove, where it drifts out of the counted region. Fine-tuning π₀.₅ itself on its own
+rollouts has never helped; one likely cause is a bug in how those fine-tunes built their action targets. The fine-tunes that test the fix
+are queued.</p>
+
+<div class="tiles">
+<div class="tile"><div class="tl">Base π₀.₅</div><div class="tv">52.4%</div><div class="ts">173 / 330 trials</div></div>
+<div class="tile"><div class="tl">AG residual, round 5</div><div class="tv">87.6%</div><div class="ts">1,400 rollouts + demos; seed 0</div></div>
+<div class="tile"><div class="tl">DSRL, 1,800 rollouts</div><div class="tv">86.1% / 89.1%</div><div class="ts">seed 0 / seed 1</div></div>
+<div class="tile"><div class="tl">Fine-tunes of π₀.₅ so far</div><div class="tv">40–56%</div><div class="ts">none above base by more than noise</div></div>
+</div>
+<p class="cap">Every number is success on the same 330 trials: 10 held-out start states × 33, env seed 7, matched noise. A 95% interval is about ±4 points from trial noise alone; separate training seeds have differed by up to 8 points.</p>
+
+<h2 id="results">Success vs. data collected</h2>
+<figure><img class="figimg" src="assets/fig1_curve.png" alt="Success against rollout episodes collected, for AG rounds and DSRL checkpoints">
+<figcaption>AG rounds (blue): round r trains on 900 base rollouts + 100 per earlier round, plus the demos.
+Rounds 0–5: 75.5, 79.1, 74.5, 80.9, 79.4, 87.6%. Round 0 with seed 1 scored 67.6%, so the round-to-round wiggles are within seed noise.
+DSRL (orange): checkpoints of one training run, evaluated held out. Seed 0 levels off around 80–83% from 400 to 1,300 rollouts and reaches 86.1% at 1,800.
+Seed 1 scored 87.0% at 1,300 and 89.1% at 1,800, so the two seeds agree within 3 points at 1,800.</figcaption></figure>
+<div class="note">AG round 6 (1,500 rollouts) is training now. Its held-out eval follows automatically.</div>
+
+<h2 id="states">Success per start state</h2>
+<figure><img class="figimg" src="assets/fig2_states.png" alt="Heatmap of success per held-out start state for each policy">
+<figcaption>Base π₀.₅ nearly always fails from three start states: 12, 13 and 42 (12–18%). Both methods lift all three:
+AG round 5 reaches 76, 73 and 94%, and DSRL 1,800 reaches 58, 85 and 79%. Neither method has a start state below 57%. DSRL's per-state numbers move more between checkpoints (state 44: 70, 58, 42, 45, 88%).</figcaption></figure>
+
+<h2 id="failures">How failures end</h2>
+<figure><img class="figimg" src="assets/fig3_failures.png" alt="Failures split into one pot on the stove and no pot on the stove, per policy">
+<figcaption>Every failure runs to the 520-step limit. Split by the simulator's end state, most failures have one pot on the stove, not none.
+AG round 5 cut one-pot failures from 61 (round 4) to 33, and no-pot failures stayed at 7–8. DSRL has more no-pot failures (16–18 from 800 rollouts on).
+Evals that did not record the end state are left out (base, AG rounds 0–1, DSRL seed 0 at 1,800).</figcaption></figure>
+
+<h2 id="drift">What happens after the first pot is on</h2>
+<p>This analysis uses <b>training</b>-state rollouts, which have the full simulator state, so the diagnosis is not tuned to the eval states.
+Sources: base π₀.₅ (400 episodes), AG (the round 4–5 collections, 200), and the DSRL 1,800 agent (300).
+Each one-pot failure is assigned one class from the pots' and gripper's positions:</p>
+<div class="tw"><table>
+<tr><th>Failure with a pot on the stove</th><th class="n">Base</th><th class="n">AG</th><th class="n">DSRL</th></tr>
+<tr><td><b>Drift:</b> the first pot is released on the stove edge and leaves the counted cooking region within 50 steps. Nothing knocks it: the hand is ~9 cm away and the gripper is open.</td><td class="n">23</td><td class="n"><b>9</b></td><td class="n"><b>11</b></td></tr>
+<tr><td><b>Knocked off later</b> by the arm, while working on the second pot</td><td class="n">3</td><td class="n">2</td><td class="n">5</td></tr>
+<tr><td><b>Never closes</b> the gripper on the second pot (hovers)</td><td class="n">37</td><td class="n">6</td><td class="n">4</td></tr>
+<tr><td><b>Missed grasp:</b> closes but does not lift it</td><td class="n">22</td><td class="n">6</td><td class="n">3</td></tr>
+<tr><td><b>Lifted, not placed</b></td><td class="n">37</td><td class="n">6</td><td class="n">9</td></tr>
+<tr><td>Total (episodes; success)</td><td class="n">122 (400; 60%)</td><td class="n">29 (200; 84%)</td><td class="n">32 (300; 85%)</td></tr>
+</table></div>
+<figure><img class="figimg" src="assets/fig5_after_first_pot.png" alt="Time course after the first pot lands: second pot lifted, gripper closed, hovering">
+<figcaption>Both methods mostly fixed the base policy's main failure: hovering over the second pot without grasping it (37 → 6 and 4).
+What remains, for both, is mostly drift: the first pot is put down too close to the edge. The policy does not cause this
+after release, so the fix has to happen at placement.</figcaption></figure>
+<figure><img class="figimg" src="assets/fig5b_examples.png" alt="Example frames of drift and knock-off failures">
+<figcaption>Examples: AG drift, DSRL drift, and a DSRL knock-off. The per-episode labels are in <code>fig5_episodes.csv</code> in the repo.</figcaption></figure>
+
+<h2 id="chunks">The fine-tune target bug: on rollouts, the target is not a chunk π₀.₅ ever produced</h2>
+<p><span class="pill open">found Nov 14 · effect not yet measured</span></p>
+<p>When we fine-tune π₀.₅ on its own rollouts, each frame's target is the next 10 actions the robot executed. That is right for
+demos, which are one continuous human motion. A rollout, though, replans every 5 steps, so the executed actions are the first 5 of
+one sampled chunk followed by the first 5 of the next. Every 10-step target therefore joins two plans (three for frames between
+replans), and its second half is not what π₀.₅ had planned for those steps.</p>
+<p>Measured on base π₀.₅'s own rollouts (9,351 consecutive chunk pairs):</p>
+<ul>
+<li>Executed steps 5–9 differ from the planned ones by <b>0.020</b> per arm dimension, about the size of the gap between success and failure actions (architecture page, section 4, point 1).</li>
+<li>For the gripper the difference is <b>0.064</b>, and the open/close command flips in 3% of steps.</li>
+<li>At the join, the target jumps 0.020 between consecutive steps: <b>2.4×</b> the normal step-to-step change inside one plan (0.008).</li>
+</ul>
+<p>Fine-tuning on these targets teaches π₀.₅ a seam that its own sampling never produces.
+<b>Fix:</b> <code>--chunk-targets sampled</code> trains only on replan frames, each with the full 10-action chunk sampled there. The rollout client has saved these chunks since Nov 14; demos keep executed targets.
+The bug is in this repo's fine-tune data code (<code>src/vl/libero_finetune_data.py</code>), not in zima.</p>
+<p><b>Tested yet?</b> Not yet. The direct test trains the same base-policy collection twice, once with sampled targets and once with the old executed ones, so the targets are the only difference.
+Both runs are queued behind the distillation fine-tunes (below).</p>
+
+<h2 id="distill">Distillation: can plain π₀.₅ keep the RL gain?</h2>
+<p>This follows PLD (arXiv 2511.00091): collect rollouts with the RL policy, then fine-tune π₀.₅ on the successes, so that zima's
+loop can ship the result as a new generation with no residual head or noise actor at inference (and RTC still applies).
+Each fine-tune starts from base π₀.₅ and uses filtered BC round 1's recipe (imitation, frozen SigLIP, LoRA, 5,000 steps × batch 32) with sampled chunk targets.
+Each run is evaluated on the same 330 trials at the final step and at step 2,000.</p>
+<div class="tw"><table>
+<tr><th>Collection (300 train-state episodes)</th><th class="n">Success</th><th class="n">Replan frames (successes)</th><th>Fine-tune</th></tr>
+<tr><td><b>Hybrid:</b> base π₀.₅ for a random prefix (median 157 steps), then the DSRL actor (PLD Sec. 3.2)</td><td class="n">76.7%</td><td class="n">17,134</td><td><span class="pill running">training</span> step ~1,850 / 5,000</td></tr>
+<tr><td><b>DSRL:</b> the DSRL actor from step 0</td><td class="n">85.0%</td><td class="n">16,503</td><td><span class="pill queued">queued</span></td></tr>
+<tr><td><b>Base:</b> plain π₀.₅, sampled targets (tests the chunk fix alone)</td><td class="n">57.3%</td><td class="n">14,508</td><td><span class="pill queued">queued</span></td></tr>
+<tr><td><b>Base, executed targets</b> (control: same data, old targets)</td><td class="n">57.3%</td><td class="n">72,238 executed frames</td><td><span class="pill queued">queued</span></td></tr>
+</table></div>
+<p><b>How to read the results.</b> Distilled hybrid ≥ ~75%: the gain survives distillation. ~50%: π₀.₅ does not absorb it by fine-tuning.
+Base sampled clearly above base executed: the chunk bug was part of why fine-tunes hurt. Both near 55%: the fix alone changes little.</p>
+<div class="note">The hybrid fine-tune has been preempted four times. Each time it resumes from its last checkpoint (saved every 500 steps), so it loses up to 500 steps per preemption. The lane runs one fine-tune at a time, so the chunk-fix test starts only after the hybrid and DSRL fine-tunes finish.</div>
+
+<h2 id="jobs">Running now (Nov 14, 16:30 PT)</h2>
+<div class="tw"><table>
+<tr><th>Job</th><th>What</th><th>State</th></tr>
+<tr><td>18509035</td><td>AG round 6 training (1,500 rollouts); its eval follows (18509036, 18509037)</td><td><span class="pill running">running</span></td></tr>
+<tr><td>18507656</td><td>Distill: hybrid fine-tune, sampled targets; evals 18507697, 18507747</td><td><span class="pill running">resuming after preemption</span></td></tr>
+<tr><td>18507772</td><td>Distill: DSRL-only fine-tune; evals 18508042, 18508053</td><td><span class="pill queued">queued</span></td></tr>
+<tr><td>18509769</td><td>Distill: base fine-tune, sampled targets; evals 18509770, 18509771</td><td><span class="pill queued">queued</span></td></tr>
+<tr><td>18509785</td><td>Control: base fine-tune, executed targets; evals 18509786, 18509787</td><td><span class="pill queued">queued</span></td></tr>
+</table></div>
+<p class="cap">Done today: DSRL seed 1 held-out evals (87.0% at 1,300 and 89.1% at 1,800). The noisy-judge robustness test was dropped.
+More background: <a href="../architecture/index.html#finetune">architecture page, section 4</a> (why fine-tuning has not helped) and <a href="../week-09/index.html">the Nov 10 update</a>.</p>
+<p class="src" style="margin-top:40px">Built 2026-11-20 11:05 PT from <code>reports/site/content/</code> by <code>scripts/build_site.py</code>.</p></div><script>themeToggle(document.getElementById("theme"))</script></body></html>

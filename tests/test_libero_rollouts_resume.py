@@ -38,7 +38,7 @@ class Preempted(Exception):
 def run(m, tmp_path, stop_after=None, resume=False):
     calls = []
 
-    def fake_episode(env, client, init, desc, args, max_steps, noise_prefix=None, explore_rng=None):
+    def fake_episode(env, client, init, desc, args, max_steps, noise_prefix=None, explore_rng=None, **kw):  # prefix / switch_step / w_idx (Changes 7-9)
         if stop_after is not None and len(calls) == stop_after:
             raise Preempted
         calls.append(noise_prefix)
@@ -180,3 +180,42 @@ def test_explore_main_writes_settings_and_refuses_matched_noise(monkeypatch, tmp
     assert seen == again and seen[0] != seen[1]  # reproducible per episode, different across episodes
     with pytest.raises(AssertionError):
         m.main(m.Args(task_ids=[8], init_states=[0], out_dir=str(tmp_path), explore_prob=0.5, matched_noise=True))
+
+
+def test_push_choices_per_episode_and_resume(monkeypatch, tmp_path):
+    """[2026-11-18] Changes 9: one w_idx per episode, passed to run_episode and written to the CSV; a resumed run
+    draws the same w_idx for the episodes it reruns."""
+    m = load_module(monkeypatch)
+    monkeypatch.delenv("SLURM_RESTART_COUNT", raising=False)
+    got = {}
+
+    def go(stop_after=None, resume=False):
+        n = [0]
+
+        def fake_episode(env, client, init, desc, args, max_steps, noise_prefix=None, explore_rng=None, **kw):
+            if stop_after is not None and n[0] == stop_after:
+                raise Preempted
+            n[0] += 1
+            got.setdefault(resume, []).append(kw["w_idx"])
+            return True, 100, "", [], None
+
+        m.run_episode = fake_episode
+        args = m.Args(task_ids=[8], init_states=[0, 1, 2, 3], repeats=4, out_dir=str(tmp_path), resume=resume,
+                      push_choices=4, push_seed=6)
+        try:
+            m.main(args)
+        except Preempted:
+            pass
+
+    go(stop_after=5)
+    go(resume=True)
+    out = rows(tmp_path)
+    assert len(out) == 16 and all(r["w_idx"] in {"0", "1", "2", "3"} for r in out)
+    assert len({r["w_idx"] for r in out}) > 1  # not one arm for every episode
+    assert [int(r["w_idx"]) for r in out[:5]] == got[False]
+    assert [int(r["w_idx"]) for r in out[5:]] == got[True]
+    # the same plan again from scratch draws the same arms
+    first = [r["w_idx"] for r in out]
+    got.clear()
+    go()
+    assert [r["w_idx"] for r in rows(tmp_path)] == first

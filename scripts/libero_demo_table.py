@@ -44,12 +44,13 @@ def task_language(filename: str) -> str:
     return language[:language.find(".bddl")]
 
 
-def suite_of_task() -> dict:
-    """task language -> suite, over each suite's .bddl task files."""
+def suite_of_task(suites=SUITES) -> dict:
+    """task language -> suite, over each suite's .bddl task files. [2026-11-19] `suites` may include libero_90 (90
+    files; some task strings repeat across its scenes, which maps them to the same suite and passes the check)."""
     out = {}
-    for s in SUITES:
+    for s in suites:
         files = sorted((BDDL / s).glob("*.bddl"))
-        assert len(files) == 10, (s, len(files))
+        assert len(files) == (90 if s == "libero_90" else 10), (s, len(files))
         for f in files:
             lang = task_language(f.name)
             assert out.get(lang, s) == s, f"task {lang!r} in two suites"
@@ -85,13 +86,15 @@ def main():
     ap.add_argument("--inner-frac", type=float, default=0.1)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", 8)))
     ap.add_argument("--limit", type=int, default=0, help="first N episodes only (smoke)")
+    ap.add_argument("--suites", nargs="+", default=SUITES, help="[2026-11-19] suites whose .bddl files map task "
+                    "strings to suites (default openpi's four; add libero_90 for a LIBERO-90 LeRobot copy)")
     a = ap.parse_args()
     src, out = Path(a.src), Path(a.out)
     (out / "raw").mkdir(parents=True, exist_ok=True)
     info = json.loads((src / "meta/info.json").read_text())
     assert info["fps"] == 10 and info["codebase_version"] == "v2.0", info
     eps = [json.loads(l) for l in (src / "meta/episodes.jsonl").read_text().splitlines() if l.strip()]
-    suite = suite_of_task()
+    suite = suite_of_task(a.suites)
     tasks = {e["tasks"][0] for e in eps}
     assert tasks <= set(suite), f"dataset tasks without a suite: {sorted(tasks - set(suite))[:3]}"
     rows = []

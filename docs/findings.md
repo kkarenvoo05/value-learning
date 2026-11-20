@@ -88,20 +88,50 @@ All single training seed; *observations* unless marked. Chronology in `docs/libe
   w 16 0.658: 0.99 is the peak. Base vs guided videos: guidance removes the "closed freeze" (gripper closed on a
   handle, no lift ≥ 3 s: base 12/30 wrist-view episodes, guided 0/30); guided failures are pots left on their side
   and open-hand hovers. [log 11-11 11:55, 17:00; `reports/site/value-learning/gallery-residual/`]
-- **DSRL** (noise-space SAC on base π₀.₅, online, 1800 episodes): held-out 0.861, +0.106 [+0.048, +0.167] vs the
-  residual. *Interpretation:* π₀.₅'s noise space holds a lot of outcome-relevant headroom on this task; online RL
-  is the stronger reference. [`reports/2026-11-10-dsrl-online/`]
+- **DSRL** (noise-space SAC on base π₀.₅, online): seed 0 held-out 0.861, +0.106 [+0.048, +0.167] vs the
+  residual (*corrected 2026-11-20*: this agent trained on **1,357** of its own episodes, not 1,800; the run restarted
+  at row 443 and the checkpoint `ep1800` counts rows). *Interpretation:* π₀.₅'s noise space holds a lot of
+  outcome-relevant headroom on this task; online RL is the stronger reference. [`reports/2026-11-10-dsrl-online/`]
 - **Iterated filtered BC does not climb**: round 2 (round 1 + round 2 successes, from base) 0.442 / 0.506 (s0 / s1)
   vs round 1 0.555. [log 11-11 15:30]
 - **Advantages vs simulator ground truth**: corr(A, A*) 0.04–0.14 for every value / label source (ceiling 0.69);
   corr(V, V*) 0.22–0.29 (ceiling 0.97). The labels are weak per frame, yet guidance turns them into +0.13 to +0.23.
   [`reports/2026-11-10-value-vs-gt/`]
 
+### Plateau, distillation, noisy judge (2026-11-13 to 11-20; same 330 trials, one seed per policy)
+*Observations* unless marked. Numbers and paired CIs: [`reports/2026-11-20-plateau-and-matched-budget/`];
+chronology in the `docs/libero_plan.md` log.
+- **Both methods level off at 85–90%.** AG rounds r0–r7 (900 base rollouts + 100 per round): 75.5, 79.1, 74.5,
+  80.9, 79.4, 87.6, 77.3, 83.0, with no trend after round 0. DSRL seed 1: 87.0 / 89.1 / 90.0 / 86.1 / 88.2 at
+  1,300 / 1,800 / 2,400 / 3,000 / 3,300 episodes; best DSRL − AG r5 +2.4 [−2.4, +7.3].
+- **Guidance strength is not the limit**: push 0.8–1.2 is flat on r5 / r7; push 1.8 costs 9.7 / 11.5 points; fixed
+  w = 1 gives 63–64% on r5–r7.
+- **Moving the guidance reference does not help**: anchored to the data's average action −9.7 (r5) / −28.2 (r7);
+  learned no-tag branch, best w, −7.9 vs standard guidance; stacked on the previous round's policy −7.3 / −0.9 / −1.2
+  (r0 / r5 / r6). IQL labels are worse than value-binned labels (−4.2 on r7 data, −15.8 at 100 base episodes).
+- **Dropping the 29 demos helps round 0**: +5.8 [−0.6, +11.8] at 900 rollouts, +27.9 [+20.9, +35.2] at 50.
+- **Distillation keeps the teacher's success**: LoRA fine-tune of π₀.₅ (filtered BC round 1 recipe) on teacher
+  successes: DSRL 0.882 (−0.9 vs DSRL s1 @1,800), AG 0.891 on 266/330 (+0.8 vs AG r5), hybrid 0.809, base 0.497
+  (executed targets 0.503). *Interpretation:* the gain transfers into π₀.₅ weights, so either method has a deployable
+  form; the fine-tune itself no longer costs points (contrast the −13 to −16 under "Policy fine-tuning", a different
+  recipe).
+- **Noisy judge** (25% symmetric, independent outcome flips): AG round 0 +0.6 [−5.5, +6.7]; DSRL −36.7 at 400 and
+  −47.9 at 600 episodes (ends below base). *Interpretation:* with a real VLM judge AG is the safer method; a
+  realistic, lopsided error model is untested.
+- **Small fixed-budget chains drop at round 1**: b100 79.7 → 53.0 (r2 72.1 / 69.7); two-task mt100cv 65.8 → 4.5 on
+  moka val. Cause open (`reports/2026-11-20-mt-r1-drop/`); these chains all train with demos.
+- **Matched budget, per state**: no val state is solved by one method and unsolved by the other (worst state AG r5
+  24/33, DSRL 15–19/33, base 4/33); per-state gaps are 3–5 trials of 33 except one DSRL checkpoint.
+
 ### Method traps
 - One training seed per recipe is not evidence: same recipe and step, two seeds 0.639 vs 0.518 (above). Train
   ≥ 2–3 seeds before reading a policy-recipe effect of ≤ 0.1. Eval noise alone is ±0.054 per arm at 330 trials
   (±0.06–0.075 paired by episode); `MATCHED_NOISE=1` (`vl/libero_noise.py`, 2026-11-06) tightens the paired
   comparison but not the seed spread. [plan 2026-11-06]
+- Matched noise does not make evals repeatable trial by trial: two evals of the same or a near-identical policy
+  agree on only 72–75% of trials (r0 control rerun 75%, 14% identical step counts; r6 push 0.8 vs 0.99 72%), and a
+  second eval noise seed moves r5 / r7 by −2.7 / −3.0. Treat single-eval differences below ~6 points as noise.
+  [`reports/2026-11-20-plateau-and-matched-budget/`]
 - Milestone and dip effects are not stable across seeds (no 3a probe arm has a positive milestone excess on all 3
   seeds); report ≥ 3 seeds before reading them. [`reports/libero_seeds.md`, plan 2026-10-29]
 - Inner-CE early stopping stops soft-target arms at epoch 0; select on inner MAE instead. [plan 2026-10-31]

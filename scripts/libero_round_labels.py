@@ -105,7 +105,11 @@ def labels_all(eps: pd.DataFrame, v: pd.DataFrame) -> tuple[pd.DataFrame, np.nda
     d["T"] = d.episode_index.map(e.policy_steps - 1).to_numpy()
     d["success"] = d.episode_index.map(e.success).to_numpy()
     rounds = d.episode_index.map(e["round"]).to_numpy()
-    return td.labels_from_v(d, d.V.to_numpy(float), N, groups=rounds), rounds
+    groups = rounds
+    if "task" in e.columns and e.task.nunique() > 1:  # [2026-11-16, multi-task AG] the 40% cut within (round, task)
+        tasks = d.episode_index.map(e.task).to_numpy()
+        groups = pd.factorize(pd.Series(rounds).astype(str) + "|" + pd.Series(tasks).astype(str))[0]
+    return td.labels_from_v(d, d.V.to_numpy(float), N, groups=groups), rounds
 
 
 def main():
@@ -130,6 +134,9 @@ def main():
         ref = pd.read_parquet(TABLE0 / "labels" / "resnet_valuebinned_p40" / "labels.parquet").sort_values(td.KEY)
         assert (lab0[td.KEY].values == ref[td.KEY].values).all() and (lab0.positive.values == ref.positive.values).all()
         print("round-0 check: resnet_valuebinned_p40 reproduced exactly")
+    # [2026-11-16] fixed-budget chains (libero_round0_subsample.py): round 0 may be a subsample of the 900, so the
+    # round-0 checks below cover the round-0 episodes in this table (all 900 for the 100-per-round chain: unchanged)
+    v0 = v0[v0.episode_index.isin(eps.episode_index)]
     prev = v0 if a.prev == "round0" else pd.read_parquet(Path(a.prev) / "v.parquet")[td.KEY + ["V"]]
     new = eps[eps["round"] == a.round]
     assert len(new), f"no round-{a.round} train episodes in {table}"

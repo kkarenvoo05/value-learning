@@ -1,0 +1,138 @@
+{
+ "quality": {
+  "t64": {
+   "episodes": 50,
+   "success_rate": 0.66,
+   "corr_V_mc": 0.302,
+   "mae_V_mc": 0.258,
+   "auc_V_outcome_all_frames": 0.62,
+   "auc_V_outcome_first_frame": 0.469,
+   "p_pos_success_eps": 0.491,
+   "p_pos_failure_eps": 0.286,
+   "auc_A_outcome": 0.577
+  },
+  "moka": {
+   "episodes": 50,
+   "success_rate": 0.54,
+   "corr_V_mc": 0.415,
+   "mae_V_mc": 0.241,
+   "auc_V_outcome_all_frames": 0.606,
+   "auc_V_outcome_first_frame": 0.481,
+   "p_pos_success_eps": 0.507,
+   "p_pos_failure_eps": 0.298,
+   "auc_A_outcome": 0.585
+  }
+ },
+ "videos": [
+  {
+   "table": "t64",
+   "episode": 100001,
+   "why": "success, 25% length pct",
+   "success": 1,
+   "steps": 248,
+   "video": "t64_ep100001_success.mp4",
+   "V_first": -0.524,
+   "mc_first": -0.237,
+   "p_pos": 0.435
+  },
+  {
+   "table": "t64",
+   "episode": 100029,
+   "why": "success, 75% length pct",
+   "success": 1,
+   "steps": 408,
+   "video": "t64_ep100029_success.mp4",
+   "V_first": -0.52,
+   "mc_first": -0.391,
+   "p_pos": 0.314
+  },
+  {
+   "table": "t64",
+   "episode": 100004,
+   "why": "failure: first bowl pushed out",
+   "success": 0,
+   "steps": 520,
+   "video": "t64_ep100004_failure.mp4",
+   "V_first": -0.814,
+   "mc_first": -0.999,
+   "p_pos": 0.177
+  },
+  {
+   "table": "t64",
+   "episode": 100012,
+   "why": "failure: late grasp, timeout",
+   "success": 0,
+   "steps": 520,
+   "video": "t64_ep100012_failure.mp4",
+   "V_first": -0.695,
+   "mc_first": -0.999,
+   "p_pos": 0.392
+  },
+  {
+   "table": "t64",
+   "episode": 100009,
+   "why": "failure: second bowl tilted on the rim",
+   "success": 0,
+   "steps": 520,
+   "video": "t64_ep100009_failure.mp4",
+   "V_first": -0.474,
+   "mc_first": -0.999,
+   "p_pos": 0.192
+  },
+  {
+   "table": "t64",
+   "episode": 100014,
+   "why": "failure: wrong bowl to tray",
+   "success": 0,
+   "steps": 520,
+   "video": "t64_ep100014_failure.mp4",
+   "V_first": -0.51,
+   "mc_first": -0.999,
+   "p_pos": 0.162
+  },
+  {
+   "table": "moka",
+   "episode": 1051,
+   "why": "success, 25% length pct",
+   "success": 1,
+   "steps": 389,
+   "video": "moka_ep1051_success.mp4",
+   "V_first": -0.746,
+   "mc_first": -0.373,
+   "p_pos": 0.49
+  },
+  {
+   "table": "moka",
+   "episode": 1196,
+   "why": "success, 75% length pct",
+   "success": 1,
+   "steps": 436,
+   "video": "moka_ep1196_success.mp4",
+   "V_first": -0.62,
+   "mc_first": -0.418,
+   "p_pos": 0.349
+  },
+  {
+   "table": "moka",
+   "episode": 1278,
+   "why": "failure",
+   "success": 0,
+   "steps": 520,
+   "video": "moka_ep1278_failure.mp4",
+   "V_first": -0.621,
+   "mc_first": -0.999,
+   "p_pos": 0.385
+  },
+  {
+   "table": "moka",
+   "episode": 1269,
+   "why": "failure",
+   "success": 0,
+   "steps": 520,
+   "video": "moka_ep1269_failure.mp4",
+   "V_first": -0.691,
+   "mc_first": -0.999,
+   "p_pos": 0.354
+  }
+ ]
+}

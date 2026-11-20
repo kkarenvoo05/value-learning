@@ -121,7 +121,7 @@ class Std:
         return (x - self.mu) / self.sd
 
 
-def train_iql(D, tr, tau, steps, device, seed, bs=1024, lr=3e-4, polyak=0.005):
+def train_iql(D, tr, tau, steps, device, seed, bs=1024, lr=3e-4, polyak=0.005, width=256):
     g = torch.Generator().manual_seed(seed)
     torch.manual_seed(seed)
     S = torch.as_tensor(D["S"], device=device)
@@ -130,8 +130,9 @@ def train_iql(D, tr, tau, steps, device, seed, bs=1024, lr=3e-4, polyak=0.005):
     nxt = torch.as_tensor(D["nxt"], device=device)
     term = torch.as_tensor(D["term"], device=device)
     ns, na = Std(D["S"][tr], device), Std(D["A"][tr], device)
-    q1, q2, v = mlp(S.shape[1] + A.shape[1]).to(device), mlp(S.shape[1] + A.shape[1]).to(device), mlp(S.shape[1]).to(device)
-    t1, t2 = mlp(S.shape[1] + A.shape[1]).to(device), mlp(S.shape[1] + A.shape[1]).to(device)  # target Qs
+    k = S.shape[1] + A.shape[1]
+    q1, q2, v = mlp(k, width).to(device), mlp(k, width).to(device), mlp(S.shape[1], width).to(device)
+    t1, t2 = mlp(k, width).to(device), mlp(k, width).to(device)  # target Qs
     t1.load_state_dict(q1.state_dict()), t2.load_state_dict(q2.state_dict())
     oq = torch.optim.Adam(list(q1.parameters()) + list(q2.parameters()), lr=lr)
     ov = torch.optim.Adam(v.parameters(), lr=lr)
@@ -155,7 +156,9 @@ def train_iql(D, tr, tau, steps, device, seed, bs=1024, lr=3e-4, polyak=0.005):
                     pt.mul_(1 - polyak).add_(polyak * pq)
         if (step + 1) % 5000 == 0:
             log(f"    tau {tau} step {step + 1}: L_V {lv.item():.5f} L_Q {lq.item():.5f}")
-    return lambda Sx, Ax: _eval_iql(q1, q2, v, ns, na, Sx, Ax, device)
+    f = lambda Sx, Ax: _eval_iql(q1, q2, v, ns, na, Sx, Ax, device)
+    f.V = lambda Sx: _eval_iql(q1, q2, v, ns, na, Sx, np.zeros((len(Sx), A.shape[1]), np.float32), device)[1]
+    return f
 
 
 @torch.no_grad()

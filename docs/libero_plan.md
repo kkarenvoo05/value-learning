@@ -2162,3 +2162,906 @@ learning step is the limit.
   section (guidance, residual AG, null control, DSRL, filtered BC round 2, value vs GT; all single seed).
 - Not done: report.md is missing in 4 data-only folders (td-labels, coach-curve, noise-sweep, step1-followup);
   summary.json is missing in 10 folders.
+
+### 2026-11-12 00:40 — Residual checks queued (Karen: "submit the shuffled-label residual and seed 2")
+- `scripts/ag_residual_controls.sh` (SUBMIT=1, log `logs/ag_residual_controls.log`): one sequential lane, shuffled
+  first. (1) `ag_residual_shufvb40_s0`: round 0's residual recipe with `control_shuffled_vb40` labels; (2)
+  `ag_residual_vb40_s1`: real labels, seed 1. Each train -> contrast check -> eval at shift 0.99 (330 val trials,
+  matched noise seed 1). Job names agc_* so the rounds feeder ignores them. Submissions retry every 5 min at the
+  25-job submit limit (26 queued at submit time). Read: shuffled ~base -> the 75.4% comes from the labels; ~70% ->
+  demo-likeness, and the rounds amplify that.
+- Cluster: the 48 GB pool (iris5-7) is fully allocated (most of it by 21-day jobs); round-1 train 18460305 started
+  ~00:20 on iris5. IQL frozen-feature run 18463794 on an idle TITAN (iris3; request cut to 40 GB to fit).
+
+### 2026-11-12 01:15 — IQL on frozen features: better V, no advantage signal; anchored filtered BC queued
+- IQL 18463794 (`scripts/libero_iql.py`, TITAN, 57 min; `reports/2026-11-11-iql-frozen/`): frozen ImageNet ResNet-18
+  features + proprio + t, n = 20 chunk, twin Q + expectile V, 5 OOF folds, 442 GT points. corr(V, V*) τ 0.5 / 0.7 /
+  0.9 = +0.25 / +0.33 / **+0.53 [+0.32, +0.68]** (MC fit on the same features +0.29; fine-tuned ResNet +0.22): the best
+  V so far. corr(Q−V, A*) −0.02 to +0.02 for every τ (n-step A of V +0.01-0.03; ResNet +0.07 [+0.02, +0.12]): no
+  advantage signal. corr(Q−V, Q−V with actions shuffled across frames) ≈ 0.5: Q depends on the action, but that part
+  does not track A*. So no critic yet for action imagination (gate G1, report 2026-11-11-advantage-guidance §5).
+- Anchored filtered BC (Karen; zima co-trains with the base policy's data, DROID_SHARE 0.5): `scripts/fbc_r2_anchored.sh`
+  = fbc_r2_s0's args + `--demos --demo-share 0.5` (step-1 grid: share 0.5 lifted 0.391 → 0.515), evals @final / @2000.
+  Waits for the shuffled residual's eval to be submitted, then runs after it (afterany), beside the seed-1 residual.
+  Log `logs/fbc_r2_anchored.log`.
+- Model note: zima uses pi05_droid (pi0.5 fine-tuned on DROID, Franka joint velocity, DROID cameras); we use
+  pi05_libero (pi0.5 fine-tuned on LIBERO: LIBERO's cameras, EEF-delta actions, norm stats). pi05_libero is the right
+  base for LIBERO sim; our anchor equivalent of DROID is LIBERO data.
+
+### 2026-11-12 01:45 — IQL τ 0.9 V → labels: no better than vb40 (Karen: "test labels from the IQL τ0.9 V")
+- `scripts/libero_iql_labels.py`: vb40's exact rule (labels_from_v, n 20, value-binned 40%) on the IQL OOF V; check:
+  the same call on V_resnet reproduces resnet_valuebinned_p40 exactly. New label sets `iql09_vb40`, `iql07_vb40`,
+  `iqlmc_vb40` (frame agreement with vb40 61%; chance 52%). Scored with `libero_value_vs_gt.py` (3 sources added) →
+  `reports/2026-11-12-iql-labels/`.
+- label corr(A*): IQL τ 0.9 **−0.02 [−0.15, +0.13]** (positive 0.31 at A* > 0 vs 0.37 at A* < 0) vs vb40 +0.10
+  [+0.02, +0.20]; paired −0.13 [−0.30, +0.07]. τ 0.7 +0.02, MC-fit +0.00. Lookahead n 40 / 80 / 160 on IQL τ 0.9:
+  +0.02 / +0.06 / +0.03 (ResNet: +0.09 / **+0.16** / +0.05).
+- Why a better V gives no better labels: corr(V, V*) splits into between-episode means (IQL 0.70, ResNet 0.64) and
+  within-episode (IQL +0.37, ResNet −0.15). IQL tracks the slow within-episode trend at branch-point spacing, but a
+  label uses V(t+20) − V(t), a 1 s difference, where V's frame-to-frame noise dominates. A better V for labels has to
+  be accurate in its short-horizon differences, not just in level.
+- No policy run queued with these labels. Best label set on this test remains ResNet lookahead n 80 (look_n80_vb40).
+
+### 2026-11-12 10:20 — shuffled-label residual eval (18472216)
+- `ag_residual_shufvb40_s0` (control_shuffled_vb40, round-0 residual recipe, seed 0), eval at action shift 0.99 x noise,
+  330 val trials, matched noise seed 1. Contrast check: shift/noise 0.04 at w 1 vs 0.17 for the real-label residual,
+  so the shift-matched w was 34.2 (extrapolated past the largest checked w 16) vs 9.26 for the real run.
+- Success **0.185** vs real-label residual 0.755 vs base 0.524 (paired, 5000 bootstraps over trials):
+  real − shuffled +0.570 [+0.503, +0.633]; shuffled − base −0.339 [−0.406, −0.279]; real − base +0.230 [+0.164, +0.297].
+- Read: an equally large push along a direction learned from shuffled labels breaks the policy; the push learned from
+  the real labels helps. The 75.4% is not demo-likeness alone. Caveats: w 34 is extrapolated (actual shift unmeasured);
+  shuffled checkpoint at w 0 not evaluated; one seed (seed 1 training, 18474503).
+
+### 2026-11-12 10:30 — queue changes (Karen)
+- Cancelled the held filtered-BC round-1 seed-1 chain 18433699-701 (`fbc_r1_s1`; resubmittable from fbc_round2.sh step 3b).
+- Anchored filtered-BC round 2 submitted: train 18475953 (`fbc_r2_anchor50_s0`), evals 18475954 (@final), 18475955 (@2000).
+- Side line, not the meeting's plan: the AG rounds (`agr_*`) use no filtered BC. Possible later baseline: filtered BC on the
+  successes of the AG round tables (same data as AG round r, successes only), recipe picked by the anchored result.
+
+### 2026-11-12 14:30 — action-imagination gate G1: not passed (scripts/libero_iql_g1.py, reports/2026-11-12-iql-g1)
+- Run on the interactive job's TITAN RTX (iris2; the workstation needs Karen's password). Critics Q(s, a_t..a_{t+4})
+  on frozen ResNet-18 features, 2 x 128, 20k steps, 2 seeds averaged; data base (900 rollouts) or all (+450 noise-x2
+  exploration + 100 AG round-1 rollouts). Test: the 3 steer probes (val states, 120 points x 8 candidates x 2
+  continuations), within-state Spearman with candidate success and best-of-8 pick gain, bootstrap over 30 episodes.
+- Ceiling 0.37 (between-candidate variance 0.0058 of observed 0.043). Random null +0.02 [-0.10, +0.14].
+- All 10 critics: rho -0.07 .. +0.11; only base IQL tau 0.5 has a CI above 0 (+0.108 [+0.009, +0.208]), not replicated
+  with more data (all tau 0.5 +0.03) and one of 10 comparisons. Pick gains +0.00 .. +0.04, every CI includes 0.
+  Q varies 25x less across a state's candidates than across states (spread ratio 0.03-0.05). Even V of the simulator's
+  actual post-candidate state ranks at -0.06 / -0.07.
+- Read: no critic ranks one decision's candidates, and there is little to rank (G0: cross-validated oracle +0.006 /
+  +0.007 / +0.015 at noise 1.0 / 1.5 / 2.0). Imagination with base-like proposals is not viable here; the residual's
+  gain comes from a consistent push across all steps, not per-state selection. Untested: guided residual as proposal.
+
+### 2026-11-12 15:10 — IQL V in other label roles (scripts/libero_iql_label_variants.py): no gain
+- label corr(A*) at the 424 branch points; current rule reproduced (n 20 +0.10, n 80 +0.16).
+- IQL V for the value bins only (ResNet A): n 20 +0.09, n 80 +0.09. IQL A + IQL bins: n 20 -0.02, n 80 +0.06.
+  Hindsight G - V: ResNet V +0.05, IQL V -0.00.
+- Read: IQL's better V level does not improve labels in any role; keep ResNet V. G0 with residual proposals dropped
+  (Karen 2026-11-12). IQL V kept for diagnostics (progress curves in the rollout visualizations).
+
+### 2026-11-12 15:40 — where the residual's gain sits (offline, existing evals 18355478 vs 18438187)
+- Paired on the 330 matched trials: the residual fixes 113 of base's 157 failures and loses 37 of base's 173
+  successes; successful episodes are ~14 steps shorter (402 vs 417).
+- Per val state, split halves (base level from even repeats, gain from odd repeats, so shared noise does not create
+  regression to the mean): corr(base level, gain) -0.75 [-0.97, -0.12] over the 10 states. Gains concentrate on the
+  hard states (12: +0.75, 42: +0.62, 13: +0.50); the two easy-ish states 9 and 40 show -0.06 each (within noise).
+- Evals save only agentview videos (no raw, no wrist, no goals_end): a V on eval episodes needs an agentview-only
+  model on decoded video frames.
+- Candidate uses of IQL / Q proposed to Karen (failure taxonomy, V-scaled guidance, targeted collection, Q over the
+  guidance weight, V drift check per round); none started.
+
+### 2026-11-12 16:30 — V drift check per round (scripts/libero_round_drift.py, reports/2026-11-12-round-drift)
+- On each collection round's own episodes, round 0's OOF ResNet V (never refit) vs the realised return-to-go G.
+- AG round 2's collection (by the round-1 policy, 100 episodes, 18460308-09) succeeded 0.82 (fixed) / 0.82 (fresh) vs
+  0.60 / 0.68 for round 1's (round-0 residual) and 0.60 / 0.55 for base: not the val eval, but the same state mix.
+- Bias V - G: round 0 -0.02 / +0.01, round 1 +0.01 / -0.01, round 2 **-0.11 / -0.10** (V too pessimistic). V(t = 0)
+  stays at -0.69 every round (V is base's value of the init state) while G(0) rises to -0.50.
+- Ranking is intact: within-episode corr(V, G) +0.82 / +0.79 at round 2 (round 0 +0.71 / +0.69); AUC at t = 200
+  0.82 / 0.65 (0.80 / 0.78; fresh n = 40).
+- Read: the drift is a level offset, which the per-round 40% cut removes for interior labels. It does enter terminal
+  frames (A = outcome - V(t)), where a pessimistic V makes successes' last frames look better. Watch: re-run each
+  round; refit V (or an IQL V on all rounds) if the within-episode corr or AUC drops.
+
+### 2026-11-12 17:30 — literature review: RECAP, SeeQ, SmolVLA/SmolVLM/openpi, Mulligan (+HF release), LWD, 2 searches
+- Page: https://storage.googleapis.com/zima-robot/reports/karenvo/value-learning/lit-review-2026-11-12/index.html
+  (per-reader notes as .md next to it; local copy /iris/u/karenvo/lit-review-2026-11-12/). Nothing run or submitted.
+- Corrections to our record (checked here):
+  - G0 "~0 best-of-N headroom" is underpowered, not zero: a beta-binomial estimate from the same branches.csv gives a
+    perfect critic's best-of-8 gain at one decision of +0.065 / +0.063 / +0.079 (noise 1.0 / 1.5 / 2.0), CI incl. 0
+    (ICC 0.09 [0, 0.30] at 1.0); the CV oracle (one binary rollout per pick) correlates ~0.16 with true candidate
+    success. G1 (critics cannot rank) stands.
+  - pi05_libero sees no robot state (Pi0Config(pi05=True, discrete_state_input=False): no state token for pi05, no
+    state in the prompt; openpi 215abfb). `--blank-state` (plan 2026-10-30) was a no-op. DSRL's actor/critic do get the
+    8-d state.
+  - Fine-tuning targets (`vl/libero_finetune_data.action_chunk`) are the next 10 executed actions, so each splices two
+    separately sampled chunks (replan every 5). Untested candidate cause of the fine-tuning drop.
+  - DSRL saved only agent pickles (no observations/actions): any use of DSRL data needs a fresh save-raw collection.
+  - Mulligan release: a timeout's T is where valid data ends (reviewer cut / operator stop; r05: 6/34 timeouts reach the
+    800 cap), so per-step-cost targets should count time-to-go from the cap; the 4 "unknown" episodes are labelled
+    ("skip" = keep the frame-column labels).
+- Top suggestions (ranked on the page): rounds hygiene from round 4 (refit V per round, failed-start promotion, best
+  round by eval, per-stage reporting); robot state into the residual head; guidance schedule / per-subtask scale /
+  lower w with a 10–20% positive share to test whether tipping comes from w 9.26; label calibration on the 424 A*
+  points; DSRL as data, critic and in-round corrector. Most consensus: offline gains are small everywhere; no paper
+  tests within-state action ranking.
+
+### 2026-11-12 18:00 — failure taxonomy, base vs residual (reports/2026-11-12-failure-taxonomy/report.md)
+- Agentview-only tools (evals save video only): IQL tau 0.9 progress curve (corr V* +0.57, within-episode +0.44) and
+  a pot-on-stove detector from the recorded goal predicates (val frame acc 0.94, end state 0.93).
+- Base -> residual: success 173 -> 249, one-pot failures 113 -> 75, lost-pot 18 -> 4, no-pot 26 -> 2. Fixed 113,
+  broken 37 (35 of them one-pot). 93% of the residual's failures have the first pot on: the second pot is what is left.
+- Faster: paired successes -12.3 steps [-20.6, -3.9]; base's tail of late first pots is gone.
+- Published: https://storage.googleapis.com/zima-robot/reports/karenvo/moka-failure-taxonomy-2026-11-12/index.html
+
+### 2026-11-12 19:40 — evals since 17:00; rounds feeder restarted (Karen: "restart the feeder for rounds 5-9")
+- Residual seed 1 (`ag_residual_vb40_s1`, eval 18477722, w 10.75): **0.676**, +0.152 [+0.082, +0.224] vs base,
+  −0.079 [−0.142, −0.012] vs seed 0 (0.755). Seed spread ~8 points.
+- AG round 1 (`agr_r1_s0`, eval 18460307, w 8.33; preempted twice, resumed): **0.791**, +0.267 [+0.200, +0.333] vs base,
+  +0.036 [−0.024, +0.094] vs round 0. vs DSRL ep-971 snapshot (0.679) +0.112 [+0.052, +0.176]; DSRL final (0.861)
+  − round 1 +0.070 [+0.015, +0.124]. DSRL final agent saw ~1360 episodes (fresh agent after episode 443).
+- The first feeder died with the iris2 interactive job (17:35) after submitting round 4. Restarted on iris4 (interactive
+  18484226, ends ~2026-11-13 19:06): `ag_rounds_feed.sh 5 9 18463160 18463161`; round 5 submitted 18484602-07.
+  If it dies, resume from the last round in `logs/ag_rounds_feed.log`.
+
+### 2026-11-12 22:30 — per-stage eval logging, per-subtask guidance w, GPU requests (Karen: "make the changes for step 2 and 3"; "do both")
+- `libero_rollouts.py`: `goals_end` (goal predicates after the last step, e.g. 011 / 111; first two = the two pots)
+  is now read from the env for every episode, not only with --args.save-raw (`episode_goals_end`). Checked: on 8 saved
+  agr_r1 episodes the env-read value equals the CSV and raw goals[-1]; a dummy-policy main() run without raw writes it.
+  Queued evals read the client at start, so round 2-5 evals record per-stage outcomes. pytest 251 pass.
+- Per-subtask contrastive w (SeeQ / openpi suggestion; guided failures are at the second pot): `pi05_ag_residual.py
+  --contrast-sub1 W` (`SubtaskMixPolicy`: obs subtask 0 = no pot on the stove -> --contrast w, 1 = at least one ->
+  W; two module_jit samplers). `pi05_tag_adarms.sbatch` FT_SHIFT_TARGET_SUB1 / FT_CONTRAST_SUB1 (turns on
+  --args.send-subtask). The subtask is the simulator's goal predicate (oracle stage). GPU test 18485553 (A6000) on
+  round-0 seed 0: subtask s = the single-w server's actions exactly (max diff 0.0, two frames), switching back exact,
+  w 9.26 vs 5.33 differ (0.037), missing subtask refused. Sweep not submitted: shift 0.99 first pot, second pot shift
+  0.57 (w 5.33) / 1.3 (w 12.16); job name sub2_eval (not cg_eval: the feeder stops on a failed cg_eval).
+- GPU requests: round jobs only fit iris5-7 (all 24 cards taken; round-2 train 18460311 preempted again, restarted
+  22:15). Memory cut in place on the 18 queued round jobs and in `ag_rounds.sh` (MEM_RUN 40G collect / check / eval,
+  MEM_TRAIN 56G; was 96G; MaxRSS ~8-14 / ~27 GB). Health checks: iris9 18486750 PASS (L40S, 0 ECC, JAX + bf16 ok) ->
+  removed from the exclude on queued pi05 jobs (incl. fbc_anchor 18475953, preempted at ~3150, resumes from 3000) and
+  in `ag_rounds.sh`; iris9 has ~10 GB RAM free now, so it only helps once that frees. iris10 18486789 FAIL (free
+  L40S: uncorrectable ECC 2 volatile / 23 aggregate, CUDA_ERROR_ECC_UNCORRECTABLE): stays excluded.
+- 2026-11-12 22:40 (Karen: "submit the two second-pot evals"): round-0 seed 0 residual, first pot shift 0.99 (w 9.26),
+  330 val trials, matched noise seed 1, 40G: second pot shift 0.57 (w 5.33) **18487066**; shift 1.3 (w 12.16) submitted
+  by a watcher when a slot frees (25-job limit). Compare paired with 18438187 (both pots 0.99, 0.755); also per-stage
+  success from goals_end and tipped-pot counts.
+
+### 2026-11-12 23:00 — DSRL matched-budget evals queued (Karen: "queue the five dsrl evals, keep the feeder going")
+- Mentor (Nov 12 pm) found the DSRL budget issue: 18434524's agent restarted fresh at the 06:51 requeue (episode 444),
+  so agent_snapshot_ep971 = 528 own episodes and the final agent = 1357, not 1800. Our "round 1 79.1% vs DSRL ep971
+  67.9% at a matched ~1000 episodes" comparison is invalid (DSRL had about half the training). All agent_N.pkl were
+  written after the restart (07:39 onward), so N = the agent's own episodes.
+- Matched points: AG round r = 900 + 100 r episodes <-> agent_(900 + 100 r). Evals of agent_1000, 900, 1100, 1200,
+  1300 (in that order), same settings as 18445300 (330 val trials, env seed 7, no matched noise; 40G; iris9 allowed),
+  job name dsrl_eval, submitted by a watcher as the 25-job limit frees. AG rounds 2-4 give the other side.
+- Feeder keeps going (mentor: 9 x 100 fine). A new DSRL run (resumable buffer or fail on requeue, ~18 h+, seed 1) is
+  needed for points past 1357; not started.
+- Second-pot eval shift 0.57 (18487066) started on iris6; the shift 1.3 eval waits for a slot.
+
+### 2026-11-12 23:40 — resumable DSRL, seed-1 run queued (Karen: "start a new resumable DSRL run with seed 1")
+- `vl/dsrl.py`: `DSRLAgent.full_state / from_full_state` (weights + Adam moments + steps + target + rng);
+  `ReplayBuffer.save_chunks / load_chunks` (append-only .npz chunks of the new rows, ~100 MB per 50 episodes; a full
+  dump would block the server past the client's ~40 s websocket keepalive). `dsrl_pi05.py --state-every 50`
+  (default): state -> <out>/dsrl_state (pointer moved only after the state is complete); a restarted train server
+  restores it and `sync_run_dir` cuts episodes.csv / dsrl_log.jsonl / videos back to that episode, so the client's
+  resume reruns the lost episodes and agent episodes = CSV episodes. `--state-every 0` refuses to restart in a run dir
+  with episodes. libero_eval.sbatch: DSRL server.log appends across requeues.
+- Selftest (CPU): 5 episodes straight vs 4 + simulated preemption after episode 5 + restore at 4 + episode 5 again:
+  weights, Adam, rng, buffer and log identical; run dir cut by 1 row / 1 log line / 1 video. pytest 251 pass.
+- Run `dsrl_s1` (job name dsrl_train): DSRL_SEED 1, client env seed 52 (s0 used 51), same 30 train states x 60 =
+  1800 episodes, ckpt every 100, 2-day limit, 64G, iris9 allowed; submitted by a watcher when a slot frees.
+
+### 2026-11-13 11:00 — second-pot results + switching control queued (Karen: "queue the second-pot control eval")
+- Per-subtask w on round-0 seed 0 (both vs both-pots-0.99 18438187, 0.755): second pot shift 0.57 (18487066) 0.664,
+  −0.091 [−0.152, −0.030]; shift 1.3 (18489907) 0.673, −0.082 [−0.139, −0.024]; 1.3 − 0.57 +0.009. P(>= 1 pot) 0.97 /
+  0.96 vs ~0.99 for the residual (failure-taxonomy detector), although stage 1 uses the same w: suspect the switching
+  path (client --args.send-subtask + server SubtaskMixPolicy), not the w.
+- Control: the same switching path with second pot shift 0.99 (w 9.26 = w for both), name
+  eval_ag_residual_vb40_s0_shift099_sub1shift099_control_noise1, submitted by a watcher once <= 17 jobs are queued.
+  ~0.755 -> the w change hurts; ~0.67 -> the switching path does (GPU selftest 18485553 showed identical actions per
+  request, so the suspect would be the extra goal_predicates call per chunk in the client or sampler recompilation).
+- Also since 02:00: AG round 2 0.745, round 3 0.809; DSRL s0 agent_1000 0.797 (vs round 1 +0.006 [−0.055, +0.067]);
+  fbc anchored @final 0.439, @2000 0.403. Round-4 fresh collector 18463158 failed on iris9 (no CUDA device): requeued
+  under its own id, label 18463159 relinked, iris9 excluded again; feeder restarted for rounds 7-9 (IGNORE=18463158).
+
+### 2026-11-13 12:00 — residual head + robot state + subtask set up (Karen: "set this up: give the residual head the robot state and/or subtask")
+- Why: pi05_libero never reads the robot state (openpi config.py:745 `discrete_state_input=False`; pi0.5 has no
+  state_proj, pi0.py:151), while DSRL's actor gets the 8-d state; and most failures are at the second pot.
+- `pi05_ag_residual.py --head-state --head-subtask` (stored in residual.json "head"): the head's per-token input gains
+  observation.state[:, :8] (openpi-normalised) and / or a subtask one-hot (first / second pot, from the goal
+  predicates; demos have none = both 0). `vl.tag_route.wrap_input_transform(subtask=True)` strips the subtask text
+  into two image_mask entries, so pi0.5's prompt stays the plain task (v_ref unchanged). load_residual reads the head
+  config (sets fd.SUBTASK_PROMPT for the contrast check); serve requires the client's subtask; pi05_tag_adarms.sbatch
+  turns on --args.send-subtask when residual.json head.subtask is true. Without the flags the computation is the
+  original (old runs load unchanged). pytest 251 pass.
+- GPU test `tmp_tests/test_head_inputs.py` (job hs_test): old vs new module on round-0 run identical actions; prompt
+  tokens = plain task; zero-init = base; random head reacts to state and subtask (not to padded dims); grads reach the
+  new input rows; save / load / serve (subtask 0 vs 1 differ, missing subtask refused).
+- Runs (round-0 recipe exactly + the two flags; --save-every 500 for preemptions): `ag_residual_vb40_hs_s0`, `_s1`,
+  each train -> contrast check -> eval at shift 0.99 (330 val trials, matched noise seed 1), gated afterok on the test.
+  Compare with the round-0 residual seeds 0 / 1 (0.755 / 0.676). Job names hs_* (feeder ignores them).
+- One submit queue (`tmp_tests/submit_queue2.sh`, log `tmp_tests/submit_queue.log`) replaces the earlier watchers:
+  head test, second-pot control, DSRL agent_1200, the two head chains, DSRL agent_900 / 1100 / 1300; one job at a
+  time while <= 17 are queued (keeps 6 slots for the rounds feeder).
+
+### 2026-11-13 — action-imagination gate G1 with DSRL's critic: set up (Karen: "set up the G1 test with DSRL's critic")
+- Why: G1 failed for 10 offline critics (11-12 14:30). DSRL's Q(s, w) is the one critic trained on actions it
+  varied itself, and its action (π₀.₅'s start noise) scores π₀.₅ samples directly. Plan, setup and pre-registered
+  reading rule: `reports/2026-11-13-dsrl-g1/report.md`.
+- Code:
+  - `vl/dsrl.py` `DSRLAgent.q` (Q per head).
+  - `dsrl_pi05.py` eval server: per-request `dsrl_cand` = actor / gauss (N(0, I) clipped to [−1, 1]) / base; every
+    answer returns the w used and Q(s, w).
+  - `libero_steer_probe.py --args.cand-source`: all N candidates from that source; the trunk and continuations are
+    the DSRL policy; w and served Q are saved.
+  - `libero_steer_probe.sbatch`: DSRL_AGENT and SOURCES; exclude iris[1-4,8-10] and hgx; 48G.
+  - `scripts/libero_dsrl_g1.py`: offline re-score with the libero_iql_g1 statistics, per probe; asserts offline Q ==
+    served Q.
+- Checks:
+  - `dsrl_pi05.py --selftest` passes, with a new probe part: noise = w repeated; offline Q == served Q; gauss within
+    the bound with ~32% clipped entries; base sends no noise; a train server refuses the key.
+  - Fake-policy client smoke test (LIBERO env) writes rp_cand_w / rp_cand_q / br_w / br_q.
+  - The scorer runs end to end on it.
+- Jobs: GPU smoke 18493792 (val state 9, 80 steps, 3 gauss candidates, R 2); full probes 18493812 (afterok;
+  agent_final_ep1800; 10 val states; branch 40 100 160 220 280; 8 candidates; R 4; actor then gauss).
+  This brings the queue to the 25-job limit, so the rounds feeder waits for these slots too.
+
+### 2026-11-13 17:00 — filtered BC anchored with base pi0.5 rollouts (Karen: "try anchoring with base π₀.₅ rollouts instead of demos")
+- Demo-anchored round 2 (18475953) final 0.439 / @2000 0.403: vs base −0.085 [−0.148, −0.021], vs unanchored round 2
+  −0.003 [−0.070, +0.061]; P(>= 1 pot) 0.87, both 0.44. Val loss flat 0.008-0.0096 after step 500.
+- `pi05_policy_finetune.py --anchor-round R --anchor-share S` (`fd.anchor_episodes`, `fd.oversample_flag`;
+  oversample_demos now calls it): every train rollout of round R of --table (successes and failures, untagged) joins the
+  imitation rows, repeated to ~S of frames. Round 1 of moka_fbc_r2 = moka_fixed_fresh exactly (1020 rows, same raw
+  files) = base pi0.5. Dry run: 1035 successes + 900 anchor (516 / 384), k 1, anchor share 0.4895. pytest
+  tests/test_libero_finetune.py 16 pass (new test_anchor_episodes_and_share).
+- `scripts/fbc_r2_baseanchor.sh`: `fbc_r2_baseanchor50_s0` = the demo-anchored run with the anchor swapped (no demos),
+  --save-every 500; train 18497899 -> eval @final 18497900 -> @2000 18497901 (330 val, matched noise 1).
+  Prior: all base rollouts alone untagged 0.391 (18376077). Pairs with 18475954 / 18451198.
+
+### 2026-11-13 18:55 — control + DSRL agent_1200; head test fixed; handoff
+- Second-pot switching control (18497491, both pots shift 0.99 through the switch): 0.730, −0.024 [−0.076, +0.030] vs
+  0.755 → the switching path is roughly neutral; changing the second-pot w hurts: 0.57 −0.067 [−0.130, −0.003], 1.3
+  −0.058 [−0.121, +0.006] vs the control. Per-stage (control): P(first) 0.973, P(second | first) 0.751.
+- DSRL s0 agent_1200 (18497492): 0.809 = AG round 3 0.809 (+0.000 [−0.058, +0.058]); P(first) 0.955, P(second | first)
+  0.848. Matched budget: tied at 1000 and at 1200.
+- Head test 18497490 failed before any check (importlib cannot load a .bak path); test fixed (copy as
+  tmp_tests/pi05_ag_residual_old.py), resubmitted 18499168; hs_train 18497493 / 18497496 relinked afterok on it.
+- 16:20 (other session, Karen): AG rounds 6-7 cancelled and the feeder stopped to free slots. Not restarted.
+- Interactive job 18484226 ends 19:06: submit_queue2 stops; remaining DSRL evals agent_900 / 1100 / 1300 via
+  `tmp_tests/submit_queue3.sh` (skips labels already in submit_queue.log).
+
+### 2026-11-14 02:00 — distillation (chunk-target fix) + noisy-judge robustness set up and submitting (Karen: "set up the distillation experiment with the chunk target fix. also complete: 2 now ... 1 next")
+Why: the LIBERO proof of concept before zima needs (a) the RL gain to survive distillation into a plain π₀.₅ (zima's
+loop ships a new model each generation; PLD 2511.00091 / RLDG 2412.09858 / AG 2610.19783 never compare base + residual
+with the distilled model) and (b) robustness to a VLM judge's outcome errors (FailBench via 2610.29677: best detector
+0.77 balanced accuracy).
+- **Chunk-target fix** (`vl.libero_finetune_data.CHUNK_TARGETS`, `pi05_policy_finetune.py --chunk-targets sampled`):
+  rollouts train only on their replan frames, each with the full 10-action chunk the policy sampled there; demos keep
+  executed targets; a rollout without saved chunks is refused; the trainer's fixed val batch stays executed (old val
+  rollouts, comparable val loss). Default unchanged (executed), so old runs and chains are untouched.
+- `libero_rollouts.py` Changes 8: with --args.save-raw, raw gains chunk_actions (m, 10, 7) + chunk_t;
+  `--args.dsrl-base-prefix a` = PLD hybrid rollouts on a DSRL eval server (base π₀.₅ via dsrl_cand "base" for chunks
+  before k ~ U[0, a·max_steps), then the actor; raw switch_step, chunk_actor). Fake-server LIBERO smoke test (2 episodes,
+  40 steps): chunk_t = new_chunk frames, executed = each chunk's first 5, base → actor at k. `scripts/libero_distill_table.py`
+  (round-2 table + chunk checks + new_episodes.txt) passed on that run.
+- `dsrl_pi05.py --judge-fp/--judge-fn/--judge-seed` (train): the buffer gets the judged outcome, dsrl_log.jsonl keeps
+  success (truth) and judged; draw keyed (seed, episode) so resumes judge alike; selftest_judge added (rates 0.24 at 0.25,
+  nested). Full `--selftest` passes (CPU).
+- `scripts/libero_judge_noise.py`: one u per round-0 train episode (rng (0, episode_index)); arms sym10 (fp = fn = 0.10,
+  balanced acc 0.91), sym25 (0.74), fp25 (0.87), fn25 (0.87; targets written, not submitted). Judged outcome → MC targets
+  (formula checked = frame_targets) → 5 OOF ResNet refits (`vl.libero_resnet --targets`) → vb40 labels. `check`: round 0's OOF
+  runs reproduce resnet_valuebinned_p40 exactly. pytest tests/test_libero_finetune.py 18 pass (2 new).
+- Chains (feeders running under nohup on iris3 = interactive job 18499690; each sbatch waits until ≤ 20 of my jobs are queued):
+  `scripts/judge_noise_chain.sh` (log `logs/judge_noise_chain.log`): DSRL sym25, 600 episodes (30 train states × 20,
+  seed 0, env seed 51) **18504845** → evals agent_300 / agent_600 **18504846 / 18504847**; then 3 value jobs (TITAN) and
+  one residual lane sym25 → fp25 → sym10 (round 0's recipe, seed 0; compare with 18438187 0.755, seed spread ~8 pts).
+  `scripts/distill_chain.sh` (log `logs/distill_chain.log`): collections hybrid (s0 agent_final_ep1800, a 0.6, env seed 61),
+  pure DSRL (62), base (63), 300 episodes each → tables `tables/moka_distill_*` → fine-tunes from base on each collection's
+  successes, filtered BC round 1's recipe + --chunk-targets sampled (one lane: hybrid, dsrl, base) → evals @final / @2000
+  (330 val, matched noise 1). Base = the chunk-fix-only control vs round 1's 0.555.
+- If a feeder dies (interactive job 18499690 ends 19:15 today), resume knobs are in each script's header.
+
+### 2026-11-14 09:35 — noisy-judge value jobs: fold 4 rerun
+fp25 (18505532) and sym10 (18505709) value jobs died at OOF fold 4 with "CUDA unknown error" on iris2 (folds 0-3 fine; iris2 now reports 7 of 8 TITANs). Reran fold 4 + labels only: fp25 18507992, sym10 18507993; re-pointed their residual trains 18506092 / 18506295 (scontrol update Dependency=afterok:<rerun>,afterany:<previous lane eval>). Judge feeder finished (15/15); distill feeder 10/15, still running.
+
+### 2026-11-14 11:20 — AG round 5 = 0.876; head-input / DSRL small-budget evals; feeder restarted for round 6 (Karen: "restart the feeder for round 6")
+- AG round 5 (18484607, w 9.83): **0.876**, vs round 4 +0.082 [+0.027, +0.139], vs base +0.352, vs DSRL agent_1300
+  +0.052 [−0.003, +0.106]; P(first) 0.976, P(second | first) 0.898. AG curve r0-r5: 0.755, 0.791, 0.745, 0.809, 0.794, 0.876 (one seed).
+- Head-input residuals (state + subtask): s0 18497495 0.745 (vs 18438187 −0.009 [−0.070, +0.055]); s1 18499105 0.679
+  (vs 18477722 +0.003 [−0.061, +0.067]). No gain.
+- DSRL s0 small budget (18504406-10): agent_100 0.548, 200 0.482, 400 0.797, 600 0.830, 800 0.827 (900 0.652, 1100 0.830, 1300 0.824).
+- Frozen V check (moka_agr_r5 labels): success AUC of V at frame 200 base 0.79 (OOF) vs rounds 1-5 0.68-0.82, frame 280
+  0.87 vs 0.81-0.90 (n 100 per round, ±~0.06): no clear staleness; V refit not run.
+- Feeder: `scripts/ag_rounds_feed.sh 6 6 18484605 18484606` under nohup on iris3 (interactive 18499690, ends 19:15);
+  submits round 6 when <= 19 jobs are queued. Mid-task starts paused (code in libero_rollouts.py --args.start-from and
+  libero_midtask_starts.py; replay test not yet run).
+
+### 2026-11-14 11:35 — more fixes
+- fold-4 reruns 18507992/3 died in 14 s with the same CUDA error on iris2 (now idle; treat iris2 as bad). Resubmitted off iris2 on any GPU (--gres=gpu:1, not TITAN): fp25 18508943, sym10 18508944; trains 18506092 / 18506295 re-pointed.
+- dsrl table 18507333 failed in my summary stats (switch step always 0 -> pd.qcut duplicate edges; fixed in libero_distill_table.py). Rebuilt the table interactively (dsrl collection: 255/300 = 0.85); dsrl train 18507772 re-pointed to afterany:18507656.
+- hybrid collection: 230/300 = 0.767 (switch median step 157).
+
+### 2026-11-14 11:50 — round 6 first
+Fold-4 reruns 18508943/4 died on iris9/iris10 (ECC / failing card; ag_rounds.sh excludes both). To let round 6 in (its feeder submits at <= 19 queued): stopped the distill feeder, cancelled the stuck fp25/sym10 residual lanes (18506092/132/137, 18506295/301/487), held every pending ds_/jn_ job, resubmitted fold-4 reruns held with the full exclude list (fp25 18508987, sym10 18508988). scripts/round6_first_watch.sh releases them when round 6's agr_train runs (or 19:00) and resumes both chains (log logs/round6_first_watch.log).
+- 11:41: round 6 submitted: collect fixed 18509032 / fresh 18509033 -> label 18509034 -> train 18509035 -> check
+  18509036 -> eval 18509037 (`eval_agr_r6_s0_shift099_noise1`). Feeder exited after it (rounds 6-6). Compare with round 5 18484607 (0.876).
+
+### 2026-11-14 11:55 — dsrl_s1 held-out evals
+dsrl_s1 (18492086, resumable, 1800 episodes, finished 01:16) had no held-out eval. Queued agent_1300 and agent_1800 as s0 ep1800 (18452292: 10 val states x 33, env seed 7, no matched noise), held behind round 6: 18509147 18509148; released with the others (round6_first_watch.log).
+
+### 2026-11-14 12:05 — executed-target control queued
+distill_chain.sh: train kind "<kind>_executed" (same collection, --chunk-targets executed). scripts/distill_executed_control_wait.sh submits distill_base_executed_s0 + evals @final/@2000 right after the resumed chain submits distill_base_sampled_s0 (lane order). base_executed vs base_sampled: only the targets differ (same 300 base rollouts, same 5000 x 32).
+
+### 2026-11-14 12:20 — fp25 / sym10 dropped
+Karen: "drop fp25 and sym10". Cancelled held fold-4 reruns 18508987/8; restarted round6_first_watch.sh without the judge-chain resume. Noisy judge = sym25 only (AG residual 18505714 -> check 18506042 -> eval 18506055; DSRL 18504845 done, evals 18504846/7).
+
+### 2026-11-14 12:30 — noisy-judge test dropped
+Karen: "drop the queued noisy judge test". Cancelled sym25 check/eval 18506042/18506055 and noisy DSRL evals 18504846/7; watcher restarted with HELD = distill jobs only. sym25 residual train 18505714 still running (no eval queued behind it). Run dirs and labels kept.
+
+### 2026-11-14 15:30 — mentor figures (reports/2026-11-14-figures, scripts/libero_mentor_figures.py)
+fig1 success vs episodes (AG r5 0.876 vs DSRL 1.8k 0.861, intervals overlap); fig2 per val state; fig3 sim end state of failures (AG r4 -> r5 one-pot 61 -> 33, no-pot ~8; DSRL no-pot 10 -> 18; base/r0/r1/DSRL 1.8k evals lack goals_end); fig5 train-state rollouts after the first pot lands (base 400 sampled, AG r4/r5-policy collections 200, DSRL 1.8k distill collection 300). One-pot failures: first pot drifts out of the cook region within 50 steps of release (z stays ~0.997, hand ~9 cm away, gripper open; placed on the stove edge): base 23/122, AG 9/29, DSRL 11/32 -- the largest single class for AG and DSRL; never closed at the second pot base 37, AG 6, DSRL 4; knocked over later (z -> 0.95) base 3, AG 2, DSRL 5. Revises the val-video read (hover as AG typical) on train states; small n.
+
+### 2026-11-14 16:00 — architecture page §4: chunk-target point
+Added point 6 (rollout targets join two plans; measured on hybrid base-policy chunks: executed steps 5-9 vs planned differ 0.020 per arm dim, gripper 0.064, 3% gripper flips; seam jump 0.020 vs 0.008 within a plan), fixed the "One training step" target line, and listed the chunk-target control under checks. Rebuilt architecture/ only (build_site.architecture()). Not yet published: gcloud auth expired.
+
+- 2026-11-14 16:40 — Week 9 · Nov 14 page (content/week09_nov14.html, build_site.week9_nov14 → week-09-nov14/; hub card marks it current). fig1 now also shows DSRL seed 1 (agent 1300 0.870, agent 1800 0.891; 18509147/8). Figures published only under value-learning/week-09-nov14/assets; the standalone bucket folder 2026-11-14-figures/ was removed. Chunk-target fix not yet tested: hybrid sampled fine-tune 18507656 preempted 4x (resumes from step 1500); base sampled 18509769 / base executed 18509785 queue behind it and dsrl 18507772.
+- 2026-11-14 16:50 — base sampled 18509769 and base executed 18509785 taken out of the lane (dependencies cleared): they run in parallel with the hybrid/dsrl fine-tunes; their evals keep their afterok dependencies.
+
+### 2026-11-14 12:30 — mid-task starts: replay test passes (Karen: "do the mid task starts test")
+- `tmp_tests/test_midtask.py` (LIBERO env, CPU, ~1.5 min): a fake policy plays each source's own remaining actions
+  through `libero_rollouts.py --args.start-from`; 5 starts (2 fixed, 2 fresh, 1 failed source). MIDTASK OK:
+  start state exact, start_step / prefix / max_steps = 520 - k / length / timeout right (failed sources run to 520),
+  hand-over robot state 0-0.2 mm (fixed), 0.2-5.6 mm (fresh) from the source, pot on right after the hand-over.
+- Not bit-exact, by design of the sources: reused env (solver warm-start), and fresh layouts played from reset()'s
+  sample vs set_init_state in the replay (fresh-env replay of agr_r4_collect_fresh/ep0019 1.8 mm off by step 50).
+  The policy acts from the actual state and only that is recorded, so this does not bias the data.
+- Found: a source whose first pot teeters on the stove edge flips "pot on" at a 1e-14 state difference (fresh-env
+  replay of agr_r1_collect_fixed/ep0004, step 216), so its hand-over had no pot on. `libero_midtask_starts.py --stable 20`
+  (default): the pot must stay on every step from the first-pot step to k + 20. 289 of 393 eligible sources are steady;
+  starts regenerated (`midtask/agr_r5mid_starts.csv`, 100: 60 fixed on 27 states / 40 fresh, start step median 190,
+  source success 0.75). Caveat: excludes the marginal placements, which may be where some knock-offs start.
+
+### 2026-11-14 17:20 — pi0.5 value-expert V through the AG label rule (scripts/libero_expert_label_check.py, reports/2026-11-14-expert-labels)
+- Karen: "run the offline check". vb40 (labels_from_v, n 20, value-binned 40%) on the pi0.5 OOF V (oof_expert_n20_p30's V)
+  vs the ResNet OOF V; variants n 20/80, smoothing k 5/9 value frames, mean of the two V. Label corr(A*), 424 branch points,
+  bootstrap over 18 episodes, paired vs the current labels. Check: ResNet n 20 reproduces resnet_valuebinned_p40 exactly.
+- pi0.5 n 20 +0.01 [-0.08, +0.11] vs ResNet +0.10 [+0.02, +0.20] (paired -0.09 [-0.24, +0.04]); same as with the old p30 rule.
+  Best pi0.5 variant smoothed k 5 + n 80 +0.11 (paired vs current +0.01 [-0.09, +0.10]); ResNet n 80 +0.16 (+0.06 [-0.03, +0.16]).
+  At every setting the ResNet ties or beats pi0.5; mean of the two V +0.06. pi0.5 labels agree with the current on 60-66% of frames.
+- Read: no case for a pi0.5-V AG run on label quality; if one label variant gets an AG run, ResNet n 80. Nothing queued.
+
+### 2026-11-15 18:25 — AG distillation + strict-success relabel submitted (Karen: "set up the AG distillation and strict-success relabel")
+Why: zima needs one learner per night, not several teachers mixed. AG is batch-only and survived the sym25 judge
+(0.761 vs 0.755), while DSRL broke (0.35-0.43). Two questions: (a) does AG distil into a plain pi0.5 as well as DSRL
+did (0.882)? (b) does a stricter success definition make AG fix the stove-edge failure?
+- Per-state ceiling (all 96 complete 330-trial val evals, from episodes.csv): every val state reaches >= 0.85 under
+  some arm; best top-5 arm per state, cross-validated over split halves, 0.924 vs 0.876 pooled. States 13 / 12 / 44
+  (0.74 / 0.79 / 0.81) hold 109 of the top arms' 205 failures (split-half corr of state rates 0.72); 44 is unchanged
+  from base (0.80 -> 0.81). Top arms' weak states differ (mean pairwise corr 0.31). All failures are 520-step
+  timeouts, split about evenly between pot A missing, pot B missing and neither.
+- **AG distillation** (`scripts/distill_chain.sh` new kind `ag`): 300 episodes from AG round 5 (policy_agr_r5_s0_18484605,
+  shift 0.99 from its contrast check, env seed 64, noise seed 164; 30 train states x 10) -> table moka_distill_ag ->
+  the DSRL distillation's exact fine-tune (sampled targets) -> evals @final / @2000. Jobs: collect 18528546, table
+  18528547, train 18528548, evals 18528549 / 18528550. Log logs/distill_ag_chain.log. Round 6's collection (the
+  round-5 policy) has only 100 episodes / 85 successes vs DSRL's 255, hence a fresh 300.
+- **Strict success** (`scripts/libero_strict_success.py`): strict = success and the first pot moves <= 2 cm in the
+  50 steps after release and is off the cook region < 5 steps after settling. Basis, train episodes of moka_agr_r7:
+  P(success) 0.76 / 0.65 / 0.49 / 0.18 at displacement <= 1 / 1-2 / 2-5 / > 5 cm. Flips 124 of 1053 successes
+  (moved 88, off region 36); per round 5-21%; round 0: 47 of 516. Training outcome only; evals keep the sim's success.
+  The second pot is not judged (the episode ends when both pots are on). `check`: round 7's labels reproduced exactly
+  from its v.parquet.
+- `scripts/strict_success_chain.sh`: value job 18528551 (5 OOF ResNet refits on the strict targets, then `labels
+  --check-v`: round 7's chained V rebuilt all at once, then strict V and labels for every round) -> residual train
+  18528552 with round 7's exact arguments and labels strict_vb40_r7 -> check 18528553 -> eval 18528554. Paired with
+  round 7 (18524601 / eval 18524603): same data and recipe, only the outcomes differ. Log logs/strict_success_chain.log.
+  ROUND0=1 (not submitted) adds round 0's recipe with the round-0-only strict labels, paired with 0.755.
+- Read: AG-distilled >= ~0.83 -> the batch-only loop ships a plain checkpoint. Strict >= round 7 + 0.05 -> carry
+  the strict judge into the rounds; smaller needs a second seed.
+- 20:42 round 7 eval (18524603): 0.830 (274/330); paired vs round 5 −0.045 [−0.100, +0.006], vs round 6 +0.058
+  [−0.003, +0.115]. Curve r0-r7: 75.5, 79.1, 74.5, 80.9, 79.4, 87.6, 77.3, 83.0. Failures (goals_end): 011 31, 001 13,
+  101 12. This is the paired reference for the strict-success arm (18528554).
+- 20:55 strict value job 18528551 failed in 1 min on iris2 ("CUDA unknown error", as 18524600); its empty fold dirs
+  removed. Resubmitted with --exclude=iris2: value 18530214 -> train 18530215 -> check 18530216 -> eval 18530217
+  (old 18528552-4 cancelled). AG collection 18528546: 256/300 successes (DSRL's 255); table 18528547 running.
+
+### 2026-11-15 21:07 — strict success cancelled; sharper label threshold 10 / 15 / 20% submitted (Karen: "cancel strict and submit 10%, 15%, 20%")
+Why: the strict rule (first-pot drift) is task-specific, built from simulator positions of one failure mode; zima
+needs a task-agnostic method. The positive share is one number that works on any task, and RECAP drops it to
+~10% once success is high (our rounds: 80-85%).
+- Strict chain cancelled (18530214-17; no outputs). `scripts/libero_strict_success.py` / `strict_success_chain.sh`
+  stay in the repo (a stricter VLM-judge rubric could reuse them).
+- `scripts/libero_threshold_labels.py`: round 7's own V (agr_vb40_r7/v.parquet), same n-step advantage and value
+  bins, cut within each round at 10 / 15 / 20% (no V refit). Check: 40% reproduces agr_vb40_r7 exactly; each set is a
+  subset of the next larger one. Share of positives from successful episodes barely moves: 0.73 at 40%, 0.71 at
+  20 / 15%, 0.71 at 10% -> the sharper cut does not concentrate on successes (a caution: V's ranking at the top is
+  not cleaner by this measure).
+- `scripts/threshold_chain.sh`: one train lane, round 7's exact arguments with only --labels changed; check + eval at
+  shift 0.99 (330 val, matched noise 1). 15%: train 18530291 -> check 18530292 -> eval 18530293; 10%: 18530294-96;
+  20%: 18530297-99. Log logs/threshold_chain.log. Paired with round 7 (0.830).
+- AG distillation: table 18528547 done (256 successes, 19,039 replan frames); fine-tune 18528548 queued.
+- 21:25 adaptive arm (Karen: "yes add the adaptive arm now"): labels agr_vbad_r7, share per round = its failure rate
+  clipped to [0.10, 0.40] -> 40 / 37 / 18 / 31 / 21 / 18 / 15 / 23% for table rounds 1-8 (33% of frames overall);
+  share of positives from successes 0.71. Same z as the other arms. Train 18530407 -> check 18530408 -> eval 18530409;
+  waits for the 20% train (afterany:18530297).
+
+### 2026-11-16 — per-init-state success across AG rounds (Karen: "set this up"; mentor: "many more initial states than just 10")
+- `scripts/libero_per_state.py`: state x checkpoint table, 0% states with one-sided 95% upper bound, per-state trend,
+  bottom-5 states followed across rounds (picked on the first checkpoint, and split-half to remove regression to the
+  mean), heatmap. Out: `reports/2026-11-16-per-state/`.
+- Val states (existing 330-trial evals, 33 per state, matched noise 1), base + r0-r7 (`.../val/`): no state at 0% in
+  any checkpoint. Base has 3 states < 50% (12 / 13 / 42 at 0.12 / 0.18 / 0.12); r0 lifts them to 0.70 / 0.58 / 0.85,
+  then no steady climb: state 13 0.58 / 0.55 / 0.36 / 0.76 / 0.61 / 0.73 / 0.48 / 0.52 over r0-r7. Bottom-5 split
+  half: base 0.39 -> r0 0.82, r1-r7 0.64-0.82.
+- Train states (30, where every round collects): `scripts/per_state_evals.sh`, 10 repeats per state (300 episodes),
+  env seed 7, matched noise 1, shift 0.99; two afterany lanes. base 18541680, r0 18541681, r7 18541682, r5 18541683,
+  r3 18541684, r6 18541685, r1 18541686, r2 18541687, r4 18541688. Run dirs `runs/ps_<ckpt>_train_*`. Test states
+  untouched.
+- AG curve r0-r7 (noise 1): 75.5, 79.1, 74.5, 80.9, 79.4, 87.6, 77.3, 83.0; noise-2 re-evals r5 84.8, r7 80.0.
+
+### 2026-11-16 12:10 — 50 / 200 episodes per round submitted (Karen: "set up the 50 and 200 episode rounds")
+- Mentor: "test the same setup but with both 50 and 200 episodes per round ... (a) total number of episodes needed
+  or (b) total number of rounds needed". Same as the 100-per-round chain in everything else: round 0 = the 900 base
+  rollouts + policy_ag_residual_vb40_s0_18438185, frozen OOF ResNet V (no refit; Karen: keep V fixed so the budgets are
+  comparable), 40% cut within each round, residual from zero init on all data, 5000 steps, shift 0.99, 330 val evals
+  every round.
+- `scripts/ag_rounds.sh`: FIXED_REPEATS / FRESH / COLLECT_TIME / TAG (default = the 100 chain; its dry run is byte-
+  identical to before). 50 = 30 train states x 1 + 20 fresh (`TAG=e50`); 200 = 30 x 4 + 80 fresh (`TAG=e200`,
+  collect 4 h). Keeps the 60 / 40 fixed / fresh mix. Collection seeds depend only on r [ours], so round r of each
+  budget uses the same env / noise seeds.
+- `scripts/ag_rounds_feed.sh`: TAG-specific log (`logs/ag_rounds_feed_<TAG>.log`) and stop pattern (only agr_<TAG>_*
+  jobs), shared flock around count + submit so two feeders stay under the 25-job limit.
+- Rounds: e200 1-7 (2300 episodes; 1700 at round 4), e50 1-14 (1600 = the 100 chain's round 7). Feeders under nohup
+  on the iris3 interactive job 18540576 (ends 2026-11-17 10:54): restart from the log's last train / check ids after
+  that. e200 round 1: 18541894-99.
+
+### 2026-11-16 14:15 — e50 / e200 stopped; fixed-budget chains b50 / b100 / b200 with a subsample round 0 (Karen: "stop the chains and build the subsample round 0")
+- Mentor: "all rounds can be the same, so 50/100/200 every time, including the first, instead of the 900". The e50 /
+  e200 chains (900 base + B per round) stopped: feeders killed, e200 round-1 jobs 18541894-99 cancelled (one fresh
+  collection had run ~80 min; its run dir is unused).
+- `scripts/libero_round0_subsample.py`: round 0 = a nested subsample of moka_fixed_fresh's 900 base train rollouts with
+  the round mix (30 states x B/50 + 2B/5 fresh; rng 0; b50 inside b100 inside b200), val rows kept; labels = the
+  round-0 OOF V, value-binned 40% within the subsample. Check: the full sample reproduces resnet_valuebinned_p40
+  exactly. Tables `tables/moka_agr_b{50,100,200}_r0` (success 0.66 / 0.61 / 0.62 vs 0.573 for all 900).
+- V for every budget = the frozen round-0 OOF ResNet, whose folds were fit on all 900 base rollouts [option (a); caveat
+  to report: V has seen more data than the chain; the chain-only V comes with IQL].
+- `scripts/libero_round_labels.py`: round-0 checks restricted to the round-0 episodes in the table (unchanged for
+  the 900 chain). Test: b100 r0 + the 100 chain's round-1 collections -> table + labels run; new-episode V equal to
+  moka_agr_r1's to 4e-16.
+- `scripts/ag_rounds.sh`: P0 / CHK0 / TABLE0 / PREV_LAB0 overrides (default dry run byte-identical).
+  `scripts/ag_rounds_feed.sh`: JUST_IN_TIME=1 submits round R only after round R-1's check left the queue.
+  `scripts/ag_budget_chain.sh` (round 0 train -> check -> eval with round 0's exact args + --table, then the feeder for
+  rounds 1-10), `scripts/ag_budget_wait.sh` (submits budgets in turn under the feeders' lock when <= 19 queued).
+- Submitted: b100 round 0 18544075-77, round 1 18544078-83, feeder rounds 2-10 (pid 94219). b200 then b50 wait in
+  ag_budget_wait.sh (pid 92137; log logs/ag_budget_wait.log). An orphan b200 train 18544084 (submit limit hit) cancelled.
+- pytest: 251 pass, 3 fail in tests/test_libero_rollouts_resume.py (fake_episode lacks the `prefix` kwarg of the
+  uncommitted libero_rollouts.py change; unrelated to this entry).
+
+### 2026-11-16 14:20 — budgets in rotation, two rounds per turn (Karen: "run round 0 and 1 for 100 then alternate to 200 and 50")
+- Stopped the b100 feeder (rounds 2-10) and the b200 / b50 waiter before they submitted anything.
+- `scripts/ag_budget_rotate.sh` (pid 111503, nohup on iris3): turns b100 r0-1 -> b200 r0-1 -> b50 r0-1 -> b100 r2-3 ->
+  ... -> r10 (18 turns). A turn is submitted when the previous turn's last check is COMPLETED and the queue has room;
+  its eval runs beside the next turn. Stops on a failed check. State `logs/ag_budget_rotate.state` (rerun the script to
+  resume, e.g. after the interactive job 18540576 ends 2026-11-17 10:54); log `logs/ag_budget_rotate.log`.
+  `ag_budget_chain.sh NOFEED=1` = round 0 only. Turn 0 = the already queued b100 r0 18544075-77 + r1 18544078-83.
+- Pace: ~9 h per turn (2 rounds x ~4.5 h critical path) -> ~6 days to round 10 on all three if the queue allows.
+
+### 2026-11-16 14:35 — continuous-layout eval set + fresh-layouts-only collection (Karen: "build the continuous eval set and switch to 100% fresh layouts")
+- Mentor: "sampling continuous values in the ranges, instead of from the discrete set of 50 predefined start states".
+- `scripts/libero_eval_layouts.py` -> `eval_sets/moka_cont100/`: 100 layouts drawn by env.reset() (task's BDDL
+  regions), env seed 9001 [ours; no collection uses it], saved as step-0 sources (sim_init, empty prefix, state after
+  the wait steps, pot positions) + starts.csv (x 3 repeats = 300 episodes) for libero_rollouts.py --args.start-from.
+  Check: re-setting each sim_init lands on the same state (max diff 0). Pots span the placement boxes (pot 1 x
+  -0.075..-0.026, y 0.225..0.275; pot 2 x, y 0.025..0.075); nearest-layout distance median 9 mm. No matched noise on
+  this path (start-from), noise seed 1. GPU smoke (base, 2 layouts x 3): 18544440.
+- `scripts/ag_rounds.sh`: FIXED_REPEATS=0 = fresh layouts only (both collectors, FRESH/2 each, seeds 200+2r / 201+2r);
+  CONT_EVAL=<starts.csv> adds `<PFX>_ceval` per evaluated round beside the 330-trial val eval. Default dry run
+  unchanged. `ag_budget_chain.sh` / `ag_budget_rotate.sh`: b50 / b100 / b200 = 50 / 100 / 200 fresh layouts per
+  round, continuous eval from round 0.
+- Round-0 tables rebuilt fresh-only (`libero_round0_subsample.py --fixed-repeats 0 --fresh B`, nested): base success
+  0.54 / 0.59 / 0.575. The 30 fixed train states are no longer collected on; the 10 val / 10 test states stay held out.
+- The 60/40 b100 jobs 18544075-83 were cancelled before running (state kept as ag_budget_rotate.state.old6040).
+  Rotation restarted at turn 0: b100 r0 18544458-61 (train, check, eval, ceval), r1 18544462-68.
+- 2026-11-16 GPU smoke 18544440 (base, layouts 0-1 x 3, 4 min): runs; hand-over state diff <= 7e-23 (exact replay of the saved layout); 2/6 success; videos and CSV as usual. `scripts/libero_cont_eval.py` (per-layout success, 0 / R share, success vs pot xy) checked on it.
+
+### 2026-11-16 15:20 — budgets in parallel; b100 IQL-AG chain (Karen: "submit the other 50, 200 runs so they can run in parallel"; "set up the 100 iql ag run")
+- Rotation stopped; one feeder per chain (`ag_rounds_feed.sh`, JUST_IN_TIME: round R after round R-1's check; round
+  1 after round 0's check via DEP_START). b100 r1 jobs 18544462-68 cancelled, resubmitted by its feeder.
+  `ag_rounds.sh`: a DEP_START job that already finished must be COMPLETED, then no dependency. Feeder accepts 6 or 7
+  steps (7 with CONT_EVAL). b200's first feeder stopped on the old cancelled orphan 18544084: restarted with IGNORE.
+- Round 0: b100 18544458-61, b200 18545075-78, b50 18545079-82 (train, check, eval, ceval). Feeders: b100 302108,
+  b200 304409, b50 302214, logs `logs/ag_rounds_feed_<TAG>.log`.
+- `scripts/libero_iql_round_labels.py`: IQL critic (libero_iql.train_iql: twin Q + expectile V, tau 0.9 [AG paper,
+  OGBench], n 20, 20k steps, frozen ImageNet ResNet-18 features + proprio + t) trained from scratch each round on the
+  chain's own train episodes only, 5 OOF folds by episode; positive = top 40% of Q - V within each round; every
+  round relabelled. Features cached per raw file (`feat_cache/r18imagenet_every4`); check: equal to
+  feat_r18imagenet_trainframes.npy up to fp16 rounding (max 0.008). Smoke (2k steps, b100 r0): 11,502 frames, 40.0%
+  positive (43% of success-episode frames, 36% of failure ones).
+- `ag_rounds.sh` / `ag_budget_chain.sh` LABELER=iql (default vb40 unchanged; default dry run byte-identical). b100iql
+  starts from the same 100-episode round-0 table as b100 (paired); round 0 = label 18545162 -> train 18545163 ->
+  check 18545164 -> eval 18545165 / ceval 18545166; feeder 329074 (rounds 1-10).
+- Queue: four chains x (round-0 evals + 7 jobs per round) exceed the 25-job limit, so feeders wait their turn (<= 19).
+
+### 2026-11-16 17:30 — chain-only V (b50cv / b100cv / b200cv); b50 / b200 on the frozen 900 V stopped
+- Karen: "instead of using the v trained on 900 episodes, should we use V trained on the respective amount so it just
+  uses the data in its chain? since if we want to port this over to zima, we will not have a v that is trained on that
+  many episodes"; "yes stop b50 and b200 and set up chain-only V. set up round 0 for 50 100 and 200".
+- Stopped: b50 (18545079-82, train was running) and b200 (18545075-78) round 0, and their feeders. Kept: b100 (frozen
+  900 V: reference ceiling) and b100iql (IQL, chain data only).
+- `scripts/libero_chainv_round_labels.py`: the round-0 V method (python -m vl.libero_resnet --every 4 --oof-fold k,
+  8000 steps, early stop on inner CE) fit from scratch on the table's train episodes only, 5 OOF folds, vb40 rule
+  (libero_round_labels.labels_all), every round relabelled with the newest V. Frame cache deleted after each job.
+- `vl.libero_oof.oof_split`: fresh-only tables have no fixed states to early-stop on, so inner = 20% of the other
+  folds' episodes (b50 round 0: fit 32 / inner 8 / held out 10 per fold); tables with fixed states unchanged.
+- `ag_budget_chain.sh` / `ag_rounds.sh`: LABELER=cv (TAG b<B>cv, label dirs <PFX>_cv40_r<r>; round-0 label job 8 h,
+  later rounds 8 h; smoke on the interactive node ran ~2.3 steps/s). Round-0 tables are the same subsamples as b<B> (b100cv paired with b100 and b100iql).
+  Default dry run of ag_rounds.sh byte-identical; pytest 248 passed (test_libero_rollouts_resume.py deselected: the 3
+  known failures from the uncommitted prefix kwarg).
+- Caveat: the frame cache grows with the chain (b200 round 10: ~2,400 episodes, ~80 GB at every-4); later rounds will
+  be slower and may need the cache on node-local disk.
+- Submitted (round 0: label, train, check, eval, ceval): b50cv 18546930-34, b100cv 18546935-39, b200cv 18546940-44;
+  feeders (rounds 1-10, JUST_IN_TIME) pids 787015 / 787119 / 787318, logs `logs/ag_rounds_feed_b<B>cv.log`.
+  Smoke (b50 round 0, 500 steps per fold): all 50 episodes one OOF V each, 40.0% positive (45% on success episodes,
+  35% on failures), cache deleted; at 500 steps V is barely fit (corr with MC 0.11), so the real check is the 8000-step
+  round-0 job's summary.json.
+
+### 2026-11-16 — second task for the multi-task AG test: base check of libero_90 tasks 59 / 64 (Karen: "submit the check for 64 and 59")
+- Mentor: run AG rounds on 2 different but similar tasks with each round's episodes split between them, vs single-task
+  runs at the same total budget. Karen wants two *separate* tasks sharing skills (as zima would have), not a moka subtask,
+  so libero_90 task 38 (right moka pot only) is out. Candidates from the 2026-10-29 sweep: **64** stack the right bowl on
+  the left bowl and place them in the tray (9/20, two-step like moka) and **59** tomato sauce into the tray (8/20);
+  fallback **2** black bowl into the top drawer (60/100, already checked). All libero_90 = not in pi05_libero's training data.
+- `scripts/libero_rollouts.py`: `--args.max-steps` (> 0 overrides the per-suite cap; default unchanged).
+- Check: tasks 59 and 64 × 50 init states × 2 repeats, env seed 8, **520 steps** (as moka, not libero_90's 400), base
+  pi05: job **18548449** (`NAME=check2t_59_64`). Pick 64 if it lands in 40–75% and its repeats often disagree
+  (outcome not fixed by the init state); else 59 if it does; else task 2.
+- 2026-11-16 **Tasks 59 / 64 check done** (job 18548449, iris7, 1:09, 200 episodes, 0 errors; 520 steps, env seed 8;
+  `/iris/u/ankile/karenvo/libero/runs/check2t_59_64_libero_90_18548449/`). All failures are 520-step timeouts.
+
+  | task | success [Wilson 95%] | repeats | agree (null) | per state 0/2, 1/2, 2/2 | success steps (median) | successes > 400 steps |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 64 stack bowls, place in tray | 40/100 [31, 50] | 20, 20 | 56% (52%) | 19, 22, 9 | 223–518 (334) | 6 / 40 |
+  | 59 tomato sauce → tray | 34/100 [25, 44] | 16, 18 | 76% (55%) | 27, 12, 11 | 104–511 (284) | 8 / 34 |
+
+  Reading [ours]: **64 passes** — at the bottom edge of 40–75%, but the outcome is not fixed by the init state (agree
+  56% vs null 52%, as moka's 44% / 51%), so AG has room on every state. 59 is out: below range and strongly layout-
+  dependent (+21 points over null, 27 states at 0/2). The 520 cap matters for 64 (6 of 40 successes after step 400).
+  Proposed second task: **libero_90 task 64** (pending Karen); task 2 stays the fallback.
+
+### 2026-11-16 22:50 — multi-task AG chain: moka + libero_90 task 64 (Karen: "go with task 64, set up the multi-task chain"; one shared V; controls t64b50 + t64b100)
+- Design: **mt100cv** = 50 moka + 50 task-64 fresh layouts per round (collector CF moka, CR task 64), one table, one
+  chain-only ResNet V refit each round on both tasks (scripts/libero_chainv_round_labels.py), the 40% cut within each
+  (round, task); one residual AG policy (per-episode prompts). Controls: moka b50cv / b100cv (running), new
+  **t64b50cv** / **t64b100cv** (task 64 only). Main metric: continuous-set success per task per round. Evals: mt100 =
+  moka 330 val + moka_cont100 + t64_cont100; t64 chains = t64_cont100.
+- Round 0: moka = tables/moka_agr_b50_r0 (nested b50 subsample, val rows kept); task 64 = base pi05 fresh layouts at
+  520 steps, --save-raw: A 50 (env seed 300, job 18549968), B 50 (seed 301, 18549969; t64b100 only), V 20 val (seed
+  302; submitted by the waiter). Tables: mt_agr_mt100cv_r0 = b50 moka + A + V; t64_agr_t64b50cv_r0 = A + V;
+  t64_agr_t64b100cv_r0 = A + B + V. Round-0 job = table + cv labels, then train (round 0's exact residual args +
+  --demos) -> check (--table) -> evals.
+- `eval_sets/t64_cont100`: scripts/libero_eval_layouts.py --suite libero_90 --task-id 64 --n 100 --repeats 3 --seed
+  9002 (iris3 TITAN; resettle diff 0; nearest-layout median 18 mm).
+- Code (defaults unchanged): `pi05_tag_adarms.sbatch` AG_SUITE / AG_TASK / AG_MAX_STEPS (MODE=eval; OUT dir names
+  the suite; names distinct from libero_eval.sbatch's SUITE so an exported SUITE never redirects a moka job).
+  `ag_rounds.sh` TASK_A / TASK_B / TPFX / NO_VAL_EVAL / CONT_EVAL_B / CHECK_TABLE. `ag_rounds_feed.sh` accepts 8 steps
+  (replaced by rename: running feeders keep their open copy). `libero_round2_table.py` `task` column only when a
+  non-moka task is present, `--base none`, `--keep-split`, `--round 1`. `libero_round_labels.labels_all` groups =
+  (round, task) when > 1 task. `pi05_policy_finetune.py --demos`: demos per task, tasks without demos skipped (moka 29,
+  task 64 none: libero_90 is not in openpi's data). `pi05_contrast_check.py --table`. New `scripts/ag_mt_chain.sh`
+  (CHAIN=mt100|t64b50|t64b100: round 0 + feeder) and `scripts/ag_mt_wait.sh` (submits smoke + V, then the 3 chains as
+  the 25-job queue frees; log logs/ag_mt_wait.log; pid on iris3).
+- Checks: dry runs of ag_rounds.sh (default, b100cv, b100iql, e50) byte-identical before / after; rebuilt
+  moka_agr_r3 with the new table builder: episodes.csv byte-identical, targets equal; labels_all on a synthetic
+  2-task table: 40.0% positive in every (round, task); pytest 248 passed (resume tests deselected, known). mt100 and
+  t64b50 round-1 dry runs: collectors on the right suites (50 + 50 / 25 + 25), RUNS dirs match, cevals per task.
+  Pending (need the base runs): GPU smoke of the task-64 residual collect path (job t64_smoke), real round-0 table
+  build, demo selection on the mt table, contrast check --table.
+- Caveats: task 64 is new to pi05_libero (libero_90) and has no demos, moka has both; one shared V (closer to zima,
+  but V differences are part of the multi-task effect); contrast-check w is calibrated on the chain's val frames
+  (mt: 120 moka + 20 task 64). The iris3 interactive job (waiter, feeders) ends 2026-11-17 10:54.
+
+### 2026-11-17 09:25 — overnight round 0; b50cv eval timeout; feeders made restartable
+- Round 0 (val 330 / continuous 300): b100 (frozen 900 V) cont 0.773, val still queued; b100iql 0.639 / 0.660;
+  b50cv val 0.49 (timed out at 312 / 330 trials) / cont 0.510; b100cv, b200cv evals running. Base val 0.524.
+- Chain-only V vs MC return, corr (OOF): b50cv 0.415, b100cv 0.534, b200cv 0.521; frozen 900 V on the same 100
+  episodes 0.614. Every fold early-stopped at step 1000-1500. Positive share 51% on success / 30% on failure episodes.
+- Fixes (Karen: "do all three"): (1) b50cv round-0 val eval rerun with 5 h (18554641); b50cv feeder restarted with
+  IGNORE=18546933 so round 1 goes ahead. (2) b100 round-1 ceval, rejected at submit by the 25-job limit, submitted
+  (18554640). (3) `ag_rounds.sh`: EVAL_TIME (default 3 h, unchanged) for eval / ceval; my chains set 5 h.
+- `scripts/ag_feeders_host.sbatch`: starts one feeder per `logs/feeders/<TAG>.env`, resuming each from its feeder log's
+  last "round R submitted" block, plus one-off `*.pending` submissions; a lock allows one host at a time. Runs as a
+  batch job or under setsid nohup on an interactive node. A CPU-only job on `iris` showed no start estimate before
+  12-01; `iris-hi` started at once but was not used (Karen) -> runs on the interactive node, restart each session:
+  `setsid nohup bash scripts/ag_feeders_host.sbatch >> $ROOT/logs/feeders/host.log 2>&1 < /dev/null &`
+- Not moved: the other session's feeders (mt100cv, t64b50cv, t64b100cv) on the same interactive node.
+
+### 2026-11-17 11:10 — Week 9 · Nov 17 page (scripts/libero_week9_nov17.py, reports/2026-11-17-ag-rounds, content/week09_nov17.html)
+- Karen: "this week 9 page should include the ideas that are now being pursued and the previous results since the last week's page".
+  Built `week-09-nov17/` (build_site.week9_nov17; hub card marked current locally). Nothing new run: existing evals,
+  collections (raw goal predicates + pot positions) and train-state evals.
+- AG r0-r7: eval vs own-collection success corr 0.78 over r0-r6 (round swings are policy differences, not eval noise);
+  success vs w r = 0.21. Persistence (matched trials, # of 8 rounds failed) matches an independent-within-state null
+  (0 always-fail; 68 never vs 68.6). Train states (base / r0 / r7): 61.7 / 70.3 / 79.7%, below 50%: 7 / 6 / 1, none at 0.
+- Collections: first-placed pot = moka_pot_2 (left) in ~95%; second-pot failures (never lifted / lifted not placed) 9-25
+  per 100 in rounds 1-6; lost-after-placement 1-5 per 100. First-pot step (successes) 193 base -> 171-177 r3-r6;
+  second-pot gap 186-209 in every round (no trend). Eval end states r2-r7: 011 (second missing) largest each round.
+- Not yet published: gcloud auth expired.
+
+### 2026-11-17 13:05 — dense guidance-push sweep on AG r5 / r7 (Karen: "queue the dense sweep on r5 and r7. make it the next run")
+- Why: push 0.99 x noise was picked once on round 0 (0.57 69.7%, 0.99 75.5%, w 16 ~1.7 65.8%) and reused every round; 1.0-1.7 never tested.
+- 10 evals: push 0.6 / 0.8 / 1.2 / 1.5 / 1.8 on policy_agr_r5_s0_18484605 (w 5.96 / 7.95 / 11.92 / 14.90 / 17.88) and
+  policy_agr_r7_s0_18524601 (w 4.89 / 6.52 / 9.79 / 12.23 / 14.68), w = push / slope of each round's contrast check
+  (0.99 reproduces the existing w 9.834 / 8.073). 330 val trials, matched noise seed 1: paired with r5 18484607 (0.876)
+  and r7 18524603 (0.830). Names eval_agr_<r>_s0_shift<push>_noise1, job name wsweep_eval, 40G, 5 h.
+- `scripts/wsweep_submit.sh` (setsid nohup on iris3, log logs/wsweep.log, state logs/wsweep.state): submits one at a time
+  when < 25 iris jobs are queued, under the feeders' lock (feeders submit at <= 19, so the sweep goes first), then
+  `scontrol top`. Order: 1.5, 1.2, 1.8, 0.8, 0.6 (r5 then r7 each). Same-trials selection caveat: confirm a winner on
+  noise seed 2 or the continuous set.
+- 15:35: `scontrol top` is denied for this user (all 4 sweep jobs so far), so the sweep evals wait on normal priority
+  behind the chains' pending jobs; "next run" only holds for submission order. b200cv round 0 final: val 73.6%,
+  continuous 75.3%. b100cv round 1 collection 76% (100 fresh layouts). Hub index uploaded with the Nov 17 card.
+- 15:50: base pi05 on the continuous set (moka_cont100, 300 rows, same client args as the chains' ceval jobs, stock
+  server): `scripts/ceval_base_submit.sh` waits for a queue slot (log logs/ceval_base.log). Task-64 base failures
+  (`scripts/libero_week9_t64.py`, 120 fresh-layout base rollouts t64_base_A/B/V): 72/120 succeed; of 48 failures, 39
+  come after the first bowl is in the tray (21 second bowl tilted on the rim, 11 late grasp + timeout, 4 first bowl
+  pushed out, 2 never lifted, 1 dropped away) and 9 carry the wrong bowl to the tray first. Added to the Nov 17 page
+  (#t64, fig7 + 2 clips).
+- 16:15: b50cv round-0 val rerun 18554641 finished (330/330, 44.8%) before Slurm preempted it at the end; the requeued
+  copy will resume with nothing left to run. Page table updated (partial 49.0% removed).
+- 17:00: methods gallery (`scripts/libero_week9_methods.py`; page #methods): shuffled-label AG 18.5 / RECAP tag 45.8 /
+  base 52.4 / AG r0 75.5 / AG r5 87.6 / DSRL s0 ep1800 86.1 on the 330 val trials. Base failures fixed of 157: 24 / 61 /
+  - / 113 / 138 / 126; base successes lost of 173: 136 / 83 / - / 37 / 22 / 15. AG r5 x DSRL: both fail 8 trials
+  (5.7 if independent). 5 grid clips; every method's leftover failures are second-stage (late second grasp, or the
+  first pot knocked off: DSRL s1 13/36 failures end 101, AG r5 15/41).
+- 17:20: trial progression base -> r7 (`scripts/libero_week9_progression.py`, fig8, page #progression): base->r7
+  11 145 / 01 129 / 00 28 / 10 28; 113 of 157 base failures already succeed at r0; 30 base failures succeed in all 8
+  rounds, 38 base successes in all 8, 262 mixed; 118 distinct paths; no base failure fails every round.
+- 17:00: cancelled the requeued b50cv val eval 18554641 (its 330 episodes were already complete); page State column updated (mt100cv round-0 training still waiting for a GPU since 09:09).
+- 19:50: GPU cap 6 (scripts/gpu_cap.sh, log logs/gpu_cap.log, cap in logs/.gpu_cap): holds all pending batch jobs, releases oldest-first while running + released-pending < 6; interactive shell not counted. Started with 7 running (5 wsweep, t64b100cv train, b100cv label), so nothing releases until 2 finish.
+- 20:30: meeting next steps. Throughput (`scripts/libero_week9_throughput.py`, fig9, page #throughput): median steps of
+  successes base 409 / r0 397 / r5 366 / r7 378 / DSRL s1 ep1800 321; paired on trials base also solves r5 365 vs 409
+  (n 151); successes per 1k env steps 1.13 / 1.75 / 2.22 / 2.03 / 2.56. Push sweep so far (paired vs 0.99): r5 1.2 84.8
+  (+27 -36), 1.5 83.5 (327 eps, +34 -48), 1.8 80.2 (86 eps); r7 1.2 80.9 (+37 -44), 1.5 78.4 (227), 1.8 74.8 (115);
+  0.8 / 0.6 held by the GPU cap. Sweep covers w 4.9-17.9 on r5 / r7 only; the meeting's w sweep also wants r6 and
+  w 0-3 (w 0 = base, 52.4%). DSRL s1 resumable from dsrl_state/state_ep01800.pkl. Only QOS normal on this account
+  (iris-hi exists: 4 GPU / 8 jobs per user).
+- 20:30: submitted (all held; scripts/gpu_cap.sh releases them, cap 6). iris-hi partition works for account iris
+  (partition QOS iris-hi: 4 GPU / 8 jobs per user, no 25-submit cap), so the new jobs go there; governor v2 releases
+  iris-hi first (at most 4), *_train before evals, then oldest first. w sweep (log logs/wsweep2.log): FT_CONTRAST w 1/2/4
+  on r5 / r6 / r7 (18562778-18562787) + r6 push 0.8 / 1.2 (18562788-9), names eval_agr_<r>_s0_w<w>_noise1 /
+  _shift08 / _shift12. DSRL s1 resume: copy of the run at runs/dsrl_s1x_libero_10 (restores dsrl_state/state_ep01800),
+  REPEATS 120 -> 3600 episodes, 3 days, job 18562790; evals agent 2400 / 3000 / 3600 (18562791-3, afterok). New
+  libero_eval.sbatch OUT_DIR override for continuing a run dir.
+- 20:45: start-state buckets (`scripts/libero_week9_buckets.py`, fig10, page #buckets): no saved state or fresh layout at
+  0 (lowest saved 2 41%, 21 47%, 13 57%; lowest layout 5/15). Over-dispersion: val states 3.4x binomial within r7, 14x
+  pooled r0-r7; fresh layouts 0.97-1.07x per policy. Hard saved states share pot-1 corner x > -0.045, y < 0.24: AG
+  62.6% vs 82.9% (base 31.4 vs 65.2); fresh layouts there 66.7 vs 70.1. Saved states have arm joint noise (fresh =
+  default pose), arm offset r = -0.34. State-13 clip: trial 21 fails "first pot lost" in r5, r6, r7 (late second pot
+  pushes the first off). Page also: #wsweep table, queued-runs box, State column (b100 r1, mt100cv r0, t64 r0 trained).
+- 21:30: AG saturation check (why rounds plateau ~85%). Hypothesis [ours]: the standard mix (w, -w, 1) steps from
+  frozen pi0.5 every round, so what earlier rounds learned (shared by + and - data) cancels and never compounds. Offline
+  evidence (no compute): within-state action spread of guided collections = base (no diversity collapse); labels still
+  separate success / failure after the first pot in every round (gap 0.23-0.31); base rollouts are 58.5% of r7's frames.
+  New: `pi05_ag_residual.anchored_mix(w, a)` = mix (a + w, 1 - a - w, 0) = v_ref + [a h(+) + (1-a) h(-)] + w (h(+) - h(-))
+  (serve `--anchor`, sbatch FT_ANCHOR); contrast check `--anchor` adds the mean residual vs none, anchored vs none /
+  vs standard per w, and plain - vs none. Jobs (a = 0.4, the vb40 positive share; r2 / r4 / r6 checks dropped):
+  checks runs/contrast_check_anchor04_r{7,0,5,3,1} (18563302 / 158 / 303 / 304 / 159), 330-trial evals
+  eval_anchor04_r{7,5,0}_shift099_noise1 (18563305-7, iris-hi) at each round's original w (8.073 / 9.834 / 9.257).
+  scripts/gpu_cap.sh now releases job names listed in logs/.gpu_cap_priority first, in file order (these 8, named
+  anchor_check_r<r> / anchor_eval_r<r>); restarted 21:16 under nohup, log logs/gpu_cap.log. Empty that file to go back
+  to oldest-first. Read: mean residual ~0 at r0 and growing over rounds + anchored r5 / r7 above 87.6 / 83.0 -> the
+  frozen anchor is the ceiling; anchored r0 should stay ~75.5 (control). pytest: 3 failures in
+  test_libero_rollouts_resume.py (file not touched here).
+- 23:10: AG saturation, option 2 (learned no-tag branch; closest to the AG paper, whose reference is trained on the
+  data). `pi05_ag_residual.py --uncond-branch` (needs --tag-dropout 0 < p < 1; residual.json head.uncond): every frame
+  trains the head and the tag-dropped frames fit h(0); serve `--uncond` / sbatch FT_UNCOND=1 = uncond_mix(w) =
+  (w, -w, 0, 1) = v_ref + h(0) + w (h(+) - h(-)). Untagged sampling without a mix stays base pi0.5 (contrast check
+  self-check unchanged). Selftest (7) covers it; contrast check `--uncond` adds h(0) vs none and uncond_mix per w.
+  Chain on r7's data (moka_agr_r7, agr_vb40_r7 labels, r7's args + --tag-dropout 0.3 [ours; RECAP's value]):
+  selftest 18565686 -> train agr_r7_uncond_s0 18565687 -> check contrast_check_agr_r7_uncond_s0 18565688 -> evals
+  18565689 (uncond mix) / 18565690 (same head, standard mix: separates the 30% fewer +/- frames from the new
+  sampling), both at shift 0.99 from the new check. Compare with r7 83.0 and anchored r7. In logs/.gpu_cap_priority
+  after the anchor evals.
+
+### 2026-11-18 — uncond results, cosine check, DSRL / IQL / distill evals, stacked AG chain (Karen: "submit the AG distilled eval and build the stacked chain")
+- Uncond (r7_uncond, 18565687; standard mix on the same head 82.4%): uncond mix w 8.4 53.0% (actions 1.93 x noise from
+  base vs 1.09 standard; gripper flips 5.6 vs 2.4%; 70 of 155 failures end with no pot on the stove), w 0 (h(0) alone)
+  59.1% (18573792), w 2 74.5% (18573793), w 4 18573794 running. r0 uncond chain cancelled (anchored r0 74.8 vs 75.5
+  already answers it). r0 selftest 18573103 failed checks 4 / 7 on an A40 at 0.0038 RMS (A6000 run: exactly 0): bf16
+  tolerance, not logic.
+- r7 push 0.6 82.7%, 0.8 80.6% (+ 1.5 79.4%): flat. Sharper labels 15% 81.2%, 10% 83.9% (vs 40% 83.0%).
+- `scripts/pi05_h0_cosine.py` / `.sbatch` (18576965, r7_uncond r7 r5 r3 r0): cosine of h(0) / mean residual / h(+-) with
+  one unit of guidance h(+) - h(-) on the contrast check's val frames, same z; saves directions.npz per run so
+  directions compare ACROSS rounds (does r7 guide in a new direction vs r0?).
+- dsrl_train 18562790 crashed at ep 3349 (EGL error, 18 h). Evals of agent_3300 18576954, 2400 18577009, 3000
+  18577010 (old afterok evals 18562791-3 cancelled; agent_3600 never written). Training success flat 86-89% from ep 2100.
+- b100iql round 1 submitted by hand (feeder not running): 18576946-52; logged in ag_rounds_feed_b100iql.log in the
+  feeder's format. Round 0: 63.9 / 66.0 vs b100 79.7 / 77.3 and b100cv 76.1 / 79.3 (same 100 episodes).
+- AG distillation (policy_distill_ag_sampled_s0_18528548 reached step 5000, marked cancelled after): evals final
+  18577069, step 2000 18577070 (vs DSRL distill 0.882 / 0.842).
+- **Stacked AG (moving anchor)** [ours]: why — every round so far serves base + w Δ at the same 0.99 push from base, so
+  rounds re-aim one step and cannot compound (r5 push 1.2 / 1.5 / 1.8 = 84.8 / 83.5 / 80.2: longer along one Δ hurts),
+  and at r7 58.5% of frames are base, so Δ stays mostly round 0's. Stacked round r: reference = round r-1's whole
+  guided sampler (base + every earlier head at its own w, frozen; residual.json head.stack, loaded by
+  pi05_ag_residual.load_stack_head; in compute_loss and sample_actions; "none" = the reference), new zero-init head
+  trained ONLY on round r's collection (`--episodes` from scripts/round_episodes.py, no demos), so the reference is
+  the data's behaviour policy (AG Thm. 1), which uncond / anchor only approximated. `ag_rounds.sh STACK=1` (SHIFT =
+  per-round step vs the previous policy, SHIFT0 = P0's 0.99 for round 1); default and IQL dry runs byte-identical.
+  Chain TAG=stk: r0 = ag_residual_vb40_s0 (w 9.257), 200 episodes per round (30 train states x 4 + 80 fresh), step 0.5,
+  vb40 labels, rounds 1-7; 330-trial val eval each round (eval_agr_stk_r<r>_s0_shift05_noise1). Gate: stk_check
+  18577204 (zero new head on P0 must sample exactly as P0 at w 9.257, all mixes; stack term nonzero) -> DEP_START of
+  round 1; smoke 18577205 (50 steps on moka_agr_r1's round-1 episodes with the stack). Feeder hosted in its own batch
+  job 18577207 (scripts/ag_feeders_host.sbatch, FEED_DIR logs/feeders_stk, log logs/ag_rounds_feed_stk.log) so it
+  outlives the interactive session. gpu_cap.sh now ignores ag_feeders* jobs (CPU only); restarted (pid 451285).
+  Read: stacked rounds climbing past ~85% where the fixed-anchor rounds were flat -> the anchor was the ceiling; flat
+  -> look at labels (they reward speed once success is high) and exploration. Not done: head ensembles per round.
+- Later 11-18 (Karen: "instead of running all 7 rounds ... compare with a later round"): 7-round stk chain dropped
+  (host 18577207 and smoke 18577205 cancelled before submitting anything; logs/feeders_stk/stk.env -> .unused). One-round
+  stacked tests on existing collections, each collected by exactly the reference policy at the stacked w (collector logs:
+  9.257 / 9.834 / 6.222): agr_stk1_on_r0_s0 (ref r0, round-1 collection, 63/100 succ) 18577232 -> check 18577233 -> eval
+  18577234; agr_stk1_on_r5_s0 (ref r5, round-6 collection, 85/100) 18577235-37; agr_stk1_on_r6_s0 (ref r6, round-7
+  collection, 77/100) 18577238-40. vb40 labels of the original round tables, --episodes stack_test_inputs/, no demos;
+  every train afterok stk_check 18577204; evals at step 0.5 vs the reference, 330 val, matched noise 1. Read: stacked >
+  its own reference (r0 75.5 / r5 87.6 / r6 77.3) = steps compound; also vs the original next round (79.1 / 77.3 / 83.0).
+- 16:25 feeders restarted for b50cv, b100cv, b200cv, mt100cv, t64b50cv, t64b100cv (Karen: "start these after the stacked
+  runs"): batch host 18577602 on iris-hi (iris was at the 25-job QOS limit; CPU only, ignored by gpu_cap.sh), FEED_DIR
+  logs/feeders_chains (the 3 b*cv .env copied from logs/feeders; mt / t64 .env rebuilt from scripts/ag_mt_chain.sh's
+  FEED_ENV with their round-0 ids). b50cv IGNORE += 18554641 (round-0 eval rerun, 330/330 done, cancelled after).
+  b100cv resumes at round 2 from round 1's 18556155 / 18556156; its round-1 ceval (step 7, rejected by QOS 11-17) was
+  never submitted: now 18577598. Dry runs of every chain's next round checked. Ordering: the feeders submit only at
+  <= 19 queued jobs and logs/.gpu_cap_priority lists stk_* first, so the stacked tests get GPUs ahead of these chains.
+  b100 / b100iql feeders not restarted (b100 round 2 and b100iql round 1 already in flight; no feeder for later rounds).
+- 17:20 stacked trains A / B (18577232 / 18577235) stuck >30 min in the pi0.5 load on iris5 (12 s CPU, 0.5 GB RSS; node crowded, 64 GB free): requeued in place (same ids, so checks / evals keep their dependencies; same run dirs) with iris5 excluded; C 18577238 (pending) excluded from iris5 too.
+- 21:05 Karen: "if not [finished], just prioritize the other runs and do not do distillation for now": cancelled AG-distill evals 18577069 (final, 1h25 in) / 18577070 (step 2000, 39 min in); no results. Cosine 18576965 timed out at 3 h after r7_uncond / r7 / r5 (r3, r0 not run). all7: h0 vs G1 -0.27 (h0 ~ mean 0.99, ~ neg 0.96: no double counting, h0 pulls against guidance); G1 size vs noise r5 0.30 / r7 0.39, G4/4 0.13 / 0.20 (shift sublinear in w). Cross-run G1 (directions.npz): r5 vs r7 0.49 (frame means 0.53), r7 vs r7_uncond 0.83 (0.87; same data, not a pure seed control) -> later rounds learn a different guidance direction. Stacked: B 18577235 / C 18577238 trains done (iris7 / iris6), C check 18577239 running, A train 18577232 running on iris6.
+- 21:20 contrast-check self-check fails sporadically on A40 only (all checks since 11-11: A40 18 exact / 2 at 2.7e-3 / 2 over TOL 2e-2; RTX, L40S always exact): b100cv r1 check 18556156 (iris5, pos 2.98e-2) and stacked C check 18577239 (iris6, none 3.78e-2). Both requeued in place (same ids); B check 18577236 requeued off iris5 before it got far; b100cv check + B check exclude iris5. Dependent evals were JobHeldAdmin (user can't release) -> resubmitted from their sacct SubmitLine: b100cv eval 18556157 -> 18580609, ceval 18577598 -> 18580611, stacked C eval 18577240 -> 18580610; old ones cancelled. b100cv feeder had stopped before round 2 ("STOP ... 18556156 FAILED"): b100cv.env moved to logs/feeders_b100cv (+ IGNORE of the 3 ids), own host 18580615 (iris-hi), feeder resumes rounds 2-10 from 18556155 / 18556156.
+- b100 r1 collapse (79.7 -> 53.0 val, 77.3 -> 45.3 cont): table r1 = 100 base (59% succ) + 100 r0-policy (83%); labels normal (40% positive per round; success eps 44-51% vs failure 26-27%); contrast check normal (w 7.4 at 0.99); train completed (resumed at 1000 / 4000, as 900-chain r1). Cause not found. IQL labels have never been used on a later round of the 900 chain (only offline label scoring on round-0 data, 11-12).
+
+### 2026-11-18 21:40 — collection-push test + IQL relabel of r7 (Karen: "set up the collection-push test"; "set this up [IQL on r7]"; "queue ... before doing the lesser important jobs ... the data per round jobs"; cap stays 6)
+- Push 0.99 history: picked 11-11 when the residual head was built, to match AdaRMS w 8's action shift (0.99 x noise;
+  w 9.257); round-0 evals then 0.57 69.7 / 0.99 75.4 / w 16 (1.64) 65.8. ag_rounds.sh (11-11 18:30) used the one
+  SHIFT for both collection and eval; collection push was never varied.
+- `ag_rounds.sh`: COLLECT_SHIFT (collectors only; evals stay at SHIFT; not with STACK) and branching START_ROUND > 1
+  with PREV_T=- (round START_ROUND-1 = P0 / CHK0 / TABLE0 / PREV_LAB0; needs TAG). Default + b100cv-resume dry runs
+  byte-identical.
+- **cp15**: round 6 again from r5 (policy_agr_r5_s0_18484605), collected at push 1.5 (w 14.9) instead of 0.99, same
+  seeds as the original r6 (SEED 212 / 213, NOISE_SEED 106; submit lines equal apart from FT_SHIFT_TARGET / names):
+  CF 18580722 CR 18580723 label 18580724 train 18580725 check 18580726 (iris) eval 18580728 (iris-hi, 25-job limit).
+  Read: eval at 0.99 vs original r6 77.3 (same states / layouts, only the collection push differs).
+- **iqlr7**: IQL labels (libero_iql_round_labels.py, tau 0.9, top 40% Q - V per round) on moka_agr_r7 ->
+  labels/agr_iql40_r7, label 18580729 -> train 18580730 (r7's exact args, new --labels) -> check 18580731 -> eval
+  18580732 (all iris-hi). Read: vs r7 83.0 (same data / settings, only the labels differ).
+- Priority (.gpu_cap_priority, old in .bak.<HHMM>): stk_eval, stk_ck, agr_iqlr7, agr_cp15, agr_b100iql, mt100cv / t64
+  chains; budget chains (b50cv, b100cv, b200cv, b100) last. Requeued + held (resume on restart): b200cv r1 collectors
+  18580520 / 18580521 (45 / 100 eps each), b100 r2 train 18571089 (step 2000 saved). gpu_cap: requeued jobs it had
+  released stay in .gpu_cap_granted and count as slots -> hold them and drop their ids from that file.
+- 22:00 options 1 + 2 (Karen: "set up options 1 and 2"): diversity tests, round 6 again from r5 with the original
+  r6's seeds, train / check / eval unchanged (eval at 0.99, compare r6 77.3; also cp15).
+  - Code: `libero_rollouts.py` Changes 9 `--args.push-choices K --args.push-seed s` (per-episode w_idx, seeded per
+    episode, sent with every request, raw + CSV w_idx; test added, resume tests' stub fixed for prefix / switch_step
+    kwargs); `pi05_ag_residual.py --contrast-set w..` (ContrastSetPolicy, as SubtaskMixPolicy); sbatch
+    FT_SHIFT_SET="p:p:.." (+ PUSH_SEED) -> w per push from the run's own check; `ag_rounds.sh` COLLECT_EXPORT /
+    COLLECT_CLIENT (collectors only) and TRAIN_PART. Default / b100cv-resume dry runs byte-identical.
+  - **pmix** (option 1): push per episode uniform in {0.5, 0.99, 1.5, 2.0} (r5 w ~5.0 / 9.8 / 14.9 / 19.9), PUSH_SEED 6:
+    18580880-85 (iris-hi). Server log line "w_idx requests" shows the counts.
+  - **nz2** (option 2): push 0.99, start noise x 2.0 on half the chunks (explore-prob 0.5, scale 2.0, seed 6; base
+    pilot 11-08: arm spread 1.64x, success -7.8 pts): 18580886-91 (iris-hi).
+  - Priority: agr_(cp15|pmix|nz2) after agr_iqlr7. Feeder hosts 18577602 (b50cv, b200cv, mt100cv, t64b50cv, t64b100cv)
+    and 18580615 (b100cv): CPU only, not GPU-capped; they keep the iris queue at its 25-job limit, so new tests go to iris-hi.
+- 21:57 feeder hosts merged (Karen: "merge them into one job"): 18577602 + 18580615 cancelled under the feeders' lock; b100cv.env back in logs/feeders_chains; one host 18580920 (iris-hi) runs all six (b100cv / b200cv resume at round 2; b50cv, mt100cv, t64b50cv, t64b100cv at round 1).
+- 22:20 Karen: "submit the base eval and mt100cv round 1": mt100cv round 1 by hand on iris-hi 18581013-20 (feeder had waited since 11-17 for <= 19 queued jobs; logged in ag_rounds_feed_mt100cv.log in the feeder format; check 18581017 off A40); feeder host restarted under the lock -> 18581022 (mt100cv resumes at round 2). Base pi05 on t64_cont100 (300 rows, 520 steps, stock server, as ceval_base for moka): ceval_base_t64 18581021 (iris-hi), priority after stk_ck.
+- 22:30 Karen: "prioritize b50cv and t64b50cv alongside mt100cv" (matched single-task controls for transfer: same 50 moka / 50 task-64 per round as mt100cv's two halves): round 1 by hand on iris-hi, b50cv 18581085-91, t64b50cv 18581092-97 (checks off A40), logged in feeder format; host restarted -> 18581098 (both resume at round 2). Priority line now agr_(mt100cv|b50cv|t64b50cv); t64b100cv falls to the default (lowest) tier.
+- 08:35 overnight check: cp15 check 18580726 pending 2.5 h on iris (Priority) -> iris-hi. iris-hi caps 4 GPUs/user and every ready priority job was iris-hi, so gpu_cap gave the 2 iris slots to agr_b100 eval/ceval 18571091/2: held them (out of granted) and moved t64b50cv r1 collects 18581092/3 to iris so the multi-task chain uses those slots (collections resume on preemption).
+- 08:50 Karen: "queue the r6 new-seed rerun": **rs6** = round 6 again from r5, push 0.99, everything as the original r6
+  except the collection seeds (new `ag_rounds.sh` COLLECT_SEED_OFFSET=1000: env 1212 / 1213, noise 1106; default dry
+  runs byte-identical; train seed 0 as r6 / pmix / nz2 / cp15): 18586830-35 (iris-hi; log ag_rounds_feed_rs6.log),
+  priority with cp15 / pmix / nz2. Read: the spread between r6 77.3 and rs6 is the round-to-round draw noise that
+  pmix's 84.7 has to beat.
+- 08:55 Karen: investigate the task-64-only chains (t64b50cv 38.7, t64b100cv 17.3 on t64_cont100 vs base 60.7, mt100cv
+  77.3). Ruled out: eval settings (same suite / task / 520 steps / starts / noise as base and mt100cv), contrast check
+  (self-check exact, w1 ratio 0.12-0.125 vs moka 0.15-0.23, pos-vs-base 0.54-0.56 within moka's 0.30-0.82), labels
+  (fold val AUC 0.71-0.89 vs mt100cv 0.60-0.79; positive share 49% on success eps vs 29-31% on failures, as mt100cv),
+  collection (33/50 and 62/100 successes = base). Failures are broad: on layouts base solves 3/3, t64b50cv 46% and
+  t64b100cv 22%; all failures are timeouts (t64b100cv mostly goals 00 = nothing done). Only structural difference
+  from every other chain: no demos (no libero_90:64 demos on disk). Weak contrast: plain pos-vs-neg 0.08-0.09 vs moka
+  0.11-0.28, so w ~8 at push 0.99 amplifies a weak direction.
+  Push sweep on eval_sets/t64_cont100/starts_rep0.csv (100 layouts, rows start_id % 3 == 0), job name t64sweep, iris,
+  priority last (logs/t64_sweep.log): t64b100cv push 0 18586844 (pipeline check: must be ~base 60.7) / 0.3 18586846 /
+  0.6 18586847; t64b50cv 0.3 18586848 / 0.6 18586849.
+- 09:25 task-64 diagnosis (offline): served w t64b50cv 10.04 / t64b100cv 12.35 vs moka b50cv 10.47, mt100cv 15.48 (w size
+  is not the difference). Base sample spread on task 64 0.089 vs moka 0.059 -> push 0.99 = ~1.5x the absolute action shift.
+  Moka demos = 34% of b50cv training frames / 56% of its positives (b100cv 20% / 39%); task 64 has none (libero_demos =
+  openpi's LeRobot copy: libero_10 / goal / object / spatial only). Labels: positives not stiller (eef 5.0-5.5 vs 4.7-4.9
+  cm / 10 steps). Moka b50cv cont 51.0 vs base 55.0 (-4, CI incl. 0). Sweep subset (rep0 rows) at push 0.99: base 61,
+  t64b50cv 29, t64b100cv 18, mt100cv 76. gpu_cap loop had died with interactive 18571943 (TIMEOUT 08:52); restarted on
+  iris2 interactive 18586922 (pid 2784024; dies with that job). Priority: `t64sweep|t64x_.*` first (old file .bak.0923).
+  New (Karen: "bump the sweep and submit 2 and 4"): t64x_moka_on_t64 18587062 (b50cv r0, moka-calibrated push 0.99, on
+  t64_cont100 300 rows; NAME xeval_agr_b50cv_r0_s0_shift099_on_t64) and t64x_mt_check_t64 18587063 (mt100cv r0 contrast
+  check on t64 val frames only, OUT contrast_check_agr_mt100cv_r0_s0_on_t64).
+- 09:40 **Task-64 demos** (Karen: "retrieve the task 64 demos like you did for moka"): openpi's LeRobot copy has no
+  libero_90; a third-party copy with the same schema (huggingface jesbu1/libero_90_lerobot, OpenVLA regenerate script:
+  no-ops / failed replays removed) has **35** demos of task 64 (194-266 steps, 7970 frames). Only those 35 downloaded
+  (lerobot/jesbu1_libero_90_lerobot, 1.1 GB) and converted with scripts/libero_demo_table.py (new --suites; default
+  unchanged) -> tables/libero90_t64_demos (episode_index = 50000 + LeRobot index; SOURCE.txt). Checked vs base task-64
+  rollouts: same prompt, start state, camera / orientation, action ranges, gripper +-1. New opt-in
+  `pi05_policy_finetune.py --demo-table-extra <table>` (fd.demo_episodes_any; without it nothing changes, so the
+  running chains and their feeders are unaffected); test added, pytest 249 passed.
+- 09:45 **Two-task test with demos on both tasks** (Karen: "queue the correct jobs to test ... whether having two
+  tasks would help"): scripts/two_task_demos_submit.sh, round 0, iris-hi, priority after t64sweep / t64x. t64d50 =
+  t64b50cv r0 + 35 task-64 demos (train 18587117, check 18587118, t64 cevals push 0.99 / 0.5 18587119 / 20); mtd100 =
+  mt100cv r0 + 35 task-64 demos (18587121, 18587122, t64 cevals 0.99 / 0.5 18587123 / 24, moka ceval 0.99 18587125).
+  Same tables, labels and train args as the existing round 0s. Read: task 64 mtd100 vs t64d50, moka mtd100 vs b50cv
+  (0.510). Demo share t64d50 29% frames / 50% positives vs b50cv 34% / 56%. One seed.
+- 10:05 **Per-task calibration of the two-task evals** (Karen: "recalibrate the two-task evals per task"): the contrast
+  check samples <= 24 val episodes x 6 frames (libero_tag_usage.val_frames, seed 1); on the combined mt table that
+  draw is 21 moka + 3 task-64 episodes, so mt100cv's single w 15.48 was ~moka-calibrated. Held-out (val) rows feed only
+  that calibration and the trainer's reported val loss (final checkpoint is used; chain-V labels fit on train only).
+  Cancelled mtd100 combined check + evals 18587122-25 (never started); two_task_demos_submit.sh now gives mtd100 one
+  check per task on the single-task arm's table (same seeded frames as the arm it is compared with): on_t64 18587715 ->
+  t64 cevals push 0.99 / 0.5 18587716 / 17; on_moka 18587718 -> moka ceval 0.99 18587719 (ARMS / TR_MTD100 reuse
+  train 18587121). mt100cv at a task-64-calibrated w: ceval 18587720 (afterok check 18587063). iris-hi, priority
+  line agr_(t64d50|mtd100|mt100cv_t64cal). Held-out counts not matched across tasks (20 vs 24 of 120, fixed states vs
+  fresh layouts): each comparison is within a task, on identical calibration frames.
+- 11:30 **Residual failures** (Karen: "do an in-depth analysis of the remaining failures"): offline, all 1,600
+  moka_agr_r7 train episodes + the 4 round-6 variant collections -> `reports/2026-11-19-residual-failures/`.
+  Late-round (AG r4-7) failures: second pot lifted too late 40% (first pot carried low, 234 vs 51 steps to set down),
+  hand stalls 1.5-2.5 cm low beside the second pot 23%, pot lost / tipped 17%. Support: lost pot re-placed 7/62,
+  tipped 0/22, long low stalls escaped 50/189. Labels: late-round negatives 65-75% from successes; base = 58% of
+  labelled frames. Not covered by current runs: base downweighting / failure-tied labels, mid-task starts, 700-step
+  cap diagnostic.
+- 13:35 **Plateau tests** from reports/2026-11-19-residual-failures (Karen: "set up the data rebalancing test as a
+  dry run. also look into 2 and 3 ... prioritize these runs in parallel with the foundational runs + multi task"):
+  `scripts/plateau_tests_submit.sh` (PARTS rebal / mid / cap700; dry run unless SUBMIT=1; iris-hi).
+  - Code: `pi05_policy_finetune.py --oversample-episodes FILE --oversample-share S` (fd.oversample_flag; off by
+    default); `libero_midtask_starts.py --kind recovery` (k = 20 steps after a placed pot is off 20 steps, or 10 after
+    a pot sits 2 cm below its start; >= 150 steps left; default kind unchanged). pytest 249 passed.
+  - **rebal (dry run only)**: r7 data / labels / args; rbag = AG rounds x3 (41% -> 67% of frames, base 58% -> 32%),
+    rbfail = 163 AG failures x2 (11.7% -> 21%); lists in tables/moka_agr_r7/rebal/. Read vs r7 83.0.
+  - **mid (submitted)**: round 6 from r5 at push 0.99, r6 seeds, 100 eps = 30 train states + 20 fresh + 50 mid-task
+    (midtask/mid6_starts.csv: 30 second-pot, 18 fixed / 12 fresh, start median 186; 20 recovery, 18 lost / 2 tipped,
+    start median 235, 11 from base rollouts, all from failed sources). Collect 18589877 / 80 / 81 -> table + labels
+    18589882 -> train 18589883 -> check 18589884 -> eval 18589885. Read vs r6 77.3 / rs6. Check after collection:
+    recovery episodes really start with a pot off (open-loop replay of a knock may not reproduce it).
+  - **cap700 (submitted)**: r5 at push 0.99, 330 val, matched noise 1, AG_MAX_STEPS=700: 18589886. Read within the
+    run: success by step 520 vs by 700.
+  - Priority: `agr_(rs6|mid|cap700|rbag|rbfail|cp15|pmix|nz2)_.*` moved up to right after the multi-task line.
+
+- [2026-11-19 15:20] Status. Task-64 push sweep (100 eps each, t64_cont100 rep0; base 60.7 on 300): b100cv push 0 / 0.3 / 0.6 / 0.99 = 56 / 41 / 42 / 17.3; b50cv 0.3 / 0.6 / 0.99 = 57 / 45 (42 of 100 eps; job 18586849 preempted on iris, requeued) / 38.7. No push beats base, so the task-64-only head points the wrong way: not a w-calibration problem. t64d50 / mtd100 trains done (logs: 35 task-64 demos; mtd100 29 moka + 35 task-64); checks held behind the cap. mt100cv r1 check 18581017 hung after w=2 and hit its 1 h limit: resubmitted 18591719 (2 h) + evals 18591720-22. t64x_mt_check_t64 18587063 moved iris -> iris-hi (6 h pending on iris behind 109 jobs). Mid-task CF / CR collecting.
+- [2026-11-19 15:45] Demo runs' task-64 checks: contrast 0.31-0.32 vs 0.08-0.12 without demos, shift superlinear in w; the linear w fit would under-push (~0.25), so the 4 task-64 evals were resubmitted at w interpolated between 1 and 2 (logs/two_task_demos.log).
+- [2026-11-19 16:05] Task-64 value check (reports/2026-11-19-t64-value-videos, scripts/libero_value_videos.py): 6 task-64 + 4 moka overlay videos from the matched 50-episode tables. Task 64 vs moka: corr(V, MC) 0.30 / 0.41, MAE 0.26 / 0.24, AUC of V for outcome 0.62 / 0.61, AUC of A 0.58 / 0.59, P(pos) success / failure eps 0.49 / 0.29 vs 0.51 / 0.30. Same pipeline, similar quality; task 64's degradation is not a value bug (demos explain it). Bucket upload pending gcloud re-login.
+
+### 2026-11-19 16:30 — b100 round-1 dip; critic tests set up as dry runs (Karen: "set up the b50 900-episode V test as a dry run ... set up the big shared critic for the multi task run. also investigate the big dip")
+- b100 r1 dip (val 79.7 -> 53.0 -> 72.4*): real, not an eval artefact. The r1 policy's own collection (table round 3) succeeded 43/100 vs r0's 83/100 and base 59; worse than base in every failure class (no pot 14 vs 6, second lifted not placed 25 vs 16, pot lost 8 vs 5); 8 of 10 val states drop. Ruled out: checkpoint (eval served policy_agr_b100_r1_s0_18554179 final), calibration (r0 / r1 checks 0.189 / 0.182 at w 1, w 8.58 / 7.40), training (229 eps, 40.1% positive, loss as r0), labels (round-2 P(pos) success / failure 0.44 / 0.27, as b100cv's 0.45 / 0.29). b100iql also drops at r1 (63.9 -> 55.5). Untested explanation: seed variance on a small table (the 100 new episodes are 44% of it); a seed-1 retrain of b100 r1 would settle it.
+- `scripts/critic_tests_submit.sh` (dry run; PARTS b50v900 bigv): b50v900 = b50cv r0 with the frozen 900-V labels (agr_b50_vb40_r0); bigv = one ResNet V (chain-V method) on 450 moka fresh + 450 task-64 fresh base rollouts (A, B + new C-F, seeds 303-306), labels onto mt_agr_mt100cv_r0 -> arms mtbv (vs mt100cv r0) and mtbvd (+ task-64 demos, vs mtd100), per-task checks, evals t64 cont / moka cont / moka val.
+- `scripts/libero_bigv_labels.py`: copies a big table's OOF V onto a chain table (by raw path) and applies labels_all. Check: frozen 900 V (moka_agr_r1 v.parquet) onto moka_agr_b50_r0 reproduces agr_b50_vb40_r0 exactly (5,825 frames: positive, A, V). Table build pre-tested in scratch (subsample --fresh 450 + round2_table with A, B, V: chain train episodes all inside).
+- `pi05_tag_adarms.sbatch` FT_SHIFT_INTERP=1 (opt-in): w by piecewise-linear interpolation of the check's shift curve; on t64d50 0.99 -> 2.06 (least squares 0.75), b100 r0 7.85 (8.58).
+- [2026-11-19 16:40] Submitted critic_tests PARTS="b50v900 bigv b100s1": b50v900 18593282-85; bigv collections 18593286-89, label 18593290 (24 h), mtbv 18593291-96, mtbvd 18593297-302; b100 r1 seed 1 18593303-09. Priority: t64_base|bigv_label after the two-task line (the label job is the long pole); the rest in the plateau-test tier.
+- [2026-11-19 16:50] Partial evals (task-64 cont set, 300 trials when done; base 60.7):
+  - mt100cv r0 at its task-64 w (11.2, check on task-64 frames, 18587720): 142/191 = 74%. Task-64-only t64b50cv: 38.7. The two-task run without task-64 demos beats base on task 64 once w is per task.
+  - t64d50 at push 0.99 (w 2.08 interpolated, 18592250): 0/101. Videos: it grasps the left bowl and carries it over the tray, but never releases it there; it later sets it back beside the other bowl (goals 00 in every episode). Push 0.5 (18592251) and mtd100's task-64 evals (18592252-53) still queued.
+  - mtd100 at the moka w (18587719), moka cont: 103/165 = 62% (b50cv 51.0).
+  Mid-task r6 normal collections done: fixed 28/30, fresh 20/20; the mid-task-start collection is next.
+- [2026-11-19 17:05] t64d50 0% explained (reports/2026-11-19-t64-demo-collapse): the 35 LIBERO-90 demos stack first then carry to the tray (0/35 tray-first); base pi0.5 puts the left bowl in the tray first (91% of 43 successes). All-positive demos make the + direction 'demo order'; eval video: carries the left bowl over the tray, never releases, returns it beside the other bowl. Moka unaffected (pi05 trained on its demos).
+- [2026-11-19 16:55] Karen: "cancel the multi task runs. we need to fix this clashing strategy issue first". Cancelled 32 jobs: all mt100cv / mtd100 / t64d50 / t64b50cv chain jobs, mtbv / mtbvd + bigv collections and label job, t64sweep 18586849, t64x_moka_on_t64 18587062 (list in logs/two_task_demos.log). Kept, running: 18587720 (mt100cv r0 at the task-64 w, no task-64 demos: unaffected by the clash, 191/300 done). Feeders: mt100cv already stopped (11-19 14:34); t64b50cv stops on its cancelled jobs; t64b100cv (waiting at round 1) stopped via a held-then-cancelled agr_t64b100cv_stop job. The demos' prompt = the rollouts' prompt ("stack the right bowl on the left bowl and place them in the tray", LeRobot tasks.jsonl index 59): the demos follow the instruction's order; base pi0.5 does not.
+- [2026-11-19 17:13] Karen: "run 1 and 2". `scripts/demo_task_tests_submit.sh` submitted (logs/demo_task_tests.log): nodemo = nd900 (the 900-rollout round 0 without --demos; with demos 75.5 val) + ndb50 (b50cv r0 without --demos; with 44.8 val / 51.0 cont); sweep = base pi0.5, 20 fresh layouts per task on libero_10 / goal / spatial / object (seeds 400-403), to find a pi0.5-trained second task at 50-80%. Priority: these first.
+- [2026-11-19 17:19] Karen: "make sure to check both iris hi and iris for gpu's ... continue checking both". `scripts/gpu_cap.sh` v3: every job it releases (and every granted job still waiting on one partition, each 10 s pass) is moved to `-p iris-hi,iris` (same nodes; iris-hi 4 GPUs / user, never preempted; iris 20 / user, PreemptMode REQUEUE: trains warm-restart from their last checkpoint, evals rerun). v2's iris-hi room accounting removed. Lock file (one loop). New `scripts/gpu_cap.sbatch`: the loop now runs as CPU-only batch job 18593806 (iris-hi, 7 days) instead of under nohup in interactive 18586922 (would have ended 11-20 ~09:00); old loop pid 2784024 stopped. Tested: scontrol update of a held job to iris-hi,iris works; squeue shows "iris-hi,iris".
+- [2026-11-19 17:20] mt100cv r0 at its task-64 w (18587720, no task-64 demos), t64_cont100: **226/300 = 75.3%** (base 60.7; task-64-only t64b50cv 38.7).
+- [2026-11-19 19:00] Status. cap700 (r5, push 0.99, 330 val, 700-step cap) 87.9%, 85.5% by step 520 (r5 at 520: 87.6): only 8 of 330 episodes succeed after 520, so the late failures are not runs that only lack time. Mid-task collection CM done (50 eps, 64% success); label 18589882 held behind the cap. rs6 train done, check / eval held. nd900 / ndb50 trains at step 3200 / 5000. fresh_sweep libero_10 running, goal / spatial waiting for GPUs (iris5-7 full on both partitions), object held. b100 r2 eval 18571091 was preempted twice and the second time ended PREEMPTED without a requeue: resubmitted as 18596273 (iris-hi,iris; second in the gpu_cap priority file). b50v900 / b100s1 held.
+- [2026-11-19 22:45] Results. **nd900 (900-rollout r0 without demos) 81.2%** (330 val, push 0.99, w 8.32) vs 75.5 with demos (w 9.26), base 52.4: moka AG does not need its demos. **rs6 80.3%** vs r6 77.3 (round-to-round draw noise ~3 pts). **b100 r2 69.7%** (r0 79.7, r1 53.0). Fresh-layout sweep of base pi0.5 (20 per task): libero_10 94 (moka = task 8, 75), goal 98, spatial 98, object 99; no other trained task is in 50-80%. b100 r2 ceval 18571092 preempted and ended PREEMPTED (second such case on iris-hi,iris): resubmitted 18598881, first in the priority file. Running: ndb50 eval / ceval, mid train, b50v900 train, b100s1 train.
+- [2026-11-19 23:10] Karen: "resume the multi task runs without task 64 demos". (mt100cv never had task-64 demos: --demos = moka's 29; libero_90 has none in the table.) Note: mt100cv r0 at the chain's combined w (15.5) scored 77.3% on t64_cont100 (18552648) vs 75.3% at the task-64 w (11.2), so the per-task calibration was not what helped; the chain keeps its one combined check.
+  - mt100cv round 1 (train 18581016 done; collections 66% moka / 80% task 64): check rerun 18598984 (2 h; the partial results.json of 18581017 moved to results_partial_18581017.json), evals 18598985 (val 330) / 86 (moka cont) / 87 (t64 cont).
+  - Rounds 2-10: new feeder host 18598996 (`FEED_DIR=logs/feeders_mt`, mt100cv.env = ag_mt_chain.sh's FEED_ENV + SINCE=2026-11-19T22:50 + CHECK_TIME=2:00:00 + FEED_MAX=17; resumes from the hand-written "round 1 submitted" block in ag_rounds_feed_mt100cv.log).
+  - Code: ag_rounds.sh CHECK_TIME (default 1:00:00); ag_rounds_feed.sh counts only iris-QOS jobs (partition list contains iris: MaxSubmitPU 25; iris-hi has none) and FEED_MAX (default 19); critic_tests_submit.sh ARMS (default "mtbv mtbvd").
+  - mtbv (big shared V, no task-64 demos): `SUBMIT=1 PARTS=bigv ARMS=mtbv`: collections 18599004-07, label 18599009, train 18599010, checks 18599011 / 18599018, evals 18599017 / 19 / 20 (8-11 by hand on iris-hi after the iris submit limit). mtbvd not submitted.
+  - iris QOS submit limit (25) was full (jobs on iris-hi,iris count too): every held iris job moved to iris-hi (gpu_cap adds iris back on release). Likely why 18571091 / 18571092 ended PREEMPTED: the requeue could not be accepted at the limit (unconfirmed).
+  - gpu_cap priority line 2: agr_mt100cv_.*|t64_base|bigv_label|agr_mtbv_.*
+- [2026-11-20 01:25] **ndb50 (b50cv r0 without demos): val 330 72.7%, moka cont 60.7%** vs with demos 44.8 / 51.0 (same labels, seed 0, push 0.99: w 8.93 vs 10.48), base 52.4. With nd900 (81.2 vs 75.5): the 29 moka demos hurt residual AG, most at 50 rollouts (where they are about half the positive frames). Every chain trains with --demos; not changed (needs Karen's call). b100 r2 moka cont 74.7. mt100cv r1 check 18598984 done (w 13.1), eval / cevals running or granted; round 2 submitted by the feeder 00:29 (18600763-70). t64_base D 62/100 (base). Partitions: 4 GPU jobs on iris-hi (its 4-GPU user limit), 2 granted jobs pending on iris-hi,iris for lack of a free GPU on iris5-7 (iris1-4 small/old GPUs, iris8-10 bad hardware, hgx full).
+- [2026-11-20 07:40] **iris7 hung from ~02:20** (GPU jobs silent, unkillable: "JOB NOT ENDING WITH SIGNALS"). Lost / damaged: mt100cv r2 collections 18600763/64 (TIMEOUT, feeder stopped), t64_base F 18599007 (TIMEOUT), mid check 18589884 (TIMEOUT), t64_base E 18599006 (18/100 client errors), mt100cv r1 val eval 18598985 (280/330 client errors, counted as failures: 4.5% is not a result). Stuck jobs requeued-held (b100s1 train 18593303, b50cv eval / ceval 18581090/91, mt100cv r1 t64 ceval 18598987 at 207/300). iris7 added to every pending job's exclude and to the active scripts' default excludes (ag_rounds / ag_mt_chain / ag_budget_chain / critic / demo / plateau submit scripts, pi05_tag_adarms.sbatch, libero_eval.sbatch); remove once iris7 is fixed. Rebuilt: mid check 18604917 -> eval 18604923; t64_base F 18604924 (4 h), E 18604936; bigv_label 18604937 (train 18599010 re-pointed); mt100cv r1 val eval 18604938; mt100cv round 2 cancelled and re-fed (host 18604928, COLLECT_TIME 3 h, SINCE 07:28:08). Scan of all evals from the last 40 h: no other client errors.
+- mt100cv **round 1 dropped** (no errors, iris5 / iris6): moka cont 33.3% (r0 63.7), task-64 cont 31.4% at 207/300 (r0 77.3); steady across the run. w 13.1, contrast curve like r0's, train loss normal. Same pattern as b100 r1 (79.7 -> 53.0).
+- [2026-11-20 08:10] mt100cv r1 drop investigated offline: reports/2026-11-20-mt-r1-drop/report.md. Real (iris5/6, no errors); failures stall at the second stage and time out; labels / V / calibration / training / serving normal; dips at r1 in every 100-base + 100-AG chain (b100, b100iql, mt100cv), not in the 900 chain (75.5 -> 79.1). Leading (unproven) explanation: 50% of round-1 data comes from the guided r0 policy, not v_ref. Proposed: seed test (queued), base-oversampled r1 retrain, r1 push sweep.
+- [2026-11-20 08:40] Karen: "run the base-oversampled retrain and the push sweep". `scripts/mt_r1_tests_submit.sh` (logs/mt_r1_tests.log): overs = mt100cv r1 retrained with its 100 base episodes repeated 9x (--oversample-episodes tables/mt_agr_mt100cv_r1/rebal/base_round1.txt --oversample-share 0.88: base 90.8% of rollout frames, as the 900 chain's 90.4%), check on the r1 table, evals moka val 330 / moka cont / t64 cont at push 0.99; sweep = existing r1 at push 0.3 / 0.6 on moka_cont100 and t64_cont100 starts_rep0.csv (100 each; moka rep0 written today = first start per layout, as t64's). Priority line 1.
+- [2026-11-20 08:55] Correction to the mt r1 report: the 900 chain reached 42% guided frames by r7 (10/24/34/42% at r1/r3/r5/r7) without a drop, so the guided share alone does not explain the small chains' r1 drop; remaining differences: one-step jump from one policy, 100 vs 900 base episodes, single seeds.
+- [2026-11-20 09:00] Session end: docs/CURRENT.md overwritten (state, queue, open questions).
+- [2026-11-20 09:00] Status: none of the r1-drop tests has started (overs, sweep, b100s1, b100cv / b50cv r1 evals). iris5 8/8 and iris6 7/8 GPUs allocated, iris7 draining; all 6 gpu_cap slots hold released jobs waiting for a GPU. b100s1 train 18593303 has steps 1000-3000 from its first run (the iris7 run 01:42-07:24 added nothing) and resumes at 3000. Fixed exclusions (our choice): 18598987 / 18593303 / 18581090 / 18581091 still allowed iris7, and the last three also excluded iris5 (left over from the 11-17 A40 check-failure exclusion, which applies to contrast checks only). All four now `iris[1-4,7-10],iris-hgx-[1-2],iris-hp-z8`. gpu_cap host 18593806 runs on iris7 (CPU only, still updating at 08:53); if iris7 is rebooted it must be resubmitted (`sbatch scripts/gpu_cap.sbatch`).
+- [2026-11-20 09:10] 18598987 / 18593303 / 18581090 / 18581091 were "requeued in held state" (priority 0, the 07:24 requeue off iris7), but gpu_cap counted them as granted, so 4 of its 6 slots were blocked and the priority-1 sweep could not be released. Released by hand (`scontrol release`); all pending with normal priority now. After a `requeuehold`, release the job or gpu_cap stalls.
+- [2026-11-20 09:55] b100iql r1 moka cont (18576952, 300, no errors) **53.0%** vs r0 66.0 (val 63.9 -> 55.5): the r1 dip holds on fresh layouts too. Started: b50cv r1 val eval 18581090 (iris5), mt100cv r1 t64 ceval 18598987 (iris6, 77/239 = 32.2% so far), mtos train 18605557 (iris6). Next released: b100s1 train, b50cv r1 ceval, first mtsweep job.
+- [2026-11-20 10:15] Karen: focus GPUs on the round-1 drop, move b200cv r1 up. gpu_cap.sh: new pause file `logs/.gpu_cap_pause` (regex per line, job name or id; matching held jobs never released; re-read every pass). Paused: mtbv (t64_base, bigv_label, agr_mtbv_*), agr_mid_* (r6 mid-task), agr_b50v900_*, mt100cv round 2 (18604941-48). Priority now: (1) mtsweep / agr_mtos, (2) b100s1 seed test, (3) b100cv / b50cv / mt100cv r1 evals, (4) b200cv r1 (200 base episodes: between 100 and 900). Old priority file in .gpu_cap_priority.bak.1000. Old loop 18593806 (on iris7) cancelled; new host 18606407 (gpu_cap.sbatch now excludes iris7; host also given iris1-4, both partitions, 1-day limit so backfill can place it).
+- [2026-11-20 11:30] Mentor session: committed Karen's working tree (all work since 20e4340: scripts, 15 report folders, site pages; nothing was pushed since Nov 12) and pushed. New `reports/2026-11-20-plateau-and-matched-budget/` (every eval since Nov 13 with paired CIs; matched-budget per-state AG r5 vs DSRL; highlights charts). `docs/findings.md`: DSRL s0 "1800 episodes" corrected to 1,357 own episodes; new section "Plateau, distillation, noisy judge"; eval-repeatability trap (72-75% per-trial agreement between re-evals). Site: new page week-10-nov20/ (hub card), published to the bucket.

@@ -1,0 +1,120 @@
+{
+  "pot_detector": {
+    "heldout_episode_frame_acc": 0.9780968103295796,
+    "frame_acc_pots": 0.9434882386689616,
+    "end_acc_failures": 0.9298245614035088,
+    "end_confusion": {
+      "0.0": {
+        "0": 9,
+        "1": 4
+      },
+      "1.0": {
+        "0": 0,
+        "1": 44
+      }
+    },
+    "vs_sim_types": {
+      "lost_pot": {
+        "knocked_over": 2,
+        "near_miss": 0,
+        "slow": 0,
+        "stalled_earlier": 1,
+        "stuck_placing_pot2": 0,
+        "stuck_pot1": 0,
+        "stuck_pot2": 1
+      },
+      "no_pot": {
+        "knocked_over": 2,
+        "near_miss": 0,
+        "slow": 1,
+        "stalled_earlier": 1,
+        "stuck_placing_pot2": 0,
+        "stuck_pot1": 5,
+        "stuck_pot2": 0
+      },
+      "one_pot": {
+        "knocked_over": 3,
+        "near_miss": 7,
+        "slow": 6,
+        "stalled_earlier": 9,
+        "stuck_placing_pot2": 9,
+        "stuck_pot1": 0,
+        "stuck_pot2": 10
+      }
+    }
+  },
+  "counts": {
+    "base": {
+      "lost_pot": 18,
+      "no_pot": 26,
+      "one_pot": 113,
+      "success": 173
+    },
+    "residual": {
+      "lost_pot": 4,
+      "no_pot": 2,
+      "one_pot": 75,
+      "success": 249
+    }
+  },
+  "transitions": {
+    "lost_pot": {
+      "lost_pot": 0,
+      "no_pot": 1,
+      "one_pot": 2,
+      "success": 1
+    },
+    "no_pot": {
+      "lost_pot": 0,
+      "no_pot": 0,
+      "one_pot": 1,
+      "success": 1
+    },
+    "one_pot": {
+      "lost_pot": 7,
+      "no_pot": 7,
+      "one_pot": 26,
+      "success": 35
+    },
+    "success": {
+      "lost_pot": 11,
+      "no_pot": 18,
+      "one_pot": 84,
+      "success": 136
+    }
+  },
+  "fixed_by_base_type": {
+    "one_pot": 84,
+    "no_pot": 18,
+    "lost_pot": 11
+  },
+  "broken_into_type": {
+    "one_pot": 35,
+    "no_pot": 1,
+    "lost_pot": 1
+  },
+  "lengths": {
+    "base": {
+      "success_steps_mean": 416.5549132947977,
+      "success_steps_median": 409.0,
+      "t_first_pot_median": 208.0,
+      "t_two_pots_median_successes": 434.0,
+      "t_drop_median_failures": 288.0
+    },
+    "residual": {
+      "success_steps_mean": 402.4738955823293,
+      "success_steps_median": 397.0,
+      "t_first_pot_median": 192.0,
+      "t_two_pots_median_successes": 400.0,
+      "t_drop_median_failures": 316.0
+    },
+    "paired_both_succeed": {
+      "n": 136,
+      "residual_minus_base_steps": -12.286764705882353,
+      "ci95": [
+        -20.58823529411765,
+        -3.874264705882364
+      ]
+    }
+  }
+}

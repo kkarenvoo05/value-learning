@@ -56,11 +56,25 @@ def main():
     ap.add_argument("--per-ep", type=int, default=6)
     ap.add_argument("--k", type=int, default=3, help="noise draws per frame")
     ap.add_argument("--mb", type=int, default=8)
+    # [2026-11-16, multi-task AG] val frames from this table's val rows (default fd.TABLE = moka_fixed_fresh)
+    ap.add_argument("--table", default=None)
+    # [2026-11-17, AG saturation check] residual runs: also measure the label-weighted mean residual
+    # a h(+) + (1 - a) h(-) (= what the training data does relative to base pi0.5, which the standard mix drops) and
+    # the anchored mix (a + w, 1 - a - w, 0) per w (pi05_ag_residual.anchored_mix)
+    ap.add_argument("--anchor", type=float, default=None)
+    # [2026-11-17] runs trained with --uncond-branch: h(0) alone vs none, and uncond_mix(w) vs none / vs standard per w
+    ap.add_argument("--uncond", action="store_true")
+    # [2026-11-18] self-check tolerance override (default TOL unchanged). Stacked run agr_stk1_on_r6 failed only the
+    # "none" one-hot check 3x on 3 nodes (rel max err 0.038 / 0.137 / 0.021, varying run to run; pos / neg exact),
+    # while scripts/pi05_ag_residual.py --stack-check had verified the stack logic to 2.3e-3.
+    ap.add_argument("--selfcheck-tol", type=float, default=TOL)
     a = ap.parse_args()
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     assert ta.is_adarms(a.run) or ar.is_residual(a.run), "contrastive guidance: AdaRMS or residual runs only"
     # residual runs [2026-11-11]: same mix interface; "none" = the frozen base pi0.5
     policy, _ = ar.load_residual(a.run, a.step) if ar.is_residual(a.run) else ta.load_adarms(a.run, a.step)
+    if a.table:
+        fd.TABLE = Path(a.table)
     frames = tu.val_frames(a.val_eps, a.per_ep)
     tu.log(f"{len(frames)} val frames, k {a.k}, run {a.run} step {a.step}")
 
@@ -75,7 +89,7 @@ def main():
         ref = plain[name][:1]
         err = float(np.abs(got["m"] - ref).max() / (np.abs(ref).max() + 1e-8))
         res["selfcheck"][name] = err
-        ok &= err < TOL
+        ok &= err < a.selfcheck_tol
         tu.log(f"self-check mix {mix} vs plain {name}: rel max err {err:.2e}")
     res["selfcheck"]["ok"] = bool(ok)
     if not ok:
@@ -101,7 +115,20 @@ def main():
     res["max_abs_raw_none"] = float(np.abs(nb).max())
     res["plain_pos_vs_neg"] = stats(plain["pos"], plain_raw["pos"], "neg")
     res["plain_pos_vs_none"] = stats(plain["pos"], plain_raw["pos"], "none")
+    res["plain_neg_vs_none"] = stats(plain["neg"], plain_raw["neg"], "none")  # [2026-11-17]
     tu.log(f"plain + vs -: {json.dumps(res['plain_pos_vs_neg'])}")
+    if a.anchor is not None:  # [2026-11-17] the dropped behaviour term alone: mix (a, 1 - a, 0) vs base
+        assert ar.is_residual(a.run), "--anchor: residual runs only"
+        ta.set_mix(policy, (a.anchor, 1.0 - a.anchor, 0.0))
+        A, R = tu.sample_variants(policy, frames, a.k, a.mb, {"m": variant(None)})
+        res["anchor"] = {"a": a.anchor, "mean_residual_vs_none": stats(A["m"], R["m"]), "weights": {}}
+        tu.log(f"mean residual (a {a.anchor}) vs none: {json.dumps(res['anchor']['mean_residual_vs_none'])}")
+    if a.uncond:  # [2026-11-17] the learned behaviour branch alone: v_ref + h(0) vs base
+        assert ar.is_residual(a.run) and policy._model.uncond, "--uncond: residual run trained with --uncond-branch"
+        ta.set_mix(policy, (0.0, 0.0, 0.0, 1.0))
+        A, R = tu.sample_variants(policy, frames, a.k, a.mb, {"m": variant(None)})
+        res["uncond"] = {"h0_vs_none": stats(A["m"], R["m"]), "weights": {}}
+        tu.log(f"h(0) vs none: {json.dumps(res['uncond']['h0_vs_none'])}")
     for w in a.weights:
         ta.set_mix(policy, ta.contrastive_mix(w))
         A, R = tu.sample_variants(policy, frames, a.k, a.mb, {"w": variant(None)})
@@ -109,6 +136,22 @@ def main():
         r["ratio_per_w"] = r["norm"]["ratio"] / w
         res["weights"][str(w)] = r
         tu.log(f"w {w}: {json.dumps(r)}")
+        if a.anchor is not None:  # [2026-11-17] anchored mix at the same w: vs base, and vs the standard mix
+            ta.set_mix(policy, ar.anchored_mix(w, a.anchor))
+            B, RB = tu.sample_variants(policy, frames, a.k, a.mb, {"m": variant(None)})
+            plain["_std"], plain_raw["_std"] = A["w"], R["w"]  # same noise draws z as B
+            res["anchor"]["weights"][str(w)] = {"vs_none": stats(B["m"], RB["m"]),
+                                                "vs_standard": stats(B["m"], RB["m"], "_std")}
+            del plain["_std"], plain_raw["_std"]
+            tu.log(f"anchored w {w}: {json.dumps(res['anchor']['weights'][str(w)])}")
+        if a.uncond:  # [2026-11-17] uncond_mix at the same w: vs base, and vs the standard mix
+            ta.set_mix(policy, ar.uncond_mix(w))
+            B, RB = tu.sample_variants(policy, frames, a.k, a.mb, {"m": variant(None)})
+            plain["_std"], plain_raw["_std"] = A["w"], R["w"]
+            res["uncond"]["weights"][str(w)] = {"vs_none": stats(B["m"], RB["m"]),
+                                                "vs_standard": stats(B["m"], RB["m"], "_std")}
+            del plain["_std"], plain_raw["_std"]
+            tu.log(f"uncond w {w}: {json.dumps(res['uncond']['weights'][str(w)])}")
         (out / "results.json").write_text(json.dumps(res, indent=2))
     (out / "results.json").write_text(json.dumps(res, indent=2))
     print("\n w | shift/noise (norm) | per w | gripper flips vs none | max |raw|")

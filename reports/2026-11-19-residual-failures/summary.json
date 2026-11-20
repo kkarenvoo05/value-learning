@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-19",
+  "slug": "residual-failures",
+  "title": "Why more AG data stops helping: the residual failures",
+  "question": "Which failures remain at the ~85% plateau, is their fix in the data, and do labels point at it?",
+  "headline": "Late failures: second pot placed too late 40%, hand stalls low beside the second pot 23%, pot lost/tipped 17%. Recovery from a lost/tipped pot is nearly absent from 1,600 training episodes; late-round negatives are 65-75% successful episodes; base rollouts are 58% of labelled frames.",
+  "late_failure_share": {"lifted_not_placed": 0.40, "low_stall": 0.23, "never_lifted_other": 0.13, "pot_lost": 0.13, "tipped": 0.04, "no_pot": 0.06},
+  "support": {"lost_pot_replaced": "7/62", "tipped_recovered": "0/22", "long_low_stall_escaped": "50/189"},
+  "labels": {"neg_from_success_late_rounds": [0.65, 0.75], "base_frame_share": 0.58, "auc_first_pot": 0.55, "auc_second_grasp": 0.64, "auc_carry": 0.72, "auc_stall": 0.60},
+  "not_covered": ["downweight base / failure-focused labels", "mid-task starts at the second pot and from knocked/tipped pots", "700-step cap diagnostic eval"]
+}
