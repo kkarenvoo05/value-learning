@@ -1,0 +1,150 @@
+<h1>Week 10 · Nov 21 update</h1>
+<div class="sub">Round-1 drop vs training seed, base share, offset G0, push direction. Experiments by Karen; numbers recomputed with paired intervals.</div>
+<style>
+.hl{--hl-fg:var(--foreground,var(--fg));--hl-mut:var(--muted-foreground,var(--fg2));--hl-grid:var(--border,var(--grid,#ddd));
+ --hl-bg:var(--background,var(--bg));--hl-ag:var(--chart-3,#d98a1f);--hl-s0:var(--chart-4,#9b6dd6);--hl-s1:var(--chart-1,#3b7ddd);
+ --hl-t:var(--chart-2,#1aa39a);--hl-ref:var(--muted-foreground,var(--fg3,#8a8984));--hl-bad:var(--destructive,#d9534f);--hl-good:var(--success,#2f9e66)}
+.hl h2{font-size:16px;font-weight:600;margin:26px 0 2px;border:0;padding:0}
+.hl .lede{font-size:13px;color:var(--hl-mut);margin:0 0 8px;line-height:1.5;max-width:760px}
+.hl .ch{width:100%;position:relative}.hl .ch svg{display:block;overflow:visible}
+.hl .lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--hl-mut);margin:4px 0}
+.hl .lg span::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:var(--sw);vertical-align:-1px}
+.hl .lg span.h::before{background:none;border:1.5px solid var(--sw);width:7px;height:7px}
+.hl .lg span.d::before{border-radius:0;height:0;width:14px;border-top:2px dashed var(--sw);background:none;vertical-align:3px}
+.hl ul.n{font-size:13px;line-height:1.5;margin:6px 0 0;padding-left:18px;max-width:780px}.hl ul.n li{margin:3px 0}
+.hl .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}
+.hl .tile{border:1px solid var(--hl-grid);border-radius:10px;padding:9px 12px}
+.hl .tile .v{font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}.hl .tile .l{font-size:12px;color:var(--hl-mut);line-height:1.35}
+.hl svg text{font-family:inherit}.hl .ax text{fill:var(--hl-mut);font-size:11px}.hl .lb{fill:var(--hl-fg);font-size:12px}.hl .lb2{fill:var(--hl-mut);font-size:11px}
+.hl .tip{position:fixed;pointer-events:none;background:var(--popover,var(--surface,#fff));color:var(--popover-foreground,var(--fg));border:1px solid var(--hl-grid);
+ border-radius:8px;padding:6px 9px;font-size:12px;line-height:1.4;max-width:320px;opacity:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.hl .src{font-size:12px;color:var(--hl-mut);margin-top:14px}
+.hl table.t{border-collapse:collapse;font-size:12.5px;margin:8px 0;font-variant-numeric:tabular-nums}.hl table.t td,.hl table.t th{padding:4px 10px 4px 0;border-bottom:1px solid var(--hl-grid);text-align:left}.hl table.t th{color:var(--hl-mut);font-weight:500}
+.hl .g2{display:grid;grid-template-columns:2fr 3fr;gap:18px}.hl .g2.eq{grid-template-columns:1fr 1fr}@media(max-width:620px){.hl .g2,.hl .g2.eq{grid-template-columns:1fr}}
+</style>
+<div class="hl">
+<section data-s="0"><div class="tiles">
+ <div class="tile"><div class="v">53 → 77%</div><div class="l">b100 round 1, training seed 0 vs seed 1 on the same data. Its round-1 drop was seed variance.</div></div>
+ <div class="tile"><div class="v">10–15%</div><div class="l">b50cv round 1 with either seed (round 0: 45–51%). This drop is real.</div></div>
+ <div class="tile"><div class="v">33 → 73%</div><div class="l">mt100cv round 1 on task 64, seed 0 vs seed 1. Seed 1 collapses on moka instead.</div></div>
+ <div class="tile"><div class="v">+12 vs +0.6</div><div class="l">Points gained by picking the best of 8 candidates: ~2 cm end-effector offsets vs π₀.₅ noise samples.</div></div>
+</div></section>
+
+<section data-s="1"><h2>1 · Round-1 drop: seed noise for b100, real for the ~50-base chains</h2>
+<p class="lede">Each chain retrained round 1 with a second training seed on identical data, labels and settings. Held-out success at push 0.99: val = 330 matched trials on 10 fixed start states, fresh = 300 new layouts. Lines join round 0 to each round-1 seed.</p>
+<div class="lg"><span style="--sw:var(--hl-ref)">Round 0</span><span style="--sw:var(--hl-ag)">Round 1, seed 0</span><span style="--sw:var(--hl-s1)">Round 1, seed 1</span><span class="d" style="--sw:var(--hl-ref)">Base π₀.₅</span></div>
+<div class="ch" id="c1"></div>
+<ul class="n">
+ <li>b100 (100 base episodes, the 900-rollout V): seed 1 scores 77.0 / 78.0% against seed 0's 53.0 / 45.3%, within 3 points of round 0. Two retrains on the same data differed by 24–33 points.</li>
+ <li>b50cv (50 base episodes) drops to 10–15% with both seeds; the seeds agree within 2 points. mt100cv (50 moka + 50 task-64 base episodes) drops on moka with both seeds, but seed 1 holds on task 64 (73.3% vs round 0's 77.3%) where seed 0 fell to 33.3%.</li>
+ <li><b>Correction:</b> the "4.5%" quoted on Nov 20 for mt100cv round 1 came from an eval with 280 client-errored episodes counted as failures. The rerun reads 32.1% (305 trials). Fixed in the Nov 20 report and page.</li>
+</ul></section>
+
+<section data-s="2"><h2>2 · Oversampling base episodes rescues the fixed states, not fresh layouts</h2>
+<p class="lede">mt100cv round 1 retrained on the same 100 base episodes, repeated so they make up a larger share of the training frames (seed 0; the hollow marker is seed 1 at the original share).</p>
+<div class="lg"><span style="--sw:var(--hl-ag)">Round 1 at each base share</span><span class="h" style="--sw:var(--hl-s1)">Seed 1, original share</span><span class="d" style="--sw:var(--hl-ref)">Base π₀.₅</span><span style="--sw:var(--hl-ref)">Round 0 (solid line)</span></div>
+<div class="ch" id="c2"></div>
+<ul class="n">
+ <li>At 91% base frames, val returns to round 0 (64.2 vs 65.8%), but fresh moka layouts reach only base level (54.3 vs base 55.0) and task 64 stays well below it (46.0 vs 60.7). At 77%, nothing improves.</li>
+ <li>Karen's reading: the guided share a chain tolerates grows with its distinct base episodes; reweighting 100 of them cannot replace more layouts. Section 1 adds that seed noise is as large as most of these effects, which is why the factorial below uses two seeds.</li>
+</ul></section>
+
+<section data-s="3"><h2>3 · Offset G0: deliberate ~2 cm offsets create choices worth ranking</h2>
+<p class="lede">At 80 branch points (10 val states × 2 base episodes × 4 times), the simulator restores the state and runs 8 candidates 4 times each: the plain π₀.₅ chunk, and the same chunk shifted ~2 cm along ±x, ±y, ±z (or +1 cm in z). Left: success of the candidate that did best on one repeat, scored on the other 3, minus the plain chunk. Right: each fixed direction minus the plain chunk. 95% intervals bootstrap over base episodes.</p>
+<div class="g2"><div class="ch" id="c3a"></div><div><div class="lg"><span style="--sw:var(--hl-ag)">Offset for 1 chunk (5 steps)</span><span style="--sw:var(--hl-s1)">Offset held 4 chunks (20 steps)</span></div><div class="ch" id="c3b"></div></div></div>
+<ul class="n">
+ <li>Picking among offsets beats the plain policy by 12 points in both probes. Picking among π₀.₅'s own noise samples (G0, Nov 4) gave +0.6, because those candidates end ~2 mm apart. The pre-registered gate passes.</li>
+ <li>No single direction helps in both probes. z+ (raising the hand, the hypothesis from the residual-failure analysis) does nothing. z− in the 1-chunk probe is the only interval above 0 and does not replicate. The useful offset depends on the state, so it takes a ranker, not a fixed push.</li>
+ <li>The +12 is an upper bound for a learned critic, since it uses the simulator's own outcome on a held-out repeat. Next per Karen's rule: G1, train Q(s, a) on data with these offsets and test whether it ranks them at held-out branch points.</li>
+</ul></section>
+
+<section data-s="4"><h2>4 · Round 1 does not re-apply round 0's push</h2>
+<p class="lede">The "double push" idea: round-1 data was collected with round 0's push, so round 1 might learn that push and apply it again. Here, each policy's push (guided minus base action, arm motion only) is measured on the same 192 val frames, and two policies' pushes are compared. Cosine per frame: 1 = same direction, 0 = unrelated. β: how much of the second policy's push the first contains. Preliminary: 10 of 17 policies scored so far (rerun of Karen's analysis on the finished ones).</p>
+<div class="lg"><span style="--sw:var(--hl-ref)">Two round-0 policies (reference)</span><span style="--sw:var(--hl-good)">Round 1 that kept val success</span><span style="--sw:var(--hl-bad)">Round 1 that dropped</span></div>
+<div class="g2 eq"><div class="ch" id="c4a"></div><div class="ch" id="c4b"></div></div>
+<ul class="n">
+ <li>The round-1 retrain that dropped hardest (mt100cv seed 0) is the least aligned with its round 0 (per-frame cosine −0.11, β 0.37), the opposite of what double pushing predicts. The 77% and 91% oversampled retrains point the same way as each other (0.31, 0.28) yet one drops and one does not.</li>
+ <li>Two round-0 policies from different chains agree more (0.54–0.58) than any round 1 does with its own round 0. Alignment does not separate the dropping retrains from the others in these 10.</li>
+ <li>In normalised units the gripper holds 50–68% of the push energy, concentrated at grasp and release; Karen scores arm motion separately for that reason.</li>
+</ul></section>
+
+<section data-s="5"><h2>5 · Labels are not the cause; the factorial is running</h2>
+<p class="lede">Label check (Karen, offline): every round-1 table labels base and guided episodes alike.</p>
+<table class="t"><tr><th>chain (round 1)</th><th>drops?</th><th>guided frame share</th><th>positive base / guided</th><th>positives on success, base / guided</th></tr>
+<tr><td>900 chain r7</td><td>no</td><td>42%</td><td>40 / 40%</td><td>0.52 / 0.45</td></tr>
+<tr><td>b100</td><td>seed noise</td><td>47%</td><td>40 / 40%</td><td>0.51 / 0.44</td></tr>
+<tr><td>b50cv</td><td>yes</td><td>49%</td><td>40 / 40%</td><td>0.50 / 0.45</td></tr>
+<tr><td>mt100cv moka</td><td>yes</td><td>49%</td><td>40 / 40%</td><td>0.52 / 0.48</td></tr></table>
+<ul class="n">
+ <li>Round-1 factorial (40 jobs, 2 seeds, no demos, all from the 900 chain's data and frozen V): A = 100 base + 100 from one guiding policy, B = 100 + 100 from seven, C = 700 + 700, D = 100 base repeated ×7 + 700, plus base-only controls. A, B and C seed-0 training started 13:40 today; about a day of GPU time.</li>
+ <li>Karen's pre-registered rule counts a difference only if both seeds agree in sign and the mean gap is ≥ 10 points on both val and fresh layouts. Section 1 shows why that bar is needed.</li>
+</ul></section>
+
+<section data-s="6"><p class="src">Compiled Nov 21 14:00 PT from <code>/iris/u/ankile/karenvo/libero/runs/</code>. Paired intervals bootstrap over trials (5,000 draws). mt100cv seed-1 fresh-layout evals are partial (moka 227/300, task 64 296/300; both waiting for a server since 10:40). Push direction: <code>scripts/push_direction_analyze.py</code> on the 10 finished policies.</p></section>
+<div class="tip" id="hltip"></div>
+</div>
+<script>
+(()=>{
+const J={"r1": {"b100|val": {"r0": {"p": 79.7, "n": 330, "vr0": null, "vs0": null}, "s0": {"p": 53.0, "n": 330, "vr0": [-26.7, -33.6, -19.4, 330], "vs0": null}, "s1": {"p": 77.0, "n": 330, "vr0": [-2.7, -8.8, 3.3, 330], "vs0": [23.9, 17.6, 30.6, 330]}}, "b100|moka": {"r0": {"p": 77.3, "n": 300, "vr0": null, "vs0": null}, "s0": {"p": 45.3, "n": 300, "vr0": [-32.0, -38.3, -25.0, 300], "vs0": null}, "s1": {"p": 78.0, "n": 300, "vr0": [0.7, -5.7, 7.0, 300], "vs0": [32.7, 25.3, 40.0, 300]}}, "b100cv|val": {"r0": {"p": 76.1, "n": 330, "vr0": null, "vs0": null}, "s0": {"p": 67.6, "n": 330, "vr0": [-8.5, -14.5, -2.4, 330], "vs0": null}}, "b100cv|moka": {"r0": {"p": 79.3, "n": 300, "vr0": null, "vs0": null}, "s0": {"p": 69.0, "n": 300, "vr0": [-10.3, -17.3, -3.3, 300], "vs0": null}}, "b50cv|val": {"r0": {"p": 44.8, "n": 330, "vr0": null, "vs0": null}, "s0": {"p": 11.5, "n": 330, "vr0": [-33.3, -40.0, -26.7, 330], "vs0": null}, "s1": {"p": 10.0, "n": 330, "vr0": [-34.8, -41.2, -28.5, 330], "vs0": [-1.5, -5.8, 2.7, 330]}}, "b50cv|moka": {"r0": {"p": 51.0, "n": 300, "vr0": null, "vs0": null}, "s0": {"p": 15.3, "n": 300, "vr0": [-35.7, -42.7, -29.0, 300], "vs0": null}, "s1": {"p": 14.7, "n": 300, "vr0": [-36.3, -43.3, -29.7, 300], "vs0": [-0.7, -6.0, 4.7, 300]}}, "mt100cv|val": {"r0": {"p": 65.8, "n": 330, "vr0": null, "vs0": null}, "s0": {"p": 32.1, "n": 305, "vr0": [-32.8, -40.0, -25.2, 305], "vs0": null}, "s1": {"p": 14.5, "n": 330, "vr0": [-51.2, -57.6, -44.8, 330], "vs0": [-17.7, -24.3, -11.1, 305]}, "os91": {"p": 64.2, "n": 318, "vr0": [-1.3, -7.9, 5.7, 318], "vs0": null}, "os77": {"p": 23.6, "n": 330, "vr0": [-42.1, -48.8, -35.8, 330], "vs0": null}}, "mt100cv|moka": {"r0": {"p": 63.7, "n": 300, "vr0": null, "vs0": null}, "s0": {"p": 33.3, "n": 300, "vr0": [-30.3, -37.7, -22.7, 300], "vs0": null}, "s1": {"p": 12.3, "n": 227, "vr0": [-55.1, -62.1, -47.6, 227], "vs0": [-22.0, -30.0, -13.7, 227]}, "os91": {"p": 54.3, "n": 300, "vr0": [-9.3, -17.3, -1.3, 300], "vs0": null}, "os77": {"p": 30.8, "n": 279, "vr0": [-33.7, -40.9, -26.2, 279], "vs0": null}}, "mt100cv|t64": {"r0": {"p": 77.3, "n": 300, "vr0": null, "vs0": null}, "s0": {"p": 33.3, "n": 300, "vr0": [-44.0, -50.7, -37.3, 300], "vs0": null}, "s1": {"p": 73.3, "n": 296, "vr0": [-4.1, -10.1, 1.7, 296], "vs0": [40.5, 32.8, 47.6, 296]}, "os91": {"p": 46.0, "n": 300, "vr0": [-31.3, -38.7, -24.0, 300], "vs0": null}, "os77": {"p": 43.0, "n": 300, "vr0": [-34.3, -41.7, -27.3, 300], "vs0": null}}}, "base": {"val": 52.4, "moka": 55.0, "t64": 60.7}, "off": {"h1": {"x+": [0.053125, -0.003125, 0.11875, 2.0704064571792937], "x-": [-0.053125, -0.14375, 0.03125, 2.199110518249261], "y+": [-0.009375, -0.0875, 0.071875, 2.3004855835823568], "y-": [0.096875, -0.0125, 0.19375, 2.268606592874635], "z+": [-0.01875, -0.13125, 0.09375, 2.562392828176568], "z-": [0.10625, 0.034375, 0.184375, 2.1209397226626896], "z+0.5": [0.00625, -0.05625, 0.071875, 1.3141005735207523]}, "h4": {"x+": [0.009375, -0.096875, 0.11882812499999956, 2.771419226311668], "x-": [-0.046875, -0.125, 0.03125, 2.945052917898883], "y+": [0.01875, -0.046875, 0.078125, 2.8714050606548267], "y-": [0.046875, -0.046875, 0.140625, 2.9451678624875726], "z+": [0.025, -0.075, 0.115625, 3.1403200792919006], "z-": [0.015625, -0.071875, 0.10625, 2.985233171285895], "z+0.5": [0.0, -0.065625, 0.0625, 1.7286410413526565]}}, "gate": {"g0": [0.006, -0.028, 0.042], "h1": [0.125, 0.056, 0.198], "h4": [0.121, 0.049, 0.193]}, "pp": {"b100cv_r1|b100cv_r0": {"cos": [0.06136951968073845, -0.039829004928469657, 0.15667620822787273], "beta": [0.593593955039978, 0.21420439183712006, 0.8402820378541945], "cosw": [0.5259646773338318, 0.22045286931097507, 0.6855084255337714]}, "mt_r1_s0|mt_r0": {"cos": [-0.10891572386026382, -0.18538372963666916, -0.032678662147372965], "beta": [0.37427711486816406, 0.11670386008918286, 0.5428751513361931], "cosw": [0.4317799210548401, 0.13095934838056564, 0.6168790966272353]}, "mtos_r1|mt_r0": {"cos": [0.2825852334499359, 0.21873471811413764, 0.3472345300018787], "beta": [0.5574595332145691, 0.4167143054306507, 0.6309149265289307], "cosw": [0.5980108380317688, 0.4072485789656639, 0.7142837181687355]}, "mtos77_r1|mt_r0": {"cos": [0.3089704215526581, 0.25985896959900856, 0.3567410409450531], "beta": [0.5427742600440979, 0.4105485312640667, 0.6335716634988785], "cosw": [0.41222861409187317, 0.22793990969657899, 0.7344695255160331]}, "mt_r0|900_r0": {"cos": [0.5421550273895264, 0.4811939008533955, 0.6017034783959389], "beta": [0.67884761095047, 0.48622195348143576, 0.8034515231847763], "cosw": [0.7343748211860657, 0.5140980541706085, 0.8444708362221718]}, "b100cv_r0|900_r0": {"cos": [0.5823410153388977, 0.520265880227089, 0.644511778652668], "beta": [0.8830170631408691, 0.7786200493574142, 0.9510829329490661], "cosw": [0.8184105157852173, 0.672930346429348, 0.8898869514465332]}, "mtos_r1|mt_r1_s0": {"cos": [0.33071330189704895, 0.2708413876593113, 0.38458204492926584], "beta": [0.5732249021530151, 0.39322881773114204, 0.6804504215717315], "cosw": [0.5330298542976379, 0.35158083587884903, 0.656670132279396]}}};
+const NS="http://www.w3.org/2000/svg";
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function tx(p,x,y,s,c,an){const e=el("text",{x,y,class:c||"lb","text-anchor":an||"start"},p);e.textContent=s;return e;}
+const tip=document.getElementById('hltip');
+function bind(e,h){e.addEventListener('mousemove',ev=>{tip.innerHTML=h;tip.style.opacity=1;const r=tip.getBoundingClientRect();let x=ev.clientX+14,y=ev.clientY+14;if(x+r.width>innerWidth-8)x=ev.clientX-r.width-14;if(y+r.height>innerHeight-8)y=ev.clientY-r.height-14;tip.style.left=x+'px';tip.style.top=y+'px';});e.addEventListener('mouseleave',()=>tip.style.opacity=0);}
+const C={ag:"var(--hl-ag)",s1:"var(--hl-s1)",t:"var(--hl-t)",ref:"var(--hl-ref)",bad:"var(--hl-bad)",good:"var(--hl-good)",mut:"var(--hl-mut)"};
+const sg=v=>(v>0?"+":"")+v.toFixed(1);
+const SN={val:"val, 10 fixed states",moka:"moka, fresh layouts",t64:"task 64, fresh layouts"};
+function box(id){const b=document.getElementById(id);b.innerHTML='';return b.clientWidth<60?null:b;}
+function draw1(){const b=box("c1");if(!b)return;const W=b.clientWidth,rh=26,L=Math.min(230,W*.4),R=16;
+ const groups=[["b100","100 base, 900-episode V",["val","moka"]],["b100cv","100 base, chain's own V (seed 1 not run)",["val","moka"]],["b50cv","50 base, chain's own V",["val","moka"]],["mt100cv","50 moka + 50 task-64 base, one policy",["val","moka","t64"]]];
+ let H=6;groups.forEach(g=>H+=24+g[2].length*rh);H+=24;const svg=el("svg",{width:W,height:H},b);const x=v=>L+v/100*(W-L-R);
+ const ax=el("g",{class:"ax"},svg);for(const v of [0,20,40,60,80,100]){el("line",{x1:x(v),x2:x(v),y1:4,y2:H-22,stroke:"var(--hl-grid)"},ax);tx(ax,x(v),H-6,v+"%","","middle");}
+ let y=6;for(const [c,lab,sets] of groups){const t=tx(svg,0,y+16,c,"lb");t.setAttribute("font-weight","600");tx(svg,c.length*8+10,y+16,lab,"lb2");y+=24;
+  for(const s of sets){const r=J.r1[c+"|"+s];const cy=y+rh/2;tx(svg,L-8,cy+4,SN[s],"lb2","end");
+   const bx=x(J.base[s]);el("line",{x1:bx,x2:bx,y1:cy-8,y2:cy+8,stroke:C.ref,"stroke-dasharray":"3 2","stroke-width":1.5},svg);
+   for(const v of ["s0","s1"])if(r[v])el("line",{x1:x(r.r0.p),x2:x(r[v].p),y1:cy+(v=="s0"?-2:2),y2:cy+(v=="s0"?-2:2),stroke:v=="s0"?C.ag:C.s1,"stroke-opacity":.35,"stroke-width":2},svg);
+   for(const [v,col] of [["r0",C.ref],["s0",C.ag],["s1",C.s1]]){const d=r[v];if(!d)continue;
+    el("circle",{cx:x(d.p),cy,r:5,fill:col,stroke:"var(--hl-bg)","stroke-width":1},svg);
+    const h=el("circle",{cx:x(d.p),cy,r:9,fill:"transparent"},svg);
+    let t=`<b>${c} ${v=="r0"?"round 0":"round 1, seed "+v[1]}</b><br>${SN[s]}: ${d.p.toFixed(1)}% on ${d.n} trials`;
+    if(d.vr0)t+=`<br>vs round 0, paired: ${sg(d.vr0[0])} [${sg(d.vr0[1])}, ${sg(d.vr0[2])}]`;if(d.vs0)t+=`<br>vs seed 0, paired: ${sg(d.vs0[0])} [${sg(d.vs0[1])}, ${sg(d.vs0[2])}] on ${d.vs0[3]}`;
+    t+=`<br>base π₀.₅ ${J.base[s].toFixed(1)}%`;bind(h,t);}
+   y+=rh;}}}
+function draw2(){const b=box("c2");if(!b)return;const W=b.clientWidth;const sets=["val","moka","t64"];const n=W>560?3:1;const pw=(W-(n-1)*14)/n;
+ const wrap=document.createElement("div");wrap.style.cssText=`display:grid;grid-template-columns:repeat(${n},1fr);gap:14px`;b.append(wrap);
+ for(const s of sets){const d=document.createElement("div");wrap.append(d);const H=210,Lm=38,Rm=10,T=22,B=30;const svg=el("svg",{width:pw,height:H},d);
+  const r=J.r1["mt100cv|"+s];const xs=[[52,"s0"],[77,"os77"],[91,"os91"]];const x=v=>Lm+(v-45)/(95-45)*(pw-Lm-Rm),y=v=>T+(1-v/90)*(H-T-B);
+  tx(svg,Lm,13,SN[s],"lb");const ax=el("g",{class:"ax"},svg);for(const v of [0,20,40,60,80]){el("line",{x1:Lm,x2:pw-Rm,y1:y(v),y2:y(v),stroke:"var(--hl-grid)"},ax);tx(ax,Lm-5,y(v)+4,v+"%","","end");}
+  for(const [v] of xs)tx(ax,x(v),H-B+15,v+"%","","middle");tx(ax,(Lm+pw-Rm)/2,H-2,"base share of round-1 frames","","middle");
+  el("line",{x1:Lm,x2:pw-Rm,y1:y(J.base[s]),y2:y(J.base[s]),stroke:C.ref,"stroke-dasharray":"4 4"},svg);
+  el("line",{x1:Lm,x2:pw-Rm,y1:y(r.r0.p),y2:y(r.r0.p),stroke:C.ref,"stroke-width":1.5},svg);tx(svg,pw-Rm,y(r.r0.p)-4,"r0 "+r.r0.p.toFixed(1),"lb2","end");
+  el("polyline",{points:xs.map(([v,k])=>x(v)+","+y(r[k].p)).join(" "),fill:"none",stroke:C.ag,"stroke-width":1.8},svg);
+  for(const [v,k] of xs){const d=r[k];el("circle",{cx:x(v),cy:y(d.p),r:4.5,fill:C.ag},svg);tx(svg,x(v)+7,y(d.p)+4,d.p.toFixed(0),"lb2");
+   bind(el("circle",{cx:x(v),cy:y(d.p),r:9,fill:"transparent"},svg),`<b>mt100cv r1, ${v}% base frames</b><br>${SN[s]}: ${d.p.toFixed(1)}% on ${d.n}<br>vs r0 paired ${sg(d.vr0[0])} [${sg(d.vr0[1])}, ${sg(d.vr0[2])}]`);}
+  const q=r.s1;if(q){el("circle",{cx:x(52)-9,cy:y(q.p),r:4,fill:"var(--hl-bg)",stroke:C.s1,"stroke-width":1.6},svg);
+   bind(el("circle",{cx:x(52)-9,cy:y(q.p),r:9,fill:"transparent"},svg),`<b>mt100cv r1 seed 1, ~52% base</b><br>${SN[s]}: ${q.p.toFixed(1)}% on ${q.n}`);}}}
+function forest(id,rows,o){const b=box(id);if(!b)return;const W=b.clientWidth,rh=o.rh||24,L=o.L(W),R=12,top=o.title?22:4;const H=top+rows.length*rh+26;
+ const svg=el("svg",{width:W,height:H},b);if(o.title)tx(svg,0,13,o.title,"lb");const x=v=>L+(v-o.lo)/(o.hi-o.lo)*(W-L-R);
+ const ax=el("g",{class:"ax"},svg);for(const v of o.t){el("line",{x1:x(v),x2:x(v),y1:top,y2:H-22,stroke:v===0?"var(--hl-mut)":"var(--hl-grid)"},ax);tx(ax,x(v),H-6,o.tf(v),"","middle");}
+ rows.forEach((r,i)=>{const y0=top+i*rh,cy=y0+rh/2;if(r.n)tx(svg,L-8,cy+4,r.n,"lb2","end");
+  (r.m||[r]).forEach((m,j,arr)=>{const yy=cy+(arr.length>1?(j-.5)*7:0);const [v,a,c]=m.d;
+   el("line",{x1:x(Math.max(a,o.lo)),x2:x(Math.min(c,o.hi)),y1:yy,y2:yy,stroke:m.c,"stroke-width":1.6},svg);
+   el("circle",{cx:x(v),cy:yy,r:4,fill:m.c},svg);});
+  bind(el("rect",{x:0,y:y0,width:W,height:rh,fill:"transparent"},svg),r.tip);});}
+function draw3(){const G=J.gate,f=v=>(v>0?"+":"")+Math.round(v*100);
+ forest("c3a",[{n:"Noise samples (G0)",d:G.g0,c:C.ref},{n:"Offsets, 1 chunk",d:G.h1,c:C.ag},{n:"Offsets, held 4",d:G.h4,c:C.s1}].map(r=>({...r,tip:`<b>${r.n}</b><br>best-of-8 minus plain chunk: ${f(r.d[0])} points [${f(r.d[1])}, ${f(r.d[2])}]`})),
+  {title:"Best of 8 vs plain chunk",lo:-.05,hi:.22,t:[0,.1,.2],tf:v=>f(v),L:W=>Math.min(130,W*.42),rh:30});
+ const labs=["x+","x-","y+","y-","z+","z-","z+0.5"],nm={"x+":"x +2 cm","x-":"x −2 cm","y+":"y +2 cm","y-":"y −2 cm","z+":"z +2 cm (up)","z-":"z −2 cm (down)","z+0.5":"z +1 cm"};
+ forest("c3b",labs.map(l=>({n:nm[l],m:[{d:J.off.h1[l],c:C.ag},{d:J.off.h4[l],c:C.s1}],tip:`<b>${nm[l]}</b> minus plain chunk<br>1 chunk: ${f(J.off.h1[l][0])} [${f(J.off.h1[l][1])}, ${f(J.off.h1[l][2])}], moved ${J.off.h1[l][3].toFixed(1)} cm<br>held 4: ${f(J.off.h4[l][0])} [${f(J.off.h4[l][1])}, ${f(J.off.h4[l][2])}], moved ${J.off.h4[l][3].toFixed(1)} cm`})),
+  {title:"Each direction vs plain chunk (points)",lo:-.16,hi:.21,t:[-.1,0,.1,.2],tf:v=>f(v),L:W=>Math.min(110,W*.32),rh:26});}
+function draw4(){const P=J.pp;const g=document.getElementById("c4a").parentElement;const two=getComputedStyle(g).gridTemplateColumns.split(" ").length>1;const rows=[["b100cv_r0|900_r0","b100cv r0 vs 900 r0",C.ref,""],["mt_r0|900_r0","mt100cv r0 vs 900 r0",C.ref,""],
+ ["mtos_r1|mt_r0","mt r1, 91% base vs r0",C.good,"val 64.2 (r0 65.8)"],["b100cv_r1|b100cv_r0","b100cv r1 vs r0",C.bad,"val 67.6 (r0 76.1)"],["mtos77_r1|mt_r0","mt r1, 77% base vs r0",C.bad,"val 23.6"],["mt_r1_s0|mt_r0","mt r1 seed 0 vs r0",C.bad,"val 32.1"]];
+ const mk=(key,title,lo,hi,t)=>forest(key=="cos"?"c4a":"c4b",rows.map(([k,n,c,ev])=>({n,d:P[k][key],c,tip:`<b>${n}</b>${ev?"<br>"+ev:""}<br>cosine per frame ${P[k].cos[0].toFixed(2)} [${P[k].cos[1].toFixed(2)}, ${P[k].cos[2].toFixed(2)}]<br>β ${P[k].beta[0].toFixed(2)} [${P[k].beta[1].toFixed(2)}, ${P[k].beta[2].toFixed(2)}]<br>weighted cosine ${P[k].cosw[0].toFixed(2)}`})),
+  {title,lo,hi,t,tf:v=>v.toFixed(1),L:W=>key=="cos"||!two?Math.min(170,W*.5):10,rh:26});
+ mk("cos","Cosine per frame (arm motion)",-.25,.7,[-.2,0,.2,.4,.6]);
+ mk("beta","β: share of the second push contained",0,1,[0,.25,.5,.75,1]);
+ if(two)document.querySelectorAll("#c4b text.lb2").forEach(t=>t.remove());}
+function all(){draw1();draw2();draw3();draw4();}
+all();let to;addEventListener('resize',()=>{clearTimeout(to);to=setTimeout(all,120)});
+})();
+</script>

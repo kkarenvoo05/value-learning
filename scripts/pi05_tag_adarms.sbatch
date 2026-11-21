@@ -54,6 +54,15 @@ train)
     fi
     .venv/bin/python $PY ${TAG_SCALE:+--tag-scale $TAG_SCALE} $ARGS $RESUME --out $OUT
     ;;
+pushdir)  # [2026-11-21] PUSH_LIST=<file of "name run check" lines>, OUT=<dir>: one process per run (frees memory),
+    # scripts/pi05_push_direction.py -> <OUT>/<name>/push.npz; runs already done are skipped (requeue-safe)
+    : "${PUSH_LIST:?set PUSH_LIST}" "${OUT:?set OUT}"
+    while read -r name run chk; do
+        [ -z "$name" ] || [ "${name:0:1}" = "#" ] && continue
+        [ -e "$OUT/$name/push.npz" ] && { echo "skip $name (done)"; continue; }
+        .venv/bin/python $VL/scripts/pi05_push_direction.py --out $OUT/$name --run $run --check $chk ${ARGS:-}
+    done < "$PUSH_LIST"
+    ;;
 tagusage)  # ARGS="--run <adarms run> --labels <parquet> --steps 1000 3000 final --arms tagged"
     OUT=${OUT:-$ROOT/runs/tag_usage_adarms_${SLURM_JOB_ID}}
     .venv/bin/python $VL/scripts/libero_tag_usage_adarms.py --out $OUT ${ARGS:-}

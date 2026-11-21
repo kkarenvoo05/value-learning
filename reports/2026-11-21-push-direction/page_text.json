@@ -1,0 +1,31 @@
+{
+ "lede": "PENDING",
+ "reading": [
+  "PENDING"
+ ],
+ "method": [
+  "Frames: 24 of the 120 base val episodes (never trained on, the same episodes in every moka table) x 8 evenly spaced steps = 192 states; 2 noise draws per state. Every policy sees exactly the same states and the same noise.",
+  "Push: guided chunk minus base chunk (a_w - a_none) for the 5 executed steps x 7 action dims, at each policy's eval guidance w (push target 0.99 from its own contrast check, as in the evals). a_none comes from the frozen base pi0.5 and is bit-identical across all policies (checked: max difference 0).",
+  "Check: shift / noise (RMS push over RMS difference between two noise draws of the base) is 0.89-1.25 per policy, close to the 0.99 target, so the pushes are the ones the evals ran with.",
+  "Arm vs gripper: in normalised units the gripper holds 50-68% of the push energy, and the 10% largest frames hold 73-85% of it (grasp and release). Direction scores therefore use the arm (xyz + rotation, 30 numbers); the gripper and all 35 numbers are in the tooltips.",
+  "cos per frame: mean over frames of the cosine between the two pushes. cos weighted: one cosine over all frames (sum of dot products over the root of the summed squared norms), so large pushes count more. β = sum of dot products / sum of the second push's squared norm: the least-squares share of the second push inside the first.",
+  "Intervals: 95% bootstrap over the 24 episodes (frames of one episode are not independent).",
+  "cm: summed raw xyz action over the 5 steps x 0.75 cm (G0 offset calibration, open loop). Approximate; for scale only.",
+  "Baselines for 'how alike can two pushes be': two retrains on the same round-1 data (seed rows), and different chains' round 0 vs the 900 chain's round 0."
+ ],
+ "evals": {
+  "900_r1|900_r0": "75.5 → 79.1",
+  "b100_r1_s0|b100_r0": "79.7 → 53.0",
+  "b100_r1_s1|b100_r0": "79.7 → 77.0",
+  "b100cv_r1|b100cv_r0": "76.1 → 67.8",
+  "b50cv_r1_s0|b50cv_r0": "44.8 → 11.5",
+  "b50cv_r1_s1|b50cv_r0": "44.8 → 10.3",
+  "mt_r1_s0|mt_r0": "65 → 32",
+  "mt_r1_s1|mt_r0": "65 → 15",
+  "mtos_r1|mt_r0": "65 → 64 (91% base)",
+  "mtos77_r1|mt_r0": "65 → 24 (77% base)",
+  "b100_r1_s1|b100_r1_s0": "53.0 / 77.0",
+  "b50cv_r1_s1|b50cv_r1_s0": "11.5 / 10.3",
+  "mt_r1_s1|mt_r1_s0": "32 / 15"
+ }
+}

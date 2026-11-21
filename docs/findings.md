@@ -72,6 +72,12 @@ interpretations are labelled. Live status is in `docs/CURRENT.md`, chronology in
   noise ×1.5 (+0.026 [−0.014, +0.068]; `runs/steer_v2_scale1p5_libero_10_18329175/analysis`) or ×2.0 (+0.010
   [−0.049, +0.077]; `runs/steer_v2_scale2p0_libero_10_18329176/analysis`), although ×2.0 doubles gripper
   disagreement between candidates (0.10 → 0.22). [`reports/2026-11-04-steer-probe/` for v1]
+- **Structured end-effector offsets do create choices worth ranking** (offset G0, 2026-11-21, sim oracle): picking
+  among the plain chunk and the chunk + ~2 cm along ±x / ±y / ±z (selected on one repeat, scored on the other 3)
+  beats the plain chunk by +12.5 [+5.6, +19.8] points (offset on one chunk) and +12.1 [+4.9, +19.3] (held 4 chunks),
+  vs +0.6 for noise candidates. No single direction helps in both probes (z+, the height hypothesis: −1.9 / +2.5):
+  the useful offset depends on the state. Upper bound for a learned ranker (uses the simulator's held-out outcome);
+  20 base episodes. [`reports/2026-11-20-offset-g0/`]
 
 ### Policy improvement (2026-11-09 to 11-11; same 330 val trials, matched noise seed 1, base 0.524)
 All single training seed; *observations* unless marked. Chronology in `docs/libero_plan.md` log 11-10 to 11-11.
@@ -118,8 +124,15 @@ chronology in the `docs/libero_plan.md` log.
 - **Noisy judge** (25% symmetric, independent outcome flips): AG round 0 +0.6 [−5.5, +6.7]; DSRL −36.7 at 400 and
   −47.9 at 600 episodes (ends below base). *Interpretation:* with a real VLM judge AG is the safer method; a
   realistic, lopsided error model is untested.
-- **Small fixed-budget chains drop at round 1**: b100 79.7 → 53.0 (r2 72.1 / 69.7); two-task mt100cv 65.8 → 4.5 on
-  moka val. Cause open (`reports/2026-11-20-mt-r1-drop/`); these chains all train with demos.
+- **Small fixed-budget chains drop at round 1, for chains with ~50 base episodes per task** (corrected 2026-11-21):
+  b50cv val 44.8 → 11.5 / 10.0 (training seeds 0 / 1), moka cont 51.0 → 15.3 / 14.7; two-task mt100cv moka val
+  65.8 → 32.1 / 14.5 (seed 0 on 305 trials; the first eval logged 280 client errors as failures and read 4.5).
+  b100's drop (79.7 → 53.0) was training-seed variance: seed 1 on the same data scored 77.0 (moka cont 78.0).
+  mt100cv seed 1 on task 64 fresh layouts: 73.3 (296/300) vs seed 0 33.3, r0 77.3, so even a reproduced drop can
+  differ by task within one policy. Labels treat base and guided episodes alike in every chain
+  (`reports/2026-11-21-r1-factorial/`). Cause still open (`reports/2026-11-20-mt-r1-drop/`); these chains all train
+  with demos. *Method trap:* single retrains on the same data vary by up to ~25 points; check `episodes.csv`
+  `error` before reading any eval.
 - **Matched budget, per state**: no val state is solved by one method and unsolved by the other (worst state AG r5
   24/33, DSRL 15–19/33, base 4/33); per-state gaps are 3–5 trials of 33 except one DSRL checkpoint.
 

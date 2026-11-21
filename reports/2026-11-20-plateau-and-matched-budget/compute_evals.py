@@ -2,7 +2,10 @@ import numpy as np, pandas as pd, json, glob
 R="/iris/u/ankile/karenvo/libero/runs/"
 def L(p):
     g=sorted(glob.glob(R+p)); assert len(g)>=1,(p,g)
-    return pd.read_csv(g[-1]+"/episodes.csv",dtype={"goals_end":str}).set_index(["init_state","repeat"])
+    df=pd.read_csv(g[-1]+"/episodes.csv",dtype={"goals_end":str,"error":str})
+    # client-errored episodes are logged as failures by the harness: drop them (2026-11-21 fix; mt_r1 18598985 had 280)
+    if "error" in df: df=df[df.error.isna()]
+    return df.set_index(["init_state","repeat"])
 A={"base":"eval_base_noise1_libero_10_18355478","r0":"eval_ag_residual_vb40_s0_shift099_noise1_libero_10_18438187",
  **{f"r{i}":f"eval_agr_r{i}_s0_shift099_noise1_libero_10_*" for i in range(1,8)},
  "r5n2":"eval_agr_r5_s0_shift099_noise2_*","r7n2":"eval_agr_r7_s0_shift099_noise2_*","r5cap700":"eval_agr_r5_s0_shift099_noise1_cap700_*",
@@ -15,8 +18,8 @@ A={"base":"eval_base_noise1_libero_10_18355478","r0":"eval_ag_residual_vb40_s0_s
  "iqlr7":"eval_agr_iqlr7_*","r7vb15":"eval_agr_r7_vb15_*","r7vb10":"eval_agr_r7_vb10_*",
  "nd900":"eval_agr_nd900_r0_*","ndb50":"eval_agr_ndb50_r0_*",
  "b50cv_r0":"eval_agr_b50cv_r0_s0_shift099_noise1_libero_10_18554641","b100cv_r0":"eval_agr_b100cv_r0_*","b200cv_r0":"eval_agr_b200cv_r0_*",
- "b100_r0":"eval_agr_b100_r0_*","b100_r1":"eval_agr_b100_r1_*","b100_r2":"eval_agr_b100_r2_s0_shift099_noise1_libero_10_18571091","b100_r2b":"eval_agr_b100_r2_s0_shift099_noise1_libero_10_18596273",
- "b100iql_r0":"eval_agr_b100iql_r0_*","b100iql_r1":"eval_agr_b100iql_r1_*","mt_r0":"eval_agr_mt100cv_r0_*","mt_r1":"eval_agr_mt100cv_r1_*",
+ "b100_r0":"eval_agr_b100_r0_*","b100_r1":"eval_agr_b100_r1_s0_shift099_noise1_libero_10_18554181","b100_r2":"eval_agr_b100_r2_s0_shift099_noise1_libero_10_18571091","b100_r2b":"eval_agr_b100_r2_s0_shift099_noise1_libero_10_18596273",
+ "b100iql_r0":"eval_agr_b100iql_r0_*","b100iql_r1":"eval_agr_b100iql_r1_*","mt_r0":"eval_agr_mt100cv_r0_*","mt_r1":"eval_agr_mt100cv_r1_s0_shift099_noise1_libero_10_18604938",
  "agjudge":"eval_ag_residual_judge_sym25_*","dj400":"eval_dsrl_judge_sym25_s0_agent400_*","dj600":"eval_dsrl_judge_sym25_s0_agent600_*",
  "d400":"eval_dsrl_s0_agent400_*","d600":"eval_dsrl_s0_agent600_*",
  **{f"d{n}":f"eval_dsrl_s0_agent{n}_*" for n in [100,200,800,900,1000,1100,1200,1300]},"d1357":"eval_dsrl_s0_ep1800_*",

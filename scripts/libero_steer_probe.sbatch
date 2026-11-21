@@ -7,13 +7,16 @@
 #        DSRL_AGENT=<agent_*.pkl> [DSRL_SEED=0] CLIENT_ARGS="--args.cand-source actor|gauss ..."  [2026-11-13]
 #                       DSRL G1 probe: the server is scripts/dsrl_pi05.py --mode eval (frozen pi05_libero + the agent);
 #                       trunk and continuations = the DSRL policy; scored by scripts/libero_dsrl_g1.py
+#        CLIENT_ARGS="--args.cand-offsets none x+ x- y+ y- z+ z- z+0.5 --args.hold-chunks H ..."  [2026-11-20]
+#                       structured-offset G0: plain pi05_libero server; candidates = one chunk + end-effector offsets
+#                       (libero_steer_probe.py docstring); resumes after a requeue (same job id -> same $OUT)
 #        SOURCES="actor gauss" (with DSRL_AGENT): one client run per candidate source, in turn, into $OUT/<source>/
 #                       against the same server (one queue slot for both probes)
 #SBATCH --job-name=job
 #SBATCH --account=iris
 #SBATCH --partition=iris
 #SBATCH --gres=gpu:1
-#SBATCH --exclude=iris[1-4,8-10],iris-hgx-[1-2],iris-hp-z8   # Turing GPUs fail the pi05 bf16 self-check; iris8-10 bad GPUs (as ag_rounds.sh, 2026-11-13); hgx not needed
+#SBATCH --exclude=iris[1-4,7-10],iris-hgx-[1-2],iris-hp-z8   # Turing GPUs fail the pi05 bf16 self-check; iris8-10 bad GPUs (as ag_rounds.sh, 2026-11-13); iris7 hung 2026-11-20; hgx not needed
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=10:00:00

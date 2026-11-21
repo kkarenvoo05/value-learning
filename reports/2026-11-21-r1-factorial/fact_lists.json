@@ -1,0 +1,68 @@
+{
+ "A": {
+  "episodes": 200,
+  "base": 100,
+  "pushed": 100,
+  "frames": 90052,
+  "pushed_frame_share": 0.49
+ },
+ "B": {
+  "episodes": 200,
+  "base": 100,
+  "pushed": 100,
+  "frames": 88759,
+  "pushed_frame_share": 0.483
+ },
+ "C": {
+  "episodes": 1400,
+  "base": 700,
+  "pushed": 700,
+  "frames": 618646,
+  "pushed_frame_share": 0.476
+ },
+ "D": {
+  "episodes": 800,
+  "base": 100,
+  "pushed": 700,
+  "frames": 340637,
+  "pushed_frame_share": 0.865,
+  "oversample": {
+   "share_arg": 0.5236,
+   "k": 7,
+   "realised_base_share": 0.5217,
+   "frames_eff": 616175
+  }
+ },
+ "R100": {
+  "episodes": 100,
+  "base": 100,
+  "pushed": 0,
+  "frames": 45923,
+  "pushed_frame_share": 0.0
+ },
+ "R700": {
+  "episodes": 700,
+  "base": 700,
+  "pushed": 0,
+  "frames": 323932,
+  "pushed_frame_share": 0.0
+ },
+ "mix_per_round": {
+  "2": 15,
+  "3": 15,
+  "4": 14,
+  "5": 14,
+  "6": 14,
+  "7": 14,
+  "8": 14
+ },
+ "seed": 20261121,
+ "success": {
+  "A": 0.61,
+  "B": 0.65,
+  "C": 0.666,
+  "D": 0.745,
+  "R100": 0.59,
+  "R700": 0.566
+ }
+}

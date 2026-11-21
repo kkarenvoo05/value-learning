@@ -24,6 +24,20 @@ one more, ordinary request (the DSRL actor) for the chunk it executes, so the tr
 candidates are. Continuations are ordinary requests (the DSRL actor) unless --args.continue-source base. The w and
 served Q of every candidate are saved (rp_cand_w / rp_cand_q, br_w / br_q). Scoring: scripts/libero_dsrl_g1.py.
 
+Offset probe [2026-11-20, structured-offset G0; Karen: "set up the structured-offset G0 probe in sim"]:
+--args.cand-offsets none x+ x- y+ y- z+ z- z+0.5 makes the N candidates the SAME policy chunk plus a constant
+end-effector offset on the arm's position dims (0-2), instead of N noise samples. One chunk is queried per replan
+point (plain base server); candidate c executes chunk[:5] + o_c, clipped to [-1, 1]; rotation and gripper untouched.
+At branch steps the offset is held for --args.hold-chunks chunks: after the first chunk the policy is re-queried
+from the candidate's own state (closed loop) and o_c is added again; then the base policy continues, --repeats
+times. At other replan points only the first chunk is executed (spread bookkeeping). o_c = dir_c * scale_c *
+offset_m / (offset_cal * replan_steps * hold_chunks), so that the summed offset over the hold moves the end effector
+by about offset_m * scale_c open loop. offset_cal = 0.0075 m per unit of summed action over one 5-step chunk [ours:
+regression of within-state end-effector differences on summed action differences between G0 candidates,
+steer_v2_scale2p0 18329176, r 0.76-0.84 per axis]. The first label must be "none" (candidate 0 = the plain policy,
+which is also what the base episode executes). Saved: cand_offsets (N, 7) per-step action offsets, offset_labels,
+br_seg_eef (end effector after the held segment) and br_seg_steps.
+
 Output: <out>/probe/epNNNN.npz per base episode and <out>/episodes.csv. Analysis: scripts/libero_steer_analyze.py.
 
 Usage:
@@ -66,6 +80,11 @@ class Args:
     # DSRL probe [2026-11-13] (module docstring): "" = off; "actor" / "gauss" = candidate noise source on a DSRL server
     cand_source: str = ""
     continue_source: str = ""  # "" = the server's default policy (DSRL actor); "base" = plain pi0.5 continuations
+    # offset probe [2026-11-20] (module docstring): [] = off; labels "none", "x+", "z-", "z+0.5", ... (sets n_cand)
+    cand_offsets: List[str] = dataclasses.field(default_factory=list)
+    offset_m: float = 0.02  # target open-loop end-effector displacement of a scale-1 offset over the held segment
+    hold_chunks: int = 1  # chunks the offset is held for at branch steps (1 = one decision, as G0)
+    offset_cal: float = 0.0075  # m of end-effector motion per unit of summed action over one 5-step chunk
     branch_steps: List[int] = dataclasses.field(default_factory=lambda: [40, 130, 220, 310])  # policy steps
     repeats: int = 2  # continuations per candidate at a branch step
     num_steps_wait: int = 10
@@ -88,6 +107,28 @@ class FakePolicy:
             out["dsrl_w"] = np.clip(self.rng.normal(0, 1, 32), -1, 1).astype(np.float32)
             out["dsrl_q"] = float(self.rng.normal())
         return out
+
+
+AXES = {"x": 0, "y": 1, "z": 2}
+
+
+def parse_offsets(labels, offset_m, cal, replan_steps, hold_chunks):
+    """Offset labels -> (N, 7) per-step action offsets. "none" = 0; "z+" / "x-" = unit axis (axis first: a leading "-" would parse as a flag); a trailing number scales it ("z+0.5")."""
+    out = np.zeros((len(labels), 7), np.float32)
+    per_step = offset_m / (cal * replan_steps * hold_chunks)
+    for i, lab in enumerate(labels):
+        if lab == "none":
+            continue
+        base, s = lab[:2], lab[2:]
+        assert len(base) == 2 and base[0] in AXES and base[1] in "+-", f"bad offset label {lab!r}"
+        out[i, AXES[base[0]]] = (1.0 if base[1] == "+" else -1.0) * float(s or 1.0) * per_step
+    return out
+
+
+def with_offset(actions, off):
+    a = np.asarray(actions, np.float64) + off[None, :]
+    a[:, :6] = np.clip(a[:, :6], -1.0, 1.0)
+    return a
 
 
 def preprocess(obs, size):
@@ -178,10 +219,16 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
     br = collections.defaultdict(list)
     t, done, restore_maxdiff = 0, False, None
     branch = set(args.branch_steps)
+    offs = (parse_offsets(args.cand_offsets, args.offset_m, args.offset_cal, args.replan_steps, args.hold_chunks)
+            if args.cand_offsets else None)
     while t < max_steps and not done:
         snap = sim.save()
         cands, cw, cq = [], [], []
-        for c in range(args.n_cand):
+        if offs is not None:  # offset probe: one policy chunk, N offsets of it
+            chunk, (img, wrist, state) = query(client, obs, prompt, args.resize_size)
+            cands = [with_offset(chunk, o_c) for o_c in offs]
+            cw, cq = [np.full(32, np.nan, np.float32)] * len(offs), [np.nan] * len(offs)
+        for c in range(args.n_cand if offs is None else 0):
             ns = args.cand_noise_scale if (c > 0 and args.cand_noise_scale != 1.0) else None
             info = {}
             chunk, pre = query(client, obs, prompt, args.resize_size, ns, cand=args.cand_source or None, info=info)
@@ -193,12 +240,15 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
         cands = np.stack(cands)  # (N, H, 7)
         if args.cand_source:  # DSRL probe: the trunk executes its own ordinary (DSRL actor) chunk, not a candidate
             trunk, _ = query(client, obs, prompt, args.resize_size, cand=args.continue_source or None)
+        elif offs is not None:  # offset probe: the plain chunk (= candidate 0 up to the env's own clipping)
+            trunk = chunk
         else:
             trunk = cands[0]
         k = min(args.replan_steps, max_steps - t)
         eef, grip, cand_done = [], [], []
         is_branch = t in branch
         after_img, after_wrist, after_state, succ, steps = [], [], [], [], []
+        seg_eef, seg_steps = [], []  # offset probe: end effector / policy step after the held segment
         for c in range(args.n_cand):
             sim.restore(snap)
             o, d = execute(env, cands[c, :k])
@@ -212,6 +262,17 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
                 restore_maxdiff = float(np.abs(env.get_sim_state() - s0).max())
                 logging.info(f"{log_prefix} restore fidelity: max |state diff| = {restore_maxdiff:.3g}")
             if is_branch:
+                seg_t = t + k
+                if offs is not None:  # hold the offset for hold_chunks chunks, re-querying from the candidate's state
+                    for _ in range(args.hold_chunks - 1):
+                        if d or seg_t >= max_steps:
+                            break
+                        ch, _ = query(client, o, prompt, args.resize_size)
+                        kk = min(args.replan_steps, max_steps - seg_t)
+                        o, d = execute(env, with_offset(ch, offs[c])[:kk])
+                        seg_t += kk
+                    seg_eef.append(o["robot0_eef_pos"].copy())
+                    seg_steps.append(seg_t)
                 ai, aw, ast = preprocess(o, args.resize_size)
                 after_img.append(ai)
                 after_wrist.append(aw)
@@ -221,10 +282,10 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
                 for r in range(args.repeats):
                     if d:
                         s_r.append(True)
-                        n_r.append(t + k)
+                        n_r.append(seg_t)
                         continue
                     o2 = sim.restore(after_snap)
-                    s, tt = run_policy(env, client, o2, prompt, t + k, max_steps, args)
+                    s, tt = run_policy(env, client, o2, prompt, seg_t, max_steps, args)
                     s_r.append(s)
                     n_r.append(tt)
                 succ.append(s_r)
@@ -239,6 +300,9 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
             br["chunks"].append(cands)
             br["w"].append(np.stack(cw))
             br["q"].append(np.array(cq, np.float32))
+            if offs is not None:
+                br["seg_eef"].append(np.stack(seg_eef))
+                br["seg_steps"].append(np.array(seg_steps))
             logging.info(f"{log_prefix} branch t={t}: success per candidate {np.array(succ).mean(1).round(2).tolist()}")
         rec["t"].append(t)
         rec["image"].append(img)
@@ -263,6 +327,11 @@ def base_episode(env, sim, client, init_state, prompt, args, max_steps, log_pref
     out["cand_noise_scale"] = np.array(args.cand_noise_scale)
     out["cand_source"] = np.array(args.cand_source)
     out["continue_source"] = np.array(args.continue_source)
+    if offs is not None:
+        out["cand_offsets"] = offs
+        out["offset_labels"] = np.array(args.cand_offsets)
+        out["offset_m"] = np.array(args.offset_m)
+        out["hold_chunks"] = np.array(args.hold_chunks)
     return done, t, out
 
 
@@ -272,12 +341,28 @@ def main(args: Args) -> None:
     (out / "probe").mkdir(parents=True, exist_ok=True)
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     max_steps = args.max_steps_override or lr.MAX_STEPS[args.task_suite_name]
+    if args.cand_offsets:
+        assert args.cand_offsets[0] == "none", "offset probe: candidate 0 must be 'none' (the plain policy)"
+        assert not args.cand_source and args.cand_noise_scale == 1.0, "offset probe runs alone (no DSRL / noise scale)"
+        assert args.hold_chunks >= 1
+        args = dataclasses.replace(args, n_cand=len(args.cand_offsets))
+        logging.info("offset probe: %s, per-step offsets (x, y, z):\n%s", args.cand_offsets,
+                     parse_offsets(args.cand_offsets, args.offset_m, args.offset_cal, args.replan_steps,
+                                   args.hold_chunks)[:, :3].round(3))
     client = FakePolicy() if args.fake_policy else _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
     fields = ["episode", "task_id", "init_state", "repeat", "success", "policy_steps", "n_branch", "restore_maxdiff",
               "seconds", "file"]
-    with open(out / "episodes.csv", "w", newline="") as fh:
+    # [2026-11-20] resume after a preemption / requeue: episodes already in episodes.csv with their npz are skipped
+    done_eps = set()
+    if (out / "episodes.csv").exists():
+        with open(out / "episodes.csv") as fh:
+            done_eps = {int(r["episode"]) for r in csv.DictReader(fh) if (out / "probe" / r["file"]).exists()}
+        if done_eps:
+            logging.info(f"resuming: {len(done_eps)} base episodes already done, skipped")
+    with open(out / "episodes.csv", "a" if done_eps else "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
-        writer.writeheader()
+        if not done_eps:
+            writer.writeheader()
         episode = 0
         for task_id in args.task_ids:
             task = suite.get_task(task_id)
@@ -287,6 +372,9 @@ def main(args: Args) -> None:
             sim = Sim(env)
             for r in range(args.base_repeats):
                 for i in ids:
+                    if episode in done_eps:
+                        episode += 1
+                        continue
                     t0 = time.time()
                     prefix = f"ep {episode} init {i} r{r}"
                     done, steps, data = base_episode(env, sim, client, init_states[i], str(prompt), args,

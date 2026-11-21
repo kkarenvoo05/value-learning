@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-21",
+  "slug": "nov21-update",
+  "title": "Nov 21 update: round-1 seeds, base share, offset G0, push direction",
+  "status": "done",
+  "question": "Is the small chains' round-1 drop seed noise or real; does base share fix it; do end-effector offsets create choices worth ranking; does round 1 re-apply round 0's push?",
+  "verdict": "b100's drop was training-seed variance (seed 1 77.0 vs 53.0); b50cv drops with both seeds; mt100cv seed 1 holds on task 64 (73.3) but collapses on moka. 91% base frames rescues val only. Offset G0 passes (+12 points best-of-8). Round-1 pushes are not more aligned with r0 where they drop. Correction: mt100cv r1 moka val is 32.1%, not 4.5% (errored eval).",
+  "tiles": [["53 → 77%", "b100 r1, seed 0 vs seed 1"], ["10–15%", "b50cv r1, both seeds"], ["33 → 73%", "mt100cv r1 task 64, seed 0 vs 1"], ["+12 vs +0.6", "best-of-8: offsets vs noise"]]
+}

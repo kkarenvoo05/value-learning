@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-21",
+  "slug": "r1-factorial",
+  "title": "Round-1 factorial: one guiding policy vs base count vs data volume",
+  "question": "Why do the small (~50 base per task) chains drop at round 1: sudden one-policy guided share, few distinct base episodes, or too little data?",
+  "headline": "Label check: base and guided episodes are labelled alike (40% positive, mean A ~0) in every chain, dropping or not; the cause is not in the labels. Arms A-D (subsets of the 900 chain's r7 table, frozen 900 V, no demos, 2 seeds) + r0 controls submitted; results pending.",
+  "status": "running",
+  "jobs": {"A": [18620353, 18620379], "B": [18620357, 18620383], "C": [18620362, 18620387], "D": [18620367, 18620391], "R100": [18620371], "R700": [18620375]}
+}

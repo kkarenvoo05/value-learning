@@ -654,6 +654,15 @@ def week9_nov17():
     (d / "index.html").write_text(page("Week 9 · Nov 17", '<a href="../index.html">Value learning</a> › Week 9 · Nov 17', body, 1))
 
 
+def week10_nov21():
+    """Nov 21 update (reports/site/content/week10_nov21.html, hand-written body with inline SVG charts; data from
+    reports/2026-11-21-nov21-update/) -> week-10-nov21/ [2026-11-21]."""
+    d = OUT / "week-10-nov21"
+    d.mkdir(parents=True, exist_ok=True)
+    body = (CONTENT / "week10_nov21.html").read_text()
+    (d / "index.html").write_text(page("Week 10 · Nov 21", '<a href="../index.html">Value learning</a> › Week 10 · Nov 21', body, 1))
+
+
 def week10_nov20():
     """Nov 20 update (reports/site/content/week10_nov20.html, hand-written body with inline SVG charts and data from
     reports/2026-11-20-plateau-and-matched-budget/compute_evals.py) -> week-10-nov20/ [2026-11-20]."""
@@ -667,7 +676,12 @@ def hub(c7: dict, ce: dict, c8: dict, c9: dict):
     cards = ('<a class="wk" href="architecture/index.html"><div class="wn">Reference · how the models work</div>'
              '<div class="wt">Architecture diagrams: π₀.₅, the tag routes, the residual head, value expert, DSRL</div>'
              '<div style="color:var(--fg2)">What each model is made of, where the advantage tag enters, and what trains.</div></a>')
-    cards += ('<a class="wk" href="week-10-nov20/index.html"><div class="wn">Week 10 · Nov 20 update · current</div>'
+    cards += ('<a class="wk" href="week-10-nov21/index.html"><div class="wn">Week 10 · Nov 21 update · current</div>'
+              '<div class="wt">LIBERO: the round-1 drop is partly seed noise, and deliberate offsets give a critic something to rank</div>'
+              '<div style="color:var(--fg2)">A second training seed removes b100\'s round-1 drop (77% vs 53%) but not b50cv\'s (10–15%). '
+              'Picking the best of 8 end-effector offsets beats the plain policy by 12 points (noise samples: +0.6). '
+              'Round 1 does not re-apply round 0\'s push.</div></a>')
+    cards += ('<a class="wk" href="week-10-nov20/index.html"><div class="wn">Week 10 · Nov 20 update</div>'
               '<div class="wt">LIBERO: AG and DSRL level off at 85–90%, distillation into π₀.₅ keeps it, and AG survives a noisy judge</div>'
               '<div style="color:var(--fg2)">DSRL seed 1 run to 3,300 episodes stays at 86–90%; AG r5 87.6%. π₀.₅ fine-tuned on DSRL / AG '
               'successes reaches 88–89%. With 25% of outcomes flipped, AG is unchanged and DSRL falls below base.</div></a>')
@@ -717,6 +731,7 @@ def main():
     week9_nov14()
     week9_nov17()
     week10_nov20()
+    week10_nov21()
     hub(c7, ce, c8, c9)
     print("->", OUT)
 

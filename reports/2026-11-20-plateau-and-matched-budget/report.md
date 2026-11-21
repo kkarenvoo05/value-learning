@@ -49,7 +49,7 @@ Paired differences (percentage points, 95% CI):
 | random push − r6 rerun | +3.9 [−1.8, +9.4] |
 | 700-step limit − 520, r5 | +0.3 |
 | b100 chain: r1 − r0 / r2 − r0 | **−26.7 [−33.6, −19.4]** / −7.6 |
-| two-task chain (mt100cv) r1, moka val | 4.5% (r0 65.8%) |
+| two-task chain (mt100cv) r1, moka val | 32.1% on 305 trials (r0 65.8%); corrected 11-21: the first eval (18598985) logged 280 client errors as failures and read 4.5% |
 
 Distillation (LoRA, filtered BC round 1's recipe, `--chunk-targets sampled`, final checkpoint; teacher: 300 rollouts
 on train states, successes only):

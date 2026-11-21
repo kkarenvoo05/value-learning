@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-21",
+  "slug": "offset-g0",
+  "title": "Structured-offset G0: do deliberate ~2 cm end-effector offsets create choices worth ranking?",
+  "question": "At a given state, does picking among the policy chunk shifted ~2 cm along +-x/y/z beat the plain chunk (imagination premise)?",
+  "headline": "Gate passes in both probes: cross-validated best-of-8 offset beats the plain chunk by +12.5 [+5.6, +19.8] (hold 1) and +12.1 [+4.9, +19.3] (hold 4) points, vs +0.6 for noise candidates in G0. No single direction replicates (z+ height hypothesis: -1.9 / +2.5). Next per the rule: G1 on offset proposals.",
+  "cv_gain_vs_cand0": {"hold1": [0.125, 0.056, 0.198], "hold4": [0.121, 0.049, 0.193], "g0_noise": [0.006, -0.028, 0.042]},
+  "sd_between": {"hold1": 0.20, "hold4": 0.22, "g0_noise": 0.08},
+  "d_vs_none_zplus": {"hold1": -0.019, "hold4": 0.025},
+  "jobs": [18611395, 18611396, 18611397]
+}

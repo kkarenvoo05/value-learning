@@ -18,6 +18,11 @@ Step 2, headroom, per branch point (N candidates x R continuations of the base p
   p_cand0 / p_scaled   success of candidate 0 / mean of the scaled candidates (cost of the extra noise)
   cv_gain_vs_cand0     as cv_gain, but minus candidate 0's held-out success: does picking among the more varied
                        candidates beat simply running the policy?
+  offset probe (--args.cand-offsets, 2026-11-20; candidate 0 = the plain policy, others = same chunk + offset):
+  per offset label: d_vs_none = mean over branch points of p_c - p_0 (paired), CI from a bootstrap over base
+  episodes (clustered: the branch points of one episode share its trunk); seg_cm = median end-effector distance
+  from candidate 0 after the held segment; by_t = the same per branch step. cv_gain / cv_gain_vs_cand0 get the
+  clustered CI too (cv_gain_ci95_ep / cv_gain_vs_cand0_ci95_ep).
 Writes <run>/analysis/{spread.csv, branches.csv, summary.json} and prints a summary.
 
 Usage: .venv/bin/python scripts/libero_steer_analyze.py --run <runs/steer_probe_libero_10_JOB>
@@ -80,6 +85,48 @@ def boot_ci(x, n=2000, seed=0):
     rng = np.random.default_rng(seed)
     m = [rng.choice(x, len(x)).mean() for _ in range(n)]
     return [float(np.percentile(m, 2.5)), float(np.percentile(m, 97.5))]
+
+
+def boot_ci_cluster(df, col, n=2000, seed=0):
+    """95% CI of the mean of df[col] with base episodes resampled as clusters."""
+    groups = [g[col].to_numpy(float) for _, g in df.groupby("episode")]
+    groups = [g[np.isfinite(g)] for g in groups]
+    groups = [g for g in groups if len(g)]
+    if not groups:
+        return [np.nan, np.nan]
+    rng = np.random.default_rng(seed)
+    m = []
+    for _ in range(n):
+        pick = [groups[i] for i in rng.integers(0, len(groups), len(groups))]
+        m.append(np.concatenate(pick).mean())
+    return [float(np.percentile(m, 2.5)), float(np.percentile(m, 97.5))]
+
+
+def offset_summary(br, files, eps):
+    """Offset probe: per-label paired effect vs candidate 0 and the displacement each offset achieved."""
+    labels = [str(x) for x in files[0]["offset_labels"]]
+    rows = []
+    for (_, e), z in zip(eps.iterrows(), files):
+        if "br_t" not in z.files:
+            continue
+        for j, t in enumerate(z["br_t"]):
+            p = z["br_success"][j].astype(float).mean(1)
+            seg = z["br_seg_eef"][j]
+            for c, lab in enumerate(labels):
+                rows.append({"episode": e.episode, "t": int(t), "label": lab, "c": c, "p": p[c],
+                             "d_vs_none": p[c] - p[0], "seg_cm": 100 * float(np.linalg.norm(seg[c] - seg[0]))})
+    d = pd.DataFrame(rows)
+    out = {"labels": labels, "offset_m": float(files[0]["offset_m"]), "hold_chunks": int(files[0]["hold_chunks"]),
+           "per_step_offsets_xyz": np.asarray(files[0]["cand_offsets"])[:, :3].round(4).tolist(), "by_label": {}}
+    for lab in labels:
+        g = d[d.label == lab]
+        out["by_label"][lab] = {
+            "p": float(g.p.mean()), "d_vs_none": float(g.d_vs_none.mean()),
+            "d_vs_none_ci95_ep": boot_ci_cluster(g, "d_vs_none") if lab != "none" else [0.0, 0.0],
+            "seg_cm_median": float(g.seg_cm.median()),
+            "by_t": {int(t): {"p": float(h.p.mean()), "d_vs_none": float(h.d_vs_none.mean()), "n": int(len(h))}
+                     for t, h in g.groupby("t")}}
+    return out, d
 
 
 def main():
@@ -152,6 +199,12 @@ def main():
                               "n": int(len(g))}
                      for t, g in br.groupby("t")},
         })
+    if len(br) and "offset_labels" in files[0].files:
+        osum, od = offset_summary(br, files, eps)
+        od.to_csv(out / "offsets.csv", index=False)
+        summ["offset_probe"] = osum
+        summ["cv_gain_ci95_ep"] = boot_ci_cluster(br, "cv_gain")
+        summ["cv_gain_vs_cand0_ci95_ep"] = boot_ci_cluster(br, "cv_gain_vs_cand0")
     (out / "summary.json").write_text(json.dumps(summ, indent=2))
     print(json.dumps(summ, indent=2))
 

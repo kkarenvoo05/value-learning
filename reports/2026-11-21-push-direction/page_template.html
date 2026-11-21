@@ -1,0 +1,309 @@
+<title>Push Direction Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one reading column (~760px) of explained figures; a sticky chain selector drives the per-chain figures. */
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --line: #e7e5de;
+  --r0: #2a78d6; --r1: #eb6834; --r1b: #1baf7a; --base: #898781; --chip: #eef3fb;
+  --display: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --line: #2c2c2a; --r0: #3987e5; --r1: #d95926; --r1b: #199e70; --chip: #1b2738;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --line: #2c2c2a; --r0: #3987e5; --r1: #d95926; --r1b: #199e70; --chip: #1b2738;
+  color-scheme: dark }
+body { background: var(--page); color: var(--ink); font: 15px/1.6 var(--body); }
+.wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; display: grid; gap: 40px; }
+h1, h2 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 2rem; line-height: 1.15; }
+h2 { font-size: 1.3rem; line-height: 1.25; }
+p { margin: 0; max-width: 66ch; }
+section { display: grid; gap: 14px; min-width: 0; }
+.eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--ink-2); font-size: 1.05rem; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; }
+.verdict strong { font-weight: 600; }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; overflow-x: auto; }
+.cap { color: var(--ink-2); font-size: 0.9rem; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--page); padding-block: 10px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page); }
+.bar span { font: 500 0.8rem var(--mono); color: var(--muted); margin-right: 4px; }
+.chip { font: 500 0.85rem var(--body); border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--chip); border-color: var(--r0); }
+.chip:focus-visible, button:focus-visible { outline: 2px solid var(--r0); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.85rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--ink-2); font: 11px var(--mono); }
+svg .t-muted { fill: var(--muted); }
+svg .gl { stroke: var(--grid); stroke-width: 1; }
+svg .ax { stroke: var(--axis); stroke-width: 1; }
+.tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font: 12px/1.45 var(--mono); box-shadow: 0 4px 16px rgb(0 0 0 / 0.12); z-index: 20; max-width: 280px; }
+.tip b { font-weight: 600; }
+table { border-collapse: collapse; width: 100%; font: 12.5px var(--mono); font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 500; }
+details summary { cursor: pointer; color: var(--ink-2); }
+ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; max-width: 66ch; }
+@media (prefers-reduced-motion: no-preference) { .arrow { transition: opacity 0.15s; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid; gap:12px">
+    <div class="eyebrow">Moka · residual advantage guidance · round 0 vs round 1</div>
+    <h1>Does round 1 push the same way as round 0?</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <section>
+    <h2>What a push is</h2>
+    <p>At every replan the frozen base π0.5 proposes an action chunk. The guided policy changes it by
+      <span class="mono">w · (h₊ − h₋)</span>, the residual's "good minus bad" direction. The <b>push</b> is the
+      difference between the guided chunk and the base chunk, from the same noise draw at the same state.</p>
+    <div class="fig" aria-label="Diagram of the double-push hypothesis">
+      <svg viewBox="0 0 720 230" role="img">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+        <circle cx="90" cy="150" r="6" fill="var(--ink)"/>
+        <text x="62" y="178">state s</text>
+        <line x1="90" y1="150" x2="250" y2="150" stroke="var(--base)" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="150" y="168">base a</text>
+        <line x1="250" y1="150" x2="330" y2="92" stroke="var(--r0)" stroke-width="2.5" marker-end="url(#ah)"/>
+        <text x="300" y="132" style="fill:var(--r0)">r0 push</text>
+        <text x="62" y="30" style="font-weight:600">Round 0</text>
+        <text x="62" y="48" class="t-muted">guided by r0; these rollouts</text>
+        <text x="62" y="62" class="t-muted">become half the round-1 data</text>
+        <line x1="400" y1="20" x2="400" y2="210" class="gl"/>
+        <circle cx="450" cy="150" r="6" fill="var(--ink)"/>
+        <line x1="450" y1="150" x2="590" y2="150" stroke="var(--base)" stroke-width="2" marker-end="url(#ah)"/>
+        <line x1="590" y1="150" x2="660" y2="99" stroke="var(--r0)" stroke-width="2" stroke-dasharray="4 4"/>
+        <line x1="590" y1="150" x2="690" y2="78" stroke="var(--r1)" stroke-width="2.5" marker-end="url(#ah)"/>
+        <text x="610" y="176" style="fill:var(--r1)">r1 push</text>
+        <text x="420" y="30" style="font-weight:600">Round 1, "double push" hypothesis</text>
+        <text x="420" y="48" class="t-muted">r1 learns r0's push from that data</text>
+        <text x="420" y="62" class="t-muted">and applies it again on top of base</text>
+        <text x="420" y="210" class="t-muted">if true: cos(r1 push, r0 push) near 1, β ≥ 1</text>
+      </svg>
+    </div>
+    <p class="cap">Per pair of policies: <b>cos</b> is 1 for the same direction, 0 for unrelated, −1 for opposite.
+      <b>β</b> is how much of the second policy's push the first contains (1 = all of it). Both are scored on the
+      arm-motion push: 5 executed steps × (xyz + rotation), normalised as the model sees it. The gripper is scored
+      separately (hover a row). In normalised units it carries about two thirds of all push energy, almost all of it in
+      the few frames around grasp and release, and it would swamp the arm. Measured on <span id="nframes"></span>.</p>
+  </section>
+
+  <div class="bar" role="group" aria-label="Chain">
+    <span>chain</span>
+    <div id="chips" style="display:flex; flex-wrap:wrap; gap:8px"></div>
+  </div>
+
+  <section>
+    <h2 id="arrowsTitle">Where each policy pushes</h2>
+    <p class="cap" id="arrowsCap"></p>
+    <div class="legend" id="arrowsLegend"></div>
+    <div class="grid2">
+      <div class="fig"><svg id="top" viewBox="0 0 360 330" role="img" aria-label="Top view of pushes"></svg></div>
+      <div class="fig"><svg id="side" viewBox="0 0 360 330" role="img" aria-label="Side view of pushes"></svg></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Do the pushes point the same way?</h2>
+    <p class="cap">Each row compares two policies on the same states and noise. The pushes are concentrated in a few
+      frames, so the weighted cos (one cosine over all frames) can sit well above the per-frame average: big
+      pushes agree, small ones are close to unrelated. Whiskers show a 95% bootstrap interval over the 24 val episodes. The column on the right is the moka val success
+      for the chain (round 0 → round 1).</p>
+    <div class="legend"><span><i style="border-color:var(--ink)"></i>cos, weighted (big pushes count more)</span><span><i style="border-color:var(--muted)"></i>cos, every frame equal (ring)</span><span><i style="border-color:var(--r1)"></i>β (share of the second policy's push)</span></div>
+    <div class="fig"><svg id="align" role="img" aria-label="Direction agreement per pair"></svg></div>
+  </section>
+
+  <section>
+    <h2 id="phaseTitle">How big is the push, and when?</h2>
+    <p class="cap">End-effector push size (cm, open loop: summed over the 5 executed steps, 0.75 cm per unit of
+      summed action) by step of the episode. Steps 0–200 are roughly the first pot, 200–400 the second.</p>
+    <div class="legend" id="phaseLegend"></div>
+    <div class="fig"><svg id="phase" viewBox="0 0 680 260" role="img" aria-label="Push size by phase"></svg></div>
+  </section>
+
+  <section>
+    <h2>Which way, on average?</h2>
+    <p class="cap">Signed mean push per axis (cm). A consistent direction survives the average; pushes that change
+      direction from state to state cancel. Compare with the typical size in the table below.</p>
+    <div class="fig"><svg id="dims" viewBox="0 0 680 230" role="img" aria-label="Mean push per axis"></svg></div>
+  </section>
+
+  <section>
+    <h2>What this means</h2>
+    <div class="verdict" id="reading"></div>
+  </section>
+
+  <section>
+    <h2>All policies</h2>
+    <div class="fig"><table id="tbl"></table></div>
+    <details><summary>Method and checks</summary>
+      <ul id="method" style="margin-top:10px"></ul></details>
+  </section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const DATA = /*DATA*/null;
+const NS = "http://www.w3.org/2000/svg";
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+const txt = (parent, x, y, s, attrs = {}) => { const t = el("text", { x, y, ...attrs }, parent); t.textContent = s; return t; };
+const fmt = (v, d = 2) => (v >= 0 ? "" : "−") + Math.abs(v).toFixed(d);
+const tip = $("tip");
+function showTip(evt, rows) { tip.replaceChildren(); rows.forEach((r, i) => { const d = document.createElement("div");
+  if (i === 0) { const b = document.createElement("b"); b.textContent = r; d.appendChild(b); } else d.textContent = r; tip.appendChild(d); });
+  tip.hidden = false; const x = Math.min(evt.clientX + 14, innerWidth - 290), y = Math.min(evt.clientY + 14, innerHeight - 120);
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
+const hideTip = () => { tip.hidden = true; };
+const P = DATA.policies, CH = DATA.chains;
+const COLORS = ["var(--r0)", "var(--r1)", "var(--r1b)"];
+let chain = CH[0].id;
+
+$("lede").textContent = DATA.text.lede;
+$("nframes").textContent = `${DATA.frames} val frames (${DATA.episodes} held-out episodes × 8 frames), ${DATA.k} noise draws each`;
+DATA.text.reading.forEach((s) => { const p = document.createElement("p"); p.innerHTML = s; $("reading").appendChild(p); });
+DATA.text.method.forEach((s) => { const li = document.createElement("li"); li.textContent = s; $("method").appendChild(li); });
+
+CH.forEach((c) => { const b = document.createElement("button"); b.className = "chip"; b.id = "chip-" + c.id; b.type = "button";
+  b.textContent = c.label; b.setAttribute("aria-pressed", c.id === chain); b.onclick = () => { chain = c.id;
+    document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x === b)); drawChain(); }; $("chips").appendChild(b); });
+
+function series(c) { return [c.r0, ...c.r1].filter((n) => P[n]); }
+function seriesLabel(n) { return DATA.labels[n] || n; }
+
+function legend(box, names) { box.replaceChildren(); names.forEach((n, i) => { const s = document.createElement("span");
+  const k = document.createElement("i"); k.style.borderColor = COLORS[i]; s.appendChild(k); s.appendChild(document.createTextNode(seriesLabel(n))); box.appendChild(s); }); }
+
+function drawArrows(svgId, ax, ay, axLabel, ayLabel, names, scale) {
+  const svg = $(svgId); svg.replaceChildren();
+  const W = 360, H = 330, m = { l: 44, r: 12, t: 14, b: 36 };
+  const eef = P[names[0]].arrows.eef;
+  const xs = eef.map((p) => p[ax]), ys = eef.map((p) => p[ay]);
+  const pad = 0.03, x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  const span = Math.max(x1 - x0, (y1 - y0) * (W - m.l - m.r) / (H - m.t - m.b));
+  const sx = (W - m.l - m.r) / span; const X = (v) => m.l + (v - x0) * sx, Y = (v) => H - m.b - (v - y0) * sx;
+  const g = el("g", {}, svg);
+  const step = 0.1; for (let v = Math.ceil(x0 / step) * step; v <= x0 + span; v += step) { el("line", { x1: X(v), x2: X(v), y1: m.t, y2: H - m.b, class: "gl" }, g); txt(g, X(v), H - m.b + 14, (v * 100).toFixed(0), { "text-anchor": "middle", class: "t-muted" }); }
+  for (let v = Math.ceil(y0 / step) * step; Y(v) >= m.t; v += step) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), class: "gl" }, g); txt(g, m.l - 6, Y(v) + 4, (v * 100).toFixed(0), { "text-anchor": "end", class: "t-muted" }); }
+  txt(g, (m.l + W - m.r) / 2, H - 6, axLabel + " (cm)", { "text-anchor": "middle" });
+  txt(g, 10, (m.t + H - m.b) / 2, ayLabel + " (cm)", { transform: `rotate(-90 10 ${(m.t + H - m.b) / 2})`, "text-anchor": "middle" });
+  const ep = DATA.frames_meta.ep, t = DATA.frames_meta.t;
+  const byEp = {}; ep.forEach((e, i) => (byEp[e] = byEp[e] || []).push(i));
+  Object.values(byEp).forEach((idx) => { idx.sort((a, b) => t[a] - t[b]); el("polyline", { points: idx.map((i) => `${X(xs[i])},${Y(ys[i])}`).join(" "), fill: "none", stroke: "var(--grid)", "stroke-width": 1 }, g); });
+  eef.forEach((p, i) => el("circle", { cx: X(xs[i]), cy: Y(ys[i]), r: 1.8, fill: "var(--muted)" }, g));
+  names.forEach((n, si) => { const A = P[n].arrows.xyz_cm; A.forEach((d, i) => {
+    const x2 = X(xs[i] + d[ax] / 100 * scale), y2 = Y(ys[i] + d[ay] / 100 * scale);
+    el("line", { x1: X(xs[i]), y1: Y(ys[i]), x2, y2, stroke: COLORS[si], "stroke-width": 1.5, "stroke-linecap": "round", opacity: 0.85, class: "arrow" }, g);
+    const hit = el("line", { x1: X(xs[i]), y1: Y(ys[i]), x2, y2, stroke: "transparent", "stroke-width": 9, tabindex: -1 }, g);
+    hit.addEventListener("pointermove", (e) => showTip(e, [`${seriesLabel(n)}`, `episode ${ep[i]}, step ${t[i]}`,
+      `push x ${fmt(d[0])} y ${fmt(d[1])} z ${fmt(d[2])} cm`, `size ${Math.hypot(...d).toFixed(2)} cm`]));
+    hit.addEventListener("pointerleave", hideTip); }); });
+}
+
+function drawAlign() {
+  const svg = $("align"); svg.replaceChildren();
+  const rows = DATA.pairs; const W = 720, rh = 34, m = { l: 210, r: 120, t: 30, b: 34 };
+  const groups = []; rows.forEach((r) => { if (!groups.length || groups[groups.length - 1].kind !== r.kind) groups.push({ kind: r.kind, rows: [] }); groups[groups.length - 1].rows.push(r); });
+  const H = m.t + m.b + rows.length * rh + groups.length * 22;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const lo = -0.5, hi = 1.5; const X = (v) => m.l + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - m.l - m.r);
+  for (let v = lo; v <= hi + 1e-9; v += 0.5) { el("line", { x1: X(v), x2: X(v), y1: m.t - 8, y2: H - m.b, class: v === 0 ? "ax" : "gl" }, svg); txt(svg, X(v), H - m.b + 16, v.toFixed(1), { "text-anchor": "middle", class: "t-muted" }); }
+  el("line", { x1: X(1), x2: X(1), y1: m.t - 8, y2: H - m.b, stroke: "var(--axis)", "stroke-dasharray": "3 3" }, svg);
+  txt(svg, X(1), m.t - 14, "same direction / all of it", { "text-anchor": "middle", class: "t-muted" });
+  txt(svg, W - m.r + 10, m.t - 14, "moka val", { class: "t-muted" });
+  let y = m.t;
+  groups.forEach((gr) => { y += 16; txt(svg, 8, y, DATA.kindLabels[gr.kind] || gr.kind, { style: "font-weight:600; fill: var(--ink)" }); y += 6;
+    gr.rows.forEach((r) => { const cy = y + rh / 2; const yc = cy - 9, yf = cy, yb = cy + 9;
+      txt(svg, 16, cy + 4, `${seriesLabel(r.a)} vs ${seriesLabel(r.b)}`);
+      el("line", { x1: X(r.cos_w_ci[0]), x2: X(r.cos_w_ci[1]), y1: yc, y2: yc, stroke: "var(--ink)", "stroke-width": 2 }, svg);
+      el("circle", { cx: X(r.cos_w), cy: yc, r: 4.5, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+      el("line", { x1: X(r.cos_ci[0]), x2: X(r.cos_ci[1]), y1: yf, y2: yf, stroke: "var(--muted)", "stroke-width": 2 }, svg);
+      el("circle", { cx: X(r.cos), cy: yf, r: 4, fill: "var(--surface)", stroke: "var(--muted)", "stroke-width": 2 }, svg);
+      el("line", { x1: X(r.beta_ci[0]), x2: X(r.beta_ci[1]), y1: yb, y2: yb, stroke: "var(--r1)", "stroke-width": 2 }, svg);
+      el("rect", { x: X(r.beta) - 4, y: yb - 4, width: 8, height: 8, rx: 1.5, fill: "var(--r1)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+      if (r.eval) txt(svg, W - m.r + 10, cy + 4, r.eval, { style: "fill: var(--ink)" });
+      const hit = el("rect", { x: 0, y, width: W, height: rh, fill: "transparent" }, svg);
+      hit.addEventListener("pointermove", (e) => showTip(e, [`${seriesLabel(r.a)} vs ${seriesLabel(r.b)}`,
+        `arm: cos weighted ${fmt(r.cos_w)} [${fmt(r.cos_w_ci[0])}, ${fmt(r.cos_w_ci[1])}]`,
+        `arm: cos per frame ${fmt(r.cos)} [${fmt(r.cos_ci[0])}, ${fmt(r.cos_ci[1])}]`,
+        `arm: β ${fmt(r.beta)} [${fmt(r.beta_ci[0])}, ${fmt(r.beta_ci[1])}]`,
+        `gripper: cos ${fmt(r.grip.cos_w)}, β ${fmt(r.grip.beta)}`, `all 35 numbers: cos ${fmt(r.all.cos_w)}, β ${fmt(r.all.beta)}`,
+        r.eval ? `moka val ${r.eval}` : ""].filter(Boolean)));
+      hit.addEventListener("pointerleave", hideTip); y += rh; }); });
+}
+
+function drawPhase(names) {
+  const svg = $("phase"); svg.replaceChildren(); const W = 680, H = 260, m = { l: 46, r: 16, t: 14, b: 34 };
+  const phases = Object.keys(P[names[0]].phase_xyz_cm);
+  const ymax = Math.max(...names.flatMap((n) => Object.values(P[n].phase_xyz_cm))) * 1.15;
+  const X = (i) => m.l + (i + 0.5) * (W - m.l - m.r) / phases.length, Y = (v) => H - m.b - v / ymax * (H - m.t - m.b);
+  const tick = ymax > 3 ? 1 : ymax > 1.5 ? 0.5 : 0.25;
+  for (let v = 0; v <= ymax; v += tick) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), class: v === 0 ? "ax" : "gl" }, svg); txt(svg, m.l - 6, Y(v) + 4, v.toFixed(2), { "text-anchor": "end", class: "t-muted" }); }
+  phases.forEach((p, i) => txt(svg, X(i), H - m.b + 16, "steps " + p, { "text-anchor": "middle", class: "t-muted" }));
+  txt(svg, 12, (m.t + H - m.b) / 2, "cm", { transform: `rotate(-90 12 ${(m.t + H - m.b) / 2})`, "text-anchor": "middle" });
+  names.forEach((n, si) => { const v = phases.map((p) => P[n].phase_xyz_cm[p]);
+    el("polyline", { points: v.map((y, i) => `${X(i)},${Y(y)}`).join(" "), fill: "none", stroke: COLORS[si], "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    v.forEach((y, i) => el("circle", { cx: X(i), cy: Y(y), r: 4, fill: COLORS[si], stroke: "var(--surface)", "stroke-width": 2 }, svg)); });
+  const cross = el("line", { y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+  phases.forEach((p, i) => { const hit = el("rect", { x: X(i) - (W - m.l - m.r) / phases.length / 2, y: m.t, width: (W - m.l - m.r) / phases.length, height: H - m.t - m.b, fill: "transparent" }, svg);
+    hit.addEventListener("pointermove", (e) => { cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
+      showTip(e, ["steps " + p, ...names.map((n) => `${P[n].phase_xyz_cm[p].toFixed(2)} cm  ${seriesLabel(n)}`)]); });
+    hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(); }); });
+}
+
+function drawDims(names) {
+  const svg = $("dims"); svg.replaceChildren(); const W = 680, H = 230, m = { l: 46, r: 16, t: 14, b: 30 };
+  const axes = ["x", "y", "z"]; const vals = names.map((n) => P[n].xyz_cm_mean);
+  const amax = Math.max(0.1, ...vals.flat().map(Math.abs)) * 1.2;
+  const Y = (v) => m.t + (amax - v) / (2 * amax) * (H - m.t - m.b);
+  const gw = (W - m.l - m.r) / axes.length, bw = Math.min(34, (gw - 40) / names.length);
+  const tick = amax > 1.5 ? 0.5 : amax > 0.6 ? 0.25 : 0.1;
+  for (let v = -Math.floor(amax / tick) * tick; v <= amax; v += tick) { el("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), class: Math.abs(v) < 1e-9 ? "ax" : "gl" }, svg); txt(svg, m.l - 6, Y(v) + 4, fmt(v, 2), { "text-anchor": "end", class: "t-muted" }); }
+  axes.forEach((a, ai) => { const gx = m.l + ai * gw + (gw - names.length * (bw + 2)) / 2; txt(svg, m.l + ai * gw + gw / 2, H - 8, a === "z" ? "z (up)" : a, { "text-anchor": "middle" });
+    names.forEach((n, si) => { const v = vals[si][ai], x = gx + si * (bw + 2), y = Math.min(Y(v), Y(0)), h = Math.max(1, Math.abs(Y(v) - Y(0)));
+      el("rect", { x, y, width: bw, height: h, rx: 3, fill: COLORS[si] }, svg);
+      const hit = el("rect", { x: x - 1, y: m.t, width: bw + 2, height: H - m.t - m.b, fill: "transparent" }, svg);
+      hit.addEventListener("pointermove", (e) => showTip(e, [`${fmt(v)} cm along ${a}`, seriesLabel(n), `typical size ${P[n].xyz_cm_abs.toFixed(2)} cm`]));
+      hit.addEventListener("pointerleave", hideTip); }); });
+}
+
+function drawChain() {
+  const c = CH.find((x) => x.id === chain); const names = series(c);
+  legend($("arrowsLegend"), names); legend($("phaseLegend"), names);
+  const med = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  const sizes = P[c.r0].arrows.xyz_cm.map((d) => Math.hypot(...d));
+  const scale = Math.max(1, Math.round(2.5 / Math.max(0.05, med(sizes))));
+  $("arrowsTitle").textContent = `Where each policy pushes: ${c.label}`;
+  $("arrowsCap").textContent = `Grey: hand positions at the ${DATA.frames} val frames (lines join frames of one episode). ` +
+    `Arrows: the push at that frame, drawn ×${scale} so they are visible. Left: seen from above; right: from the side (z is height). ` + (c.note || "");
+  drawArrows("top", 0, 1, "x", "y", names, scale); drawArrows("side", 0, 2, "x", "z", names, scale);
+  drawPhase(names); drawDims(names);
+}
+
+function drawTable() { const t = $("tbl"); t.replaceChildren(); const head = t.createTHead().insertRow();
+  ["policy", "w", "shift / noise", "gripper share", "top 10% frames share", "typical |push| cm", "mean x", "mean y", "mean z"].forEach((h) => { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); });
+  const b = t.createTBody(); Object.keys(P).forEach((n) => { const r = b.insertRow(); const p = P[n];
+    [seriesLabel(n), p.w.toFixed(2), p.ratio.toFixed(2), p.grip_share.toFixed(2), p.top10pct_share.toFixed(2), p.xyz_cm_abs.toFixed(2), ...p.xyz_cm_mean.map((v) => fmt(v))].forEach((v) => { r.insertCell().textContent = v; }); }); }
+
+drawAlign(); drawChain(); drawTable();
+</script>
